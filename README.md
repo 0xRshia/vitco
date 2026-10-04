@@ -139,5 +139,6 @@ npm run start
 ```
 
 Place behind an HTTPS reverse proxy, set `APP_ORIGIN`, persist `data/`, configure
-provider credentials as needed, and register real café accounts. No deployment,
-remote push, or other GitHub mutation has been performed.
+provider credentials as needed, and register real café accounts. The deployment at
+https://dev.rshi.info is described in [deployment operations](docs/deployment.md).
+No remote push or other GitHub mutation has been performed.
