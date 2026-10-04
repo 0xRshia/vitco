@@ -1,0 +1,225 @@
+{
+  "cafe": {
+    "id": 1,
+    "uuid": "07e809ef-bc31-478b-81be-1c28d7d94ffb",
+    "name": "کافه اعلا",
+    "slug": "kafh-aaala",
+    "description": "کافه رستورانی برای خانواده ها",
+    "category": "cafe_restaurant",
+    "amenities": null,
+    "has_wifi": true,
+    "has_live_music": true,
+    "allows_smoking": true,
+    "is_vip": false,
+    "average_rating": null,
+    "reviews_count": 0,
+    "primary_city": "تهران",
+    "primary_province": "تهران",
+    "primary_color": null,
+    "logo_url": null,
+    "images": [],
+    "branches": [
+      {
+        "id": 1,
+        "uuid": "31b4c345-62c3-44a4-a83d-5ec9cc3cd7eb",
+        "name": "شعبه اصلی",
+        "slug": "shaabh-asly",
+        "address_line1": "پیروزی خیبان پرستار",
+        "city": "تهران",
+        "province": "تهران",
+        "postal_code": null,
+        "latitude": null,
+        "longitude": null,
+        "phone": "09130000000",
+        "status": "active",
+        "is_default": true,
+        "working_hours": [
+          {
+            "day_of_week": 0,
+            "opens_at": null,
+            "closes_at": null,
+            "is_closed": true
+          },
+          {
+            "day_of_week": 1,
+            "opens_at": null,
+            "closes_at": null,
+            "is_closed": true
+          },
+          {
+            "day_of_week": 2,
+            "opens_at": null,
+            "closes_at": null,
+            "is_closed": true
+          },
+          {
+            "day_of_week": 3,
+            "opens_at": null,
+            "closes_at": null,
+            "is_closed": true
+          },
+          {
+            "day_of_week": 4,
+            "opens_at": null,
+            "closes_at": null,
+            "is_closed": true
+          },
+          {
+            "day_of_week": 5,
+            "opens_at": null,
+            "closes_at": null,
+            "is_closed": true
+          },
+          {
+            "day_of_week": 6,
+            "opens_at": null,
+            "closes_at": null,
+            "is_closed": true
+          }
+        ]
+      }
+    ]
+  },
+  "categories": [
+    {
+      "id": 1,
+      "cafe_branch_id": 1,
+      "name": "نوشیدنی گرم",
+      "slug": "noshydny-grm",
+      "sort_order": 0,
+      "status": "visible",
+      "kind": "drink",
+      "image_key": "cafe-hot-drink",
+      "image_url": "https://vitrincafe.ir/assets/images/product-categories/cafe-hot-drink.webp",
+      "items": [
+        {
+          "id": 1,
+          "menu_category_id": 1,
+          "name": "ماچا لته",
+          "description": "پودر ماچا-شیر-سیروپ دلخواه",
+          "price_amount": 349995,
+          "status": "available",
+          "sort_order": 0,
+          "is_vip_only": false,
+          "addons": [
+            {
+              "id": 1,
+              "menu_item_id": 1,
+              "name": "سیروپ توت فرنگی",
+              "description": null,
+              "price_amount": 40000,
+              "is_required": false,
+              "max_select": 1,
+              "sort_order": 0
+            },
+            {
+              "id": 2,
+              "menu_item_id": 1,
+              "name": "سیروپ پرتغال",
+              "description": null,
+              "price_amount": 40000,
+              "is_required": false,
+              "max_select": 1,
+              "sort_order": 1
+            },
+            {
+              "id": 3,
+              "menu_item_id": 1,
+              "name": "سیروپ شکلات",
+              "description": null,
+              "price_amount": 40000,
+              "is_required": false,
+              "max_select": 1,
+              "sort_order": 2
+            }
+          ],
+          "images": []
+        },
+        {
+          "id": 2,
+          "menu_category_id": 1,
+          "name": "امریکانو",
+          "description": "لاین 30/70 روبوستا",
+          "price_amount": 290000,
+          "status": "available",
+          "sort_order": 0,
+          "is_vip_only": false,
+          "addons": [],
+          "images": []
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "cafe_branch_id": 1,
+      "name": "غذای ایرانی",
+      "slug": "ghthay-ayrany",
+      "sort_order": 0,
+      "status": "visible",
+      "kind": "food",
+      "image_key": null,
+      "image_url": null,
+      "items": [
+        {
+          "id": 3,
+          "menu_category_id": 2,
+          "name": "کباب کوبیده",
+          "description": "گوشت گوسفندی /ادویه های خاص",
+          "price_amount": 1200000,
+          "status": "available",
+          "sort_order": 0,
+          "is_vip_only": false,
+          "addons": [
+            {
+              "id": 4,
+              "menu_item_id": 3,
+              "name": "دوغ الیس",
+              "description": null,
+              "price_amount": 120000,
+              "is_required": false,
+              "max_select": 1,
+              "sort_order": 0
+            },
+            {
+              "id": 5,
+              "menu_item_id": 3,
+              "name": "نوشابه کوکاکولا مشکی",
+              "description": null,
+              "price_amount": 60000,
+              "is_required": false,
+              "max_select": 1,
+              "sort_order": 1
+            }
+          ],
+          "images": []
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "cafe_branch_id": 1,
+      "name": "فست فود",
+      "slug": "fst-fod",
+      "sort_order": 0,
+      "status": "visible",
+      "kind": "food",
+      "image_key": null,
+      "image_url": null,
+      "items": []
+    },
+    {
+      "id": 4,
+      "cafe_branch_id": 1,
+      "name": "نوشیدنی سرد",
+      "slug": "noshydny-srd",
+      "sort_order": 0,
+      "status": "visible",
+      "kind": "drink",
+      "image_key": null,
+      "image_url": null,
+      "items": []
+    }
+  ],
+  "source": "https://vitrincafe.ir/cafes/kafh-aaala",
+  "retrievedAt": "2026-10-04"
+}
