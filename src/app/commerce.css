@@ -1,0 +1,752 @@
+/* Purchase journey, using the shared Vitco tokens and existing commerce APIs. */
+.vitco-menu,
+.vitco-product,
+.vitco-cart,
+.vitco-orders {
+  max-width: 1120px;
+  margin-inline: auto;
+}
+
+.vitco-menu .menu-toolbar {
+  gap: 16px;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.vitco-menu .search-input {
+  border-radius: var(--radius-pill);
+}
+
+.vitco-menu .category-tabs {
+  gap: 8px;
+  margin-block: 20px 12px;
+  padding-block: 4px;
+}
+
+.menu-results {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.menu-results small {
+  font-size: 12px;
+}
+
+.vitco-menu .product-grid {
+  gap: 16px;
+}
+
+.product-unavailable {
+  align-self: start;
+  margin-top: 4px;
+  background: var(--surface-alt);
+  color: var(--muted);
+}
+
+.vitco-menu .product-card h3 {
+  font-size: 15px;
+}
+
+.vitco-menu .product-card p {
+  font-size: 12px;
+  height: 44px;
+}
+
+.vitco-menu .product-card-bottom strong {
+  font-size: 13px;
+}
+
+.menu-cart-dock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  bottom: 16px;
+  margin-top: 24px;
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--on-primary);
+  box-shadow: 0 8px 24px #00000018;
+  z-index: 20;
+  font-size: 13px;
+}
+
+.dock-count {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--on-primary) 12%, transparent);
+}
+
+.menu-cart-dock strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+  font-size: 13px;
+}
+
+.vitco-product .product-detail {
+  gap: 32px;
+  align-items: start;
+}
+
+.vitco-product .product-large,
+.vitco-product .product-large .no-photo {
+  height: 380px;
+  border-radius: var(--radius-lg);
+}
+
+.vitco-product .product-name {
+  font-size: 28px;
+  line-height: 1.6;
+  margin-block: 12px 8px;
+  overflow-wrap: anywhere;
+}
+
+.vitco-product .product-config > p {
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+.vitco-product .source-note {
+  font-size: 11px;
+  margin-top: 16px;
+}
+
+.vitco-product .product-price {
+  font-size: 22px;
+  margin-block: 16px 24px;
+}
+
+.vitco-product .option-group {
+  margin-block: 24px;
+}
+
+.vitco-product .option-group legend {
+  font-size: 14px;
+}
+
+.vitco-product .option-group legend small,
+.vitco-product .option-row > strong {
+  font-size: 12px;
+}
+
+.vitco-product .option-row {
+  font-size: 14px;
+  padding: 14px;
+}
+
+.vitco-product textarea {
+  min-height: 100px;
+}
+
+.product-purchase-bar {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.product-purchase-bar .product-total {
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.product-total-price {
+  display: flex;
+  flex-direction: column;
+  align-items: end;
+  gap: 4px;
+  text-align: end;
+}
+
+.product-total-price > small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.product-total-price > strong {
+  font-size: 18px;
+}
+
+.added-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0 24px;
+  text-align: center;
+}
+
+.added-check {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--sage);
+  color: var(--green);
+}
+
+.added-summary h3 {
+  font-size: 18px;
+}
+
+.added-summary p,
+.added-summary small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.vitco-cart .checkout-layout,
+.vitco-orders .checkout-layout {
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.85fr);
+  gap: 24px;
+}
+
+.vitco-cart .cart-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  padding: 16px;
+  gap: 16px;
+  align-items: start;
+}
+
+.vitco-cart .cart-item > .media {
+  grid-row: 1 / 3;
+  width: 88px;
+  height: 100px;
+  flex-shrink: 0;
+  border-radius: 12px;
+}
+
+.vitco-cart .cart-item .no-photo {
+  min-height: 100px;
+}
+
+.vitco-cart .cart-item-content {
+  min-width: 0;
+}
+
+.vitco-cart .cart-item-content h3 {
+  padding-inline-end: 28px;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.vitco-cart .cart-item-content p,
+.vitco-cart .cart-item-content > small {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.vitco-cart .cart-item > .icon-button {
+  position: absolute;
+  inset-inline-end: 4px;
+  top: 4px;
+  width: 44px;
+  height: 44px;
+  color: var(--muted);
+}
+
+.vitco-cart .cart-item-controls {
+  grid-column: 2;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 0;
+}
+
+.vitco-cart .cart-item-controls strong {
+  font-size: 13px;
+}
+
+.vitco-cart .section-title h2,
+.vitco-cart .panel h2,
+.vitco-orders .panel h2 {
+  font-size: 17px;
+}
+
+.vitco-cart .section-title > a {
+  font-size: 12px;
+  min-height: 44px;
+}
+
+.checkout-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 68px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: start;
+}
+
+.checkout-choice > span {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.checkout-choice strong {
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.checkout-choice small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.coupon-trigger {
+  margin-block: 20px;
+}
+
+.vitco-cart .order-summary,
+.vitco-orders .order-summary {
+  padding: 24px;
+  top: 24px;
+}
+
+.vitco-cart .order-summary .list-row,
+.vitco-orders .order-summary .list-row {
+  font-size: 13px;
+}
+
+.vitco-cart .order-summary .list-row strong,
+.vitco-orders .order-summary .list-row strong {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.vitco-cart .summary-total,
+.vitco-orders .summary-total {
+  gap: 12px;
+  font-size: 13px;
+}
+
+.vitco-cart .summary-total strong,
+.vitco-orders .summary-total strong {
+  font-size: 18px;
+}
+
+.guest-quote-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.vitco-cart .payment-info {
+  padding: 16px;
+  background: var(--surface-alt);
+  border-radius: 12px;
+  margin-block: 20px;
+}
+
+.vitco-cart .points-row {
+  font-size: 13px;
+  padding-block: 8px;
+}
+
+.vitco-cart .points-row small,
+.vitco-cart .payment-info small {
+  font-size: 11px;
+}
+
+.vitco-cart .checkout-terms {
+  font-size: 11px;
+}
+
+.vitco-orders .order-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+  padding: 32px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.vitco-orders .order-success > span {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--sage);
+  color: var(--green);
+}
+
+.vitco-orders .order-success > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 460px;
+}
+
+.vitco-orders .order-success h2 {
+  font-size: 24px;
+}
+
+.vitco-orders .order-success p,
+.vitco-orders .order-success small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.success-order-total {
+  font-size: 24px;
+  color: var(--text);
+}
+
+.order-reference {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.order-reference bdi {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.vitco-orders .order-timeline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  list-style: none;
+  padding: 0;
+  margin: 28px 0;
+}
+
+.order-timeline > li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  position: relative;
+  text-align: center;
+}
+
+.order-timeline > li:before {
+  content: '';
+  position: absolute;
+  height: 2px;
+  width: 100%;
+  inset-inline-end: 50%;
+  top: 22px;
+  background: var(--line);
+}
+
+.order-timeline > li:last-child:before {
+  content: none;
+}
+
+.order-timeline > li > span {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  z-index: 1;
+}
+
+.order-timeline > li > strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.order-timeline > li.done {
+  color: var(--green);
+}
+
+.order-timeline > li.done > span {
+  background: var(--sage);
+  border-color: var(--green);
+}
+
+.order-timeline > li[aria-current='step'] > span {
+  outline: 3px solid var(--peach);
+  outline-offset: 3px;
+}
+
+.vitco-orders .order-card {
+  padding: 20px;
+  gap: 16px;
+}
+
+.vitco-orders .order-card h3 {
+  font-size: 15px;
+}
+
+.vitco-orders .order-card p,
+.vitco-orders .order-card small {
+  font-size: 12px;
+}
+
+.vitco-orders .order-card-end strong {
+  font-size: 14px;
+}
+
+.vitco-orders .receipt-item {
+  gap: 12px;
+  font-size: 13px;
+}
+
+.vitco-orders .receipt-item small {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media screen and (max-width: 760px) {
+  .vitco-menu .page-title,
+  .vitco-product .page-title {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    align-items: start;
+  }
+
+  .vitco-menu .page-title > .button,
+  .vitco-product .page-title > .button {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    margin: 0;
+  }
+
+  .vitco-menu .page-title > .button > span,
+  .vitco-product .page-title > .button > span {
+    display: none;
+  }
+
+  .pickup-schedule-fields:has(.calendar-popover) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .vitco-menu .menu-toolbar {
+    padding: 12px;
+    flex-direction: column;
+  }
+
+  .vitco-menu .menu-toolbar > .segmented,
+  .vitco-menu .menu-toolbar > select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .vitco-menu .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .vitco-menu .product-card h3 {
+    font-size: 13px;
+  }
+
+  .vitco-menu .product-card p {
+    font-size: 11px;
+  }
+
+  .vitco-menu .product-card-bottom strong {
+    font-size: 11px;
+  }
+
+  .has-cart-dock {
+    padding-bottom: 90px;
+  }
+
+  .menu-cart-dock {
+    position: fixed;
+    inset-inline: 12px;
+    bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 12px);
+    padding: 12px;
+    font-size: 11px;
+    gap: 8px;
+    z-index: 35;
+  }
+
+  .menu-cart-dock strong {
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .menu-cart-dock > span:nth-child(2) {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .vitco-product .product-detail {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .vitco-product .product-large,
+  .vitco-product .product-large .no-photo {
+    height: 260px;
+  }
+
+  .vitco-product .product-name {
+    font-size: 25px;
+  }
+
+  .vitco-product:has(.is-orderable) {
+    padding-bottom: 170px;
+  }
+
+  .product-purchase-bar.is-orderable {
+    position: fixed;
+    bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+    inset-inline: 0;
+    padding: 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -4px 24px #00000008;
+    z-index: 35;
+    margin: 0;
+  }
+
+  .product-purchase-bar .product-total {
+    margin-bottom: 12px;
+  }
+
+  .product-total-price > strong {
+    font-size: 16px;
+  }
+
+  .modal.modal-sheet {
+    inset: auto 0 0;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 88dvh;
+    padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+    border-radius: 24px 24px 0 0;
+    border-bottom: 0;
+  }
+
+  .vitco-cart .checkout-layout,
+  .vitco-orders .checkout-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .vitco-cart .order-summary,
+  .vitco-orders .order-summary {
+    position: static;
+    padding: 20px;
+  }
+
+  .vitco-cart .cart-item {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .vitco-cart .cart-item > .media {
+    grid-row: 1;
+    width: 64px;
+    height: 80px;
+  }
+
+  .vitco-cart .cart-item .no-photo {
+    min-height: 80px;
+  }
+
+  .vitco-cart .cart-item-content h3 {
+    font-size: 14px;
+  }
+
+  .vitco-cart .cart-item-controls {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+
+  .vitco-cart .cart-item-content p,
+  .vitco-cart .cart-item-content > small {
+    font-size: 11px;
+  }
+
+  .vitco-orders .order-timeline {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .order-timeline > li {
+    flex-direction: row;
+    min-height: 68px;
+    text-align: start;
+    gap: 16px;
+  }
+
+  .order-timeline > li:before {
+    inset-inline-start: 21px;
+    inset-inline-end: auto;
+    top: 34px;
+    width: 2px;
+    height: 100%;
+  }
+
+  .order-timeline > li > strong {
+    font-size: 13px;
+  }
+
+  .vitco-orders .order-success {
+    padding: 28px 20px;
+  }
+
+  .vitco-orders .order-card {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .vitco-orders .order-card > div:nth-child(2) {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .vitco-orders .order-card p {
+    overflow-wrap: anywhere;
+  }
+
+  .vitco-orders .receipt-item {
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+
+  .vitco-orders .receipt-item > div {
+    flex-basis: 100%;
+  }
+
+  .vitco-orders .receipt-item > strong {
+    margin-inline-start: auto;
+    font-size: 13px;
+  }
+}
+
+@media print {
+  .product-purchase-bar,
+  .menu-cart-dock {
+    display: none;
+  }
+}

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { api, useApp, useResource } from '@/lib/client';
 import { PersianDateInput, PersianTimeInput } from './persian-date';
+import { LocationMap, hasPosition } from './location-map';
 import { money, digits, dateLabel, daysAhead, today, statusLabels } from '@/lib/format';
 import type { Address, Order, Reservation } from '@/lib/types';
 import {
@@ -70,9 +71,13 @@ export function CartView() {
     [error, setError] = useState(''),
     [quote, setQuote] = useState<Quote | null>(null),
     [quoting, setQuoting] = useState(false),
-    [clear, setClear] = useState(false);
+    [clear, setClear] = useState(false),
+    [removeKey, setRemoveKey] = useState<string | null>(null),
+    [couponOpen, setCouponOpen] = useState(false),
+    [pickupOpen, setPickupOpen] = useState(false);
   const requestKey = useRef({ signature: '', key: '' });
   const cafe = data?.cafes.find((c) => c.id === cart[0]?.cafe_id);
+  const removing = cart.find((item) => item.key === removeKey);
   const estimated = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const cafePoints = data?.rewards.find((r) => r.cafe_id === cafe?.id)?.points || 0;
   const points = usePoints ? Math.min(cafePoints, Math.floor(estimated / 1000)) : 0;
@@ -131,18 +136,18 @@ export function CartView() {
   }
   if (!cart.length)
     return (
-      <>
-        <PageTitle title="سبد خرید" />
+      <div className="vitco-cart">
+        <PageTitle title="سبد خرید" back="/menu" />
         <Empty
           title="سبدت منتظر یک طعم تازه است"
           description="از منوی کافه‌ها انتخاب کن و اولین محصول را به سبد اضافه کن."
           href="/menu"
           label="دیدن منوی کافه‌ها"
         />
-      </>
+      </div>
     );
   return (
-    <>
+    <div className="vitco-cart">
       <PageTitle
         title="سبد خرید شما"
         description={cafe?.name}
@@ -159,12 +164,17 @@ export function CartView() {
           <div className="segmented">
             <button
               className={mode === 'delivery' ? 'active' : ''}
+              aria-pressed={mode === 'delivery'}
               onClick={() => setMode('delivery')}
             >
               <Bike size={18} />
               ارسال به آدرس
             </button>
-            <button className={mode === 'pickup' ? 'active' : ''} onClick={() => setMode('pickup')}>
+            <button
+              className={mode === 'pickup' ? 'active' : ''}
+              aria-pressed={mode === 'pickup'}
+              onClick={() => setMode('pickup')}
+            >
               <Store size={18} />
               تحویل از کافه
             </button>
@@ -181,20 +191,20 @@ export function CartView() {
                     </Link>
                     <p>{item.option_names.join('، ')}</p>
                     {item.note && <small>{item.note}</small>}
-                    <div className="cart-item-controls">
-                      <Quantity
-                        value={item.quantity}
-                        onChange={(quantity) =>
-                          setCart(cart.map((i) => (i.key === item.key ? { ...i, quantity } : i)))
-                        }
-                      />
-                      <strong>{money(item.price * item.quantity)}</strong>
-                    </div>
+                  </div>
+                  <div className="cart-item-controls">
+                    <Quantity
+                      value={item.quantity}
+                      onChange={(quantity) =>
+                        setCart(cart.map((i) => (i.key === item.key ? { ...i, quantity } : i)))
+                      }
+                    />
+                    <strong>{money(item.price * item.quantity)}</strong>
                   </div>
                   <button
                     className="icon-button"
                     aria-label={'حذف ' + item.name}
-                    onClick={() => setCart(cart.filter((i) => i.key !== item.key))}
+                    onClick={() => setRemoveKey(item.key)}
                   >
                     <Trash2 size={17} />
                   </button>
@@ -236,15 +246,18 @@ export function CartView() {
                   <MapPin size={18} />
                   {cafe?.city}، {cafe?.address}
                 </p>
-                <Field
-                  label="زمان دریافت (اختیاری)"
-                  hint="خالی بگذارید تا سفارش برای اولین زمان ممکن آماده شود."
-                >
-                  <div className="form-grid">
-                    <PersianDateInput value={pickup} onChange={setPickup} min={today()} />
-                    <PersianTimeInput value={pickupTime} onChange={setPickupTime} />
-                  </div>
-                </Field>
+                <button className="checkout-choice" onClick={() => setPickupOpen(true)}>
+                  <Clock3 size={20} />
+                  <span>
+                    <strong>زمان دریافت</strong>
+                    <small>
+                      {pickup
+                        ? dateLabel(pickup) + '، ساعت ' + digits(pickupTime)
+                        : 'اولین زمان ممکن'}
+                    </small>
+                  </span>
+                  <ChevronLeft size={18} />
+                </button>
               </>
             )}
             <Field label="یادداشت برای کافه (اختیاری)">
@@ -260,12 +273,20 @@ export function CartView() {
         <aside className="order-summary panel">
           <h2>خلاصه سفارش</h2>
           <div className="list-row">
-            <span>قیمت محصولات</span>
-            <strong>{quote ? money(quote.subtotal) : 'در حال محاسبه…'}</strong>
+            <span>{data?.user ? 'قیمت محصولات' : 'قیمت تقریبی محصولات'}</span>
+            <strong>
+              {quote
+                ? money(quote.subtotal)
+                : !data?.user
+                  ? money(estimated)
+                  : quoting
+                    ? 'در حال محاسبه…'
+                    : '—'}
+            </strong>
           </div>
           <div className="list-row">
             <span>هزینه ارسال</span>
-            <strong>{quote ? money(quote.delivery_fee) : '—'}</strong>
+            <strong>{quote ? money(quote.delivery_fee) : data?.user ? '—' : 'پس از ورود'}</strong>
           </div>
           {Boolean(quote?.discount) && (
             <div className="list-row green">
@@ -279,33 +300,29 @@ export function CartView() {
               <strong>− {money(quote!.points_used * 1000)}</strong>
             </div>
           )}
-          <div className="coupon-form">
-            <label htmlFor="coupon">
-              <TicketPercent size={17} />
-              کد تخفیف داری؟
-            </label>
-            <div>
-              <input
-                id="coupon"
-                value={couponInput}
-                onChange={(e) => setCouponInput(e.target.value)}
-                placeholder="کد تخفیف"
-              />
-              <button onClick={() => setCoupon(couponInput.trim())}>اعمال</button>
-            </div>
-            {coupon && (
-              <button
-                className="text-link"
-                onClick={() => {
-                  setCoupon('');
-                  setCouponInput('');
-                }}
-              >
-                حذف کد تخفیف
-                <X size={14} />
-              </button>
-            )}
-          </div>
+          <button
+            className="checkout-choice coupon-trigger"
+            disabled={!data?.user}
+            onClick={() => {
+              setCouponInput(coupon);
+              setCouponOpen(true);
+            }}
+          >
+            <TicketPercent size={20} />
+            <span>
+              <strong>{coupon || 'کد تخفیف داری؟'}</strong>
+              <small>
+                {!data?.user
+                  ? 'پس از ورود می‌توانی کد تخفیف اعمال کنی'
+                  : coupon && quote?.discount
+                    ? 'کد تخفیف اعمال شد'
+                    : coupon
+                      ? 'ویرایش یا حذف کد'
+                      : 'افزودن کد تخفیف'}
+              </small>
+            </span>
+            <ChevronLeft size={18} />
+          </button>
           {data?.user && (
             <label className="check-row points-row">
               <input
@@ -321,10 +338,21 @@ export function CartView() {
               <Gift size={20} />
             </label>
           )}
-          <div className="summary-total">
-            <span>مبلغ قابل پرداخت</span>
-            <strong>{quoting ? 'در حال محاسبه…' : quote ? money(quote.total) : '—'}</strong>
+          <div className="summary-total" aria-live="polite">
+            <span>{data?.user ? 'مبلغ قابل پرداخت' : 'جمع تقریبی'}</span>
+            <strong>
+              {!data?.user
+                ? money(estimated)
+                : quoting
+                  ? 'در حال محاسبه…'
+                  : quote
+                    ? money(quote.total)
+                    : '—'}
+            </strong>
           </div>
+          {!data?.user && (
+            <p className="guest-quote-note">مبلغ نهایی و هزینه ارسال پس از ورود محاسبه می‌شود.</p>
+          )}
           <div className="payment-info">
             <CreditCard size={20} />
             <div>
@@ -339,7 +367,7 @@ export function CartView() {
               busy ||
               (Boolean(data?.user) && (!quote || quoting || (mode === 'delivery' && !address)))
             }
-            onClick={() => (data?.user ? void checkout() : router.push('/login'))}
+            onClick={() => (data?.user ? void checkout() : router.push('/login?next=%2Fcart'))}
           >
             {busy ? 'در حال ثبت سفارش…' : data?.user ? 'ثبت سفارش' : 'ورود و ادامه سفارش'}
             <ArrowLeft size={18} />
@@ -349,6 +377,87 @@ export function CartView() {
           </p>
         </aside>
       </div>
+      <Modal
+        open={couponOpen}
+        onClose={() => setCouponOpen(false)}
+        title="کد تخفیف"
+        presentation="sheet"
+      >
+        <form
+          className="form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setCoupon(couponInput.trim());
+            setCouponOpen(false);
+          }}
+        >
+          <Field label="کد تخفیف داری؟">
+            <input
+              id="coupon"
+              value={couponInput}
+              onChange={(event) => setCouponInput(event.target.value)}
+              placeholder="کد تخفیف را وارد کن"
+              autoComplete="off"
+            />
+          </Field>
+          <button className="button primary full" type="submit">
+            اعمال کد تخفیف <TicketPercent size={18} />
+          </button>
+          {coupon && (
+            <button
+              className="button secondary full"
+              type="button"
+              onClick={() => {
+                setCoupon('');
+                setCouponInput('');
+                setCouponOpen(false);
+              }}
+            >
+              حذف کد تخفیف <X size={16} />
+            </button>
+          )}
+        </form>
+      </Modal>
+      <Modal
+        open={pickupOpen}
+        onClose={() => setPickupOpen(false)}
+        title="زمان دریافت از کافه"
+        presentation="sheet"
+      >
+        <div className="form">
+          <p className="muted">
+            زمان دلخواهت را انتخاب کن یا دریافت در اولین زمان ممکن را ادامه بده.
+          </p>
+          <Field label="زمان دریافت (اختیاری)">
+            <div className="form-grid pickup-schedule-fields">
+              <PersianDateInput value={pickup} onChange={setPickup} min={today()} />
+              <PersianTimeInput value={pickupTime} onChange={setPickupTime} />
+            </div>
+          </Field>
+          <button className="button primary full" onClick={() => setPickupOpen(false)}>
+            تأیید زمان دریافت
+          </button>
+          <button
+            className="button secondary full"
+            onClick={() => {
+              setPickup('');
+              setPickupOpen(false);
+            }}
+          >
+            اولین زمان ممکن
+          </button>
+        </div>
+      </Modal>
+      <Confirm
+        open={Boolean(removing)}
+        title="این محصول حذف شود؟"
+        description={removing ? '«' + removing.name + '» از سبد خرید حذف می‌شود.' : ''}
+        onClose={() => setRemoveKey(null)}
+        onConfirm={() => {
+          setCart(cart.filter((item) => item.key !== removeKey));
+          setRemoveKey(null);
+        }}
+      />
       <Confirm
         open={clear}
         title="سبد خرید خالی شود؟"
@@ -359,7 +468,7 @@ export function CartView() {
           setClear(false);
         }}
       />
-    </>
+    </div>
   );
 }
 export function OrdersView({ id }: { id?: string }) {
@@ -387,7 +496,7 @@ export function OrdersView({ id }: { id?: string }) {
       ? ['pending', 'preparing', 'delivering', 'completed']
       : ['pending', 'preparing', 'ready', 'completed'];
   return (
-    <>
+    <div className="vitco-orders">
       <PageTitle
         title={id ? 'جزئیات سفارش' : 'سفارش‌های من'}
         description={
@@ -410,6 +519,14 @@ export function OrdersView({ id }: { id?: string }) {
                 <div>
                   <h2>سفارش شما ثبت شد!</h2>
                   <p>درخواست برای کافه ارسال شد. پس از تأیید کافه، وضعیت آن اینجا به‌روز می‌شود.</p>
+                  <strong className="success-order-total">{money(order.total)}</strong>
+                  <small>
+                    پرداخت هنگام دریافت ·{' '}
+                    {order.mode === 'delivery' ? 'ارسال به آدرس' : 'تحویل از کافه'}
+                  </small>
+                  <Link className="button primary" href={'/orders/' + order.id}>
+                    پیگیری سفارش <ArrowLeft size={17} />
+                  </Link>
                 </div>
               </div>
             )}
@@ -421,10 +538,17 @@ export function OrdersView({ id }: { id?: string }) {
                     <Badge status={order.status} />
                   </div>
                   <p className="muted">{dateLabel(order.created_at, true)}</p>
+                  <p className="order-reference">
+                    شناسه سفارش <bdi>{order.id.slice(0, 8)}</bdi>
+                  </p>
                   {order.status !== 'cancelled' && (
-                    <div className="order-timeline">
+                    <ol className="order-timeline" aria-label="مراحل آماده‌سازی سفارش">
                       {steps.map((s, i) => (
-                        <div key={s} className={steps.indexOf(order.status) >= i ? 'done' : ''}>
+                        <li
+                          key={s}
+                          aria-current={order.status === s ? 'step' : undefined}
+                          className={steps.indexOf(order.status) >= i ? 'done' : ''}
+                        >
                           <span>
                             {i === 0 ? (
                               <ReceiptText size={20} />
@@ -437,11 +561,11 @@ export function OrdersView({ id }: { id?: string }) {
                             )}
                           </span>
                           <strong>{statusLabels[s]}</strong>
-                        </div>
+                        </li>
                       ))}
-                    </div>
+                    </ol>
                   )}
-                  <button className="text-link" onClick={resource.reload}>
+                  <button className="text-link" onClick={() => void refresh()}>
                     <RotateCcw size={15} />
                     به‌روزرسانی وضعیت
                   </button>
@@ -548,12 +672,14 @@ export function OrdersView({ id }: { id?: string }) {
               <div className="tabs">
                 <button
                   className={tab === 'active' ? 'active' : ''}
+                  aria-pressed={tab === 'active'}
                   onClick={() => setTab('active')}
                 >
                   سفارش‌های جاری
                 </button>
                 <button
                   className={tab === 'history' ? 'active' : ''}
+                  aria-pressed={tab === 'history'}
                   onClick={() => setTab('history')}
                 >
                   تاریخچه سفارش‌ها
@@ -575,7 +701,10 @@ export function OrdersView({ id }: { id?: string }) {
                     <div>
                       <h3>{o.cafe_name}</h3>
                       <p>{o.items.map((i) => i.name).join('، ')}</p>
-                      <small>{dateLabel(o.created_at, true)}</small>
+                      <small>
+                        {o.mode === 'delivery' ? 'ارسال به آدرس' : 'تحویل از کافه'} ·{' '}
+                        {dateLabel(o.created_at, true)}
+                      </small>
                     </div>
                     <div className="order-card-end">
                       <Badge status={o.status} />
@@ -610,31 +739,65 @@ export function OrdersView({ id }: { id?: string }) {
           }
         }}
       />
-    </>
+    </div>
   );
 }
 export function ReserveView() {
   const { data, toast, refresh } = useApp(),
-    query = useSearchParams();
+    query = useSearchParams(),
+    router = useRouter();
   const [cafeId, setCafeId] = useState(
       query.get('cafe') || data?.cafes.find((c) => c.owner_id && c.active)?.id || '',
     ),
-    [date, setDate] = useState(today()),
-    [time, setTime] = useState(''),
-    [guests, setGuests] = useState(2),
+    [date, setDate] = useState(() =>
+      /^\d{4}-\d{2}-\d{2}$/.test(query.get('date') || '') &&
+      query.get('date')! >= today() &&
+      Number.isFinite(Date.parse(query.get('date') + 'T12:00:00Z')) &&
+      new Date(query.get('date') + 'T12:00:00Z').toISOString().slice(0, 10) === query.get('date')
+        ? query.get('date')!
+        : today(),
+    ),
+    [time, setTime] = useState(() =>
+      /^\d{2}:\d{2}$/.test(query.get('time') || '') ? query.get('time')! : '',
+    ),
+    [guests, setGuests] = useState(() =>
+      Math.min(20, Math.max(1, Math.floor(Number(query.get('guests')) || 2))),
+    ),
     [note, setNote] = useState(''),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [success, setSuccess] = useState(false),
     [calendar, setCalendar] = useState(false);
   const key = useRef({ signature: '', key: '' });
+  const submitting = useRef(false);
+  const initializedCafe = useRef(Boolean(query.get('cafe')));
   const cafe = data?.cafes.find((c) => c.id === cafeId);
   const slots = useResource<{ slots: { time: string; remaining: number }[] }>(
     cafeId ? 'slots/' + cafeId + '?date=' + date : null,
   );
-  useEffect(() => setTime(''), [date, cafeId]);
-  const days = daysAhead(calendar ? 30 : 7);
+  const defaultCafeId = data?.cafes.find((c) => c.owner_id && c.active)?.id;
+  useEffect(() => {
+    if (!initializedCafe.current && defaultCafeId) {
+      initializedCafe.current = true;
+      setCafeId(defaultCafeId);
+    }
+  }, [defaultCafeId]);
+  const available = Boolean(
+    cafe?.active &&
+    cafe.owner_id &&
+    !slots.loading &&
+    !slots.error &&
+    slots.data?.slots.some((slot) => slot.time === time && slot.remaining >= guests),
+  );
+  const days = daysAhead(7);
+  function selectDate(value: string) {
+    setDate(value);
+    setTime('');
+    setError('');
+  }
   async function submit() {
+    if (submitting.current || !available) return;
+    submitting.current = true;
     setError('');
     setBusy(true);
     try {
@@ -647,15 +810,17 @@ export function ReserveView() {
       await refresh();
     } catch (e) {
       setError((e as Error).message);
+      slots.reload();
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
   return (
-    <>
+    <div className="reserve-page">
       <PageTitle
         title="یک میز برای لحظه‌های خوب"
-        description="کافه، روز و ساعت را انتخاب کن؛ ادامه‌اش با ما."
+        description="کافه، روز و ساعت را انتخاب کن و درخواستت را برای تأیید بفرست."
         back="/cafes"
       />
       <div className="reservation-layout">
@@ -665,16 +830,26 @@ export function ReserveView() {
             کجا قرار بگذاریم؟
           </h2>
           <Field label="کافه">
-            <select value={cafeId} onChange={(e) => setCafeId(e.target.value)}>
+            <select
+              value={cafeId}
+              onChange={(e) => {
+                setCafeId(e.target.value);
+                setTime('');
+                setError('');
+              }}
+            >
               <option value="">کافه را انتخاب کنید</option>
               {data?.cafes.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c.id} value={c.id} disabled={!c.owner_id || !c.active}>
                   {c.name}
                   {!c.owner_id || !c.active ? ' · رزرو غیرفعال' : ''}
                 </option>
               ))}
             </select>
           </Field>
+          {!data?.cafes.some((c) => c.owner_id && c.active) && (
+            <p className="notice">هنوز کافه‌ای با امکان رزرو آنلاین ثبت نشده است.</p>
+          )}
           {cafe && (
             <p className="icon-text muted">
               <MapPin size={17} />
@@ -686,17 +861,26 @@ export function ReserveView() {
               <CalendarDays size={20} />
               کِی همدیگر را ببینیم؟
             </h2>
-            <button className="text-link" onClick={() => setCalendar(!calendar)}>
-              {calendar ? 'نمای هفته' : 'تقویم کامل'}
+            <button className="text-link" onClick={() => setCalendar(true)}>
+              تقویم کامل
             </button>
           </div>
-          <div className={'date-picker ' + (calendar ? 'expanded' : '')}>
+          <div className="date-picker">
             {days.map((d) => {
               const parsed = new Date(d + 'T12:00:00+03:30');
               return (
-                <button key={d} className={date === d ? 'selected' : ''} onClick={() => setDate(d)}>
+                <button
+                  key={d}
+                  aria-label={dateLabel(d)}
+                  aria-pressed={date === d}
+                  className={date === d ? 'selected' : ''}
+                  onClick={() => selectDate(d)}
+                >
                   <small>
-                    {new Intl.DateTimeFormat('fa-IR', { weekday: 'short' }).format(parsed)}
+                    {new Intl.DateTimeFormat('fa-IR', {
+                      weekday: 'short',
+                      timeZone: 'Asia/Tehran',
+                    }).format(parsed)}
                   </small>
                   <strong>
                     {new Intl.DateTimeFormat('fa-IR', { day: 'numeric' }).format(parsed)}
@@ -708,6 +892,10 @@ export function ReserveView() {
               );
             })}
           </div>
+          <p className="reserve-chosen-date">
+            <CalendarDays size={17} />
+            {dateLabel(date)}
+          </p>
           <h2>
             <Clock3 size={20} />
             ساعت قرار
@@ -722,6 +910,7 @@ export function ReserveView() {
                 <button
                   key={s.time}
                   className={time === s.time ? 'selected' : ''}
+                  aria-pressed={time === s.time}
                   disabled={s.remaining < guests}
                   onClick={() => setTime(s.time)}
                 >
@@ -765,9 +954,26 @@ export function ReserveView() {
           </Field>
         </section>
         <aside className="booking-summary">
-          <div className="booking-art">
-            <img src="/images/hero.webp" alt="قهوه و شیرینی برای یک قرار خوب" />
-          </div>
+          {cafe && (
+            <div className="reserve-location panel">
+              <h2>
+                <MapPin size={19} />
+                موقعیت کافه
+              </h2>
+              {hasPosition(cafe) ? (
+                <LocationMap
+                  points={[{ ...cafe, latitude: cafe.latitude, longitude: cafe.longitude }]}
+                  selected={cafe.id}
+                  label={'موقعیت ' + cafe.name}
+                />
+              ) : (
+                <p className="notice">موقعیت دقیق این کافه هنوز ثبت نشده است.</p>
+              )}
+              <p className="muted">
+                {cafe.city}، {cafe.address}
+              </p>
+            </div>
+          )}
           <div className="panel">
             <span className="eyebrow">خلاصه قرار شما</span>
             <h2>{cafe?.name || 'یک قرار تازه'}</h2>
@@ -789,10 +995,13 @@ export function ReserveView() {
             {error && <ErrorBox message={error} />}
             <button
               className="button primary full"
-              disabled={busy || !time || !cafe?.owner_id}
+              disabled={busy || !available}
               onClick={() => {
                 if (!data?.user) {
-                  window.location.href = '/login';
+                  const next =
+                    '/reserve?' +
+                    new URLSearchParams({ cafe: cafeId, date, time, guests: String(guests) });
+                  router.push('/login?next=' + encodeURIComponent(next));
                   return;
                 }
                 void submit();
@@ -804,12 +1013,39 @@ export function ReserveView() {
           </div>
         </aside>
       </div>
-      <Modal open={success} title="درخواست رزرو ثبت شد" onClose={() => setSuccess(false)}>
+      <Modal
+        open={calendar}
+        title="انتخاب روز قرار"
+        presentation="sheet"
+        onClose={() => setCalendar(false)}
+      >
+        {calendar && (
+          <PersianDateInput
+            value={date}
+            min={today()}
+            initialOpen
+            onChange={(value) => {
+              selectDate(value);
+              setCalendar(false);
+            }}
+          />
+        )}
+      </Modal>
+      <Modal
+        open={success}
+        title="درخواست رزرو ثبت شد"
+        presentation="sheet"
+        onClose={() => setSuccess(false)}
+      >
         <div className="booking-success">
           <span className="empty-icon">
             <CalendarCheck size={40} />
           </span>
           <h3>یک قدم تا قرار بعدی</h3>
+          <p>
+            <strong>{cafe?.name}</strong> · {dateLabel(date)} · {digits(time)} · {digits(guests)}{' '}
+            نفر
+          </p>
           <p>کافه باید درخواست شما را تأیید کند. وضعیت را در بخش رزروهای من ببینید.</p>
           <Link className="button primary" href="/reservations">
             مشاهده رزروهای من
@@ -817,7 +1053,7 @@ export function ReserveView() {
           </Link>
         </div>
       </Modal>
-    </>
+    </div>
   );
 }
 export function ReservationsView() {
@@ -832,7 +1068,7 @@ export function ReservationsView() {
         : !['pending', 'confirmed'].includes(r.status) || r.date < today(),
     ) || [];
   return (
-    <>
+    <div className="reservations-page">
       <PageTitle
         title="قرارهای من"
         description="برای وقت‌هایی که از قبل برای خودت کنار گذاشته‌ای."
@@ -845,13 +1081,30 @@ export function ReservationsView() {
       />
       <LoginGate>
         <div className="tabs">
-          <button className={tab === 'active' ? 'active' : ''} onClick={() => setTab('active')}>
+          <button
+            aria-pressed={tab === 'active'}
+            className={tab === 'active' ? 'active' : ''}
+            onClick={() => setTab('active')}
+          >
             قرارهای پیش رو
           </button>
-          <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
+          <button
+            aria-pressed={tab === 'history'}
+            className={tab === 'history' ? 'active' : ''}
+            onClick={() => setTab('history')}
+          >
             قرارهای گذشته
           </button>
         </div>
+        <button
+          type="button"
+          className="button secondary reservation-refresh"
+          disabled={resource.loading}
+          onClick={resource.reload}
+        >
+          <RotateCcw size={16} />
+          تازه‌سازی وضعیت قرارها
+        </button>
         {resource.loading ? (
           <Loading />
         ) : resource.error ? (
@@ -923,6 +1176,6 @@ export function ReservationsView() {
           }
         }}
       />
-    </>
+    </div>
   );
 }

@@ -1,0 +1,319 @@
+.location-map-shell {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-alt);
+  isolation: isolate;
+}
+.location-map {
+  height: 340px;
+  width: 100%;
+  z-index: 0;
+  font-family: inherit;
+  background: var(--surface-alt);
+}
+.location-map .leaflet-control-attribution {
+  direction: ltr;
+  font-size: 10px;
+}
+.location-map .leaflet-tooltip {
+  font-family: inherit;
+  direction: rtl;
+}
+.location-map a {
+  color: #21567d;
+}
+.map-message {
+  position: absolute;
+  inset: 40% 0 auto;
+  text-align: center;
+  pointer-events: none;
+}
+.map-warning {
+  position: relative;
+  padding: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.map-center-button {
+  position: absolute;
+  z-index: 500;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  box-shadow: 0 2px 12px #0002;
+}
+.vitco-map-pin {
+  background: none;
+  border: none;
+}
+.vitco-map-pin > span {
+  display: block;
+  width: 30px;
+  height: 30px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: #333336;
+  border: 3px solid white;
+  box-shadow: 0 3px 8px #0005;
+}
+.vitco-map-pin > span::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  inset: 8px;
+  border-radius: 50%;
+  background: white;
+}
+.vitco-map-pin.is-selected > span {
+  background: #935426;
+}
+.vitco-map-pin:focus-visible {
+  outline: 3px solid #935426;
+  outline-offset: 5px;
+}
+.location-picker {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.location-picker > p {
+  font-size: 13px;
+  margin: 0;
+}
+.location-picker .location-map {
+  height: 280px;
+}
+.location-selection {
+  display: flex;
+  align-items: center;
+  gap: 8px 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.location-selection > small {
+  color: var(--muted);
+}
+.cafe-map-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.cafe-map-layout .location-map {
+  height: 560px;
+}
+.cafe-map-list {
+  display: grid;
+  gap: 12px;
+  max-height: 562px;
+  overflow: auto;
+}
+.cafe-map-list .section-title {
+  margin: 0;
+}
+.cafe-map-list h2 {
+  font-size: 17px;
+}
+.map-cafe-card {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.map-cafe-card.selected {
+  border-color: var(--accent);
+}
+.map-cafe-card > button {
+  display: grid;
+  text-align: start;
+  gap: 8px;
+  padding: 18px;
+  width: 100%;
+}
+.map-cafe-card > button span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.map-cafe-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+.map-cafe-actions > a {
+  flex: 1;
+  font-size: 12px;
+}
+.reserve-page .reservation-layout {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.reserve-page .reservation-form {
+  padding: 28px;
+  border-radius: 20px;
+}
+.reserve-page .reservation-form h2 {
+  font-size: 16px;
+  gap: 8px;
+  margin: 12px 0;
+}
+.reserve-page .reservation-form h2:first-child {
+  margin-top: 0;
+}
+.reserve-page .reservation-form > .section-title {
+  margin: 12px 0 0;
+  gap: 12px;
+}
+.reserve-page .date-picker {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.reserve-page .date-picker > button {
+  padding: 12px 3px;
+  min-width: 0;
+  border-radius: 12px;
+  background: var(--surface-alt);
+  border: 1px solid transparent;
+}
+.reserve-page .date-picker > button.selected,
+.reserve-page .time-picker > button.selected {
+  background: var(--primary);
+  color: var(--on-primary);
+  border-color: var(--primary);
+}
+.reserve-page .date-picker > button.selected small,
+.reserve-page .time-picker > button.selected small {
+  color: inherit;
+}
+.reserve-chosen-date {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+.reserve-page .time-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 300px;
+  overflow: auto;
+  padding: 3px;
+}
+.reserve-page .time-picker > button {
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 12px 6px;
+}
+.reserve-page .time-picker > button:disabled {
+  opacity: 0.45;
+}
+.reserve-page .guest-picker {
+  background: var(--surface-alt);
+  border-radius: 14px;
+  padding: 12px 16px;
+  justify-content: space-between;
+}
+.reserve-page .booking-summary {
+  display: grid;
+  gap: 16px;
+}
+.reserve-page .booking-summary > .panel {
+  border-radius: 20px;
+  padding: 24px;
+}
+.reserve-page .booking-summary .reserve-location {
+  padding: 16px;
+}
+.reserve-location h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  margin-bottom: 14px;
+}
+.reserve-location .location-map {
+  height: 230px;
+}
+.reserve-location > p {
+  font-size: 12px;
+  margin: 12px 0 0;
+}
+.reserve-page .booking-summary .list-row {
+  font-size: 13px;
+  gap: 12px;
+}
+.reserve-page .booking-summary .list-row strong {
+  text-align: end;
+}
+.reserve-page .booking-summary .muted {
+  line-height: 1.9;
+  font-size: 13px;
+}
+.reserve-page .calendar-popover {
+  width: 100%;
+}
+.reservations-page .reservation-card {
+  border-radius: 20px;
+}
+.reservations-page .reservation-card h2 {
+  font-size: 18px;
+}
+.reservation-refresh {
+  margin: 12px 0 20px;
+}
+@media (max-width: 760px) {
+  .cafe-map-layout,
+  .reserve-page .reservation-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cafe-map-layout {
+    gap: 16px;
+  }
+  .cafe-map-layout .location-map {
+    height: 360px;
+  }
+  .cafe-map-list {
+    max-height: none;
+  }
+  .reserve-page .reservation-form {
+    padding: 18px 14px;
+  }
+  .reserve-page .date-picker > button strong {
+    font-size: 18px;
+  }
+  .reserve-page .date-picker > button small {
+    font-size: 10px;
+  }
+  .reserve-page .date-picker {
+    gap: 4px;
+  }
+  .reserve-page .time-picker {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .reserve-page .booking-summary {
+    position: static;
+  }
+  .reserve-page .booking-summary > .panel {
+    padding: 20px;
+  }
+  .location-map {
+    height: 300px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .location-map * {
+    scroll-behavior: auto;
+  }
+}

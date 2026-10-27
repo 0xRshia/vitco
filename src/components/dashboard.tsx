@@ -1,4 +1,5 @@
 'use client';
+import { LocationPicker } from './location-map';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -83,7 +84,7 @@ export function DashboardView() {
   return (
     <>
       <PageTitle
-        title="ویترین کافه شما"
+        title="مدیریت کافه شما"
         description="از اولین فنجان تا قرار بعدی؛ کسب‌وکارت را از اینجا مدیریت کن."
         action={
           app?.user && (
@@ -192,7 +193,7 @@ export function DashboardView() {
                   </div>
                 ) : (
                   <Empty
-                    title="کافه شما، در ویترین شهر"
+                    title="کافه شما، در ویتکو"
                     description="اطلاعات واقعی کافه‌تان را ثبت کنید، منو بسازید و پذیرای سفارش و رزرو مشتریان باشید."
                   />
                 ))}
@@ -671,6 +672,20 @@ function CafeEditor({ cafe, onDone }: { cafe: Cafe | null; onDone: () => Promise
       <Field label="نشانی کامل">
         <textarea name="address" defaultValue={cafe?.address} />
       </Field>
+      <LocationPicker
+        value={
+          latitude !== '' &&
+          longitude !== '' &&
+          Number.isFinite(Number(latitude)) &&
+          Number.isFinite(Number(longitude))
+            ? { latitude: Number(latitude), longitude: Number(longitude) }
+            : null
+        }
+        onChange={(point) => {
+          setLatitude(point ? String(point.latitude) : '');
+          setLongitude(point ? String(point.longitude) : '');
+        }}
+      />
       <div className="form-grid">
         <Field label="عرض جغرافیایی (اختیاری)">
           <input

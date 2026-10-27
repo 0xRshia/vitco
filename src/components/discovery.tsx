@@ -27,12 +27,12 @@ import {
   Plus,
   Check,
   ScanLine,
-  Sparkles,
   Users,
   Utensils,
   X,
 } from 'lucide-react';
 import { api, useApp, useResource } from '@/lib/client';
+import { CafeMap } from './location-map';
 import { money, digits, dateLabel, amenities, today } from '@/lib/format';
 import type { Cafe, Product, Review, CafeEvent, Order } from '@/lib/types';
 import {
@@ -48,6 +48,8 @@ import {
   Submit,
   LoginGate,
   Confirm,
+  LoyaltyCard,
+  Badge,
 } from './ui';
 
 export function FavoriteButton({ id }: { id: string }) {
@@ -100,7 +102,7 @@ export function CafeCard({ cafe }: { cafe: Cafe }) {
               {digits(cafe.rating.toFixed(1))}
             </span>
           ) : (
-            <span className="new-label">تازه در ویترین</span>
+            <span className="new-label">تازه در ویتکو</span>
           )}
         </div>
         <p>
@@ -147,6 +149,7 @@ export function ProductCard({ product }: { product: Product }) {
       </Link>
       <div className="product-card-body">
         <span className="category-caption">{product.category}</span>
+        {!product.available && <span className="badge product-unavailable">ناموجود</span>}
         <Link href={'/products/' + product.id}>
           <h3>{product.name}</h3>
         </Link>
@@ -166,223 +169,199 @@ export function ProductCard({ product }: { product: Product }) {
   );
 }
 export function HomeView() {
-  const { data, setMode } = useApp(),
-    router = useRouter();
+  const { data, setMode } = useApp();
+  const router = useRouter();
   const [search, setSearch] = useState('');
-  const cafes = data?.cafes || [],
-    products = data?.products.filter((p) => p.available) || [];
+  const cafes = data?.cafes || [];
+  const products = data?.products.filter((p) => p.available) || [];
   return (
-    <>
-      <div className="home-intro">
+    <div className="vitco-home">
+      <header className="home-greeting">
         <div>
-          <span className="eyebrow">به ویترین خوش آمدید</span>
-          <h1>
-            {data?.user ? `سلام ${data.user.name.split(' ')[0]}،` : 'امروز،'} وقتِ یک قرار خوبه
-            <span className="title-dot">.</span>
-          </h1>
-          <p>یک گوشه دنج، یک فنجان قهوه، یک حال خوب.</p>
+          <span className="eyebrow">به وقتِ یک حال خوب</span>
+          <h1>{data?.user ? `سلام، ${data.user.name.split(' ')[0]}` : 'به ویتکو خوش آمدی'}</h1>
+          <p>امروز، کجا قرار بگذاریم؟</p>
         </div>
-        <Link href="/cafes" className="location-pill">
-          <MapPin size={18} />
-          <span>کافه‌های ایران</span>
-          <ChevronLeft size={15} />
+        <Link href="/cafes" className="home-location">
+          <MapPin size={16} aria-hidden="true" /> کافه‌های ایران
+          <ChevronLeft size={14} aria-hidden="true" />
         </Link>
-      </div>
-      <section className="hero">
-        <div className="hero-content">
-          <span className="hero-kicker">
-            <span />
-            کافه‌گردی، به سلیقه تو
-          </span>
-          <h2>
-            قرار بعدی‌ات،
-            <br />
-            همین نزدیکی‌ست.
-          </h2>
-          <p>
-            کافه‌های شهر رو بشناس، منوها رو ببین
-            <br className="desktop-only" /> و برای لحظه‌های خوش برنامه بریز.
-          </p>
-          <Link href="/cafes" className="button hero-button">
-            شروع کافه‌گردی
-            <ArrowLeft size={18} />
-          </Link>
+      </header>
+      <div className="home-start-grid">
+        {data?.user ? (
+          <LoyaltyCard points={data.user.points} />
+        ) : (
+          <section className="home-welcome-card">
+            <span className="welcome-caption">
+              <Coffee size={18} /> به جمعِ قرارهای خوب بپیوند
+            </span>
+            <h2>
+              یک فنجان قهوه،
+              <br />
+              هزار بهانه برای دیدار.
+            </h2>
+            <Link href="/login" className="welcome-link">
+              ورود یا ساخت حساب <ArrowLeft size={17} />
+            </Link>
+          </section>
+        )}
+        <div className="home-start-actions">
+          <form
+            className="home-search"
+            onSubmit={(e) => {
+              e.preventDefault();
+              router.push('/cafes?q=' + encodeURIComponent(search.trim()));
+            }}
+          >
+            <Search size={20} aria-hidden="true" />
+            <input
+              aria-label="نام کافه یا محله"
+              placeholder="کافه یا محله‌ات را پیدا کن…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <button type="submit" aria-label="پیدا کن">
+              <ArrowLeft size={20} />
+            </button>
+          </form>
+          <nav className="home-services" aria-label="خدمات ویتکو">
+            <Link href="/menu?mode=delivery" onClick={() => setMode('delivery')}>
+              <span>
+                <Bike size={22} />
+              </span>
+              <strong>ارسال به آدرس</strong>
+              <small>کافه، هر جا که هستی</small>
+            </Link>
+            <Link href="/menu?mode=pickup" onClick={() => setMode('pickup')}>
+              <span>
+                <ShoppingBag size={22} />
+              </span>
+              <strong>تحویل از کافه</strong>
+              <small>سفارش بده، سر راه بردار</small>
+            </Link>
+            <Link href="/reserve">
+              <span>
+                <CalendarDays size={22} />
+              </span>
+              <strong>رزرو میز</strong>
+              <small>برای قرار بعدی‌ات</small>
+            </Link>
+          </nav>
         </div>
-        <div className="hero-image">
-          <div className="hero-orbit" />
-          <img src="/images/hero.webp" alt="یک فنجان قهوه با شیرینی؛ تصویر ویترین کافه" />
-          <span className="hero-note">
-            <Coffee size={18} /> به وقتِ خودت
-          </span>
-        </div>
-        <span className="hero-number">ویترینِ لحظه‌های تو</span>
-      </section>
-      <div className="quick-actions">
-        <Link href="/menu?mode=delivery" onClick={() => setMode('delivery')}>
-          <span className="action-icon peach">
-            <Bike size={25} />
-          </span>
-          <div>
-            <h3>سفارش در محل</h3>
-            <p>طعم کافه، هر جا که هستی</p>
-          </div>
-          <ArrowUpLeft size={21} />
-        </Link>
-        <Link href="/menu?mode=pickup" onClick={() => setMode('pickup')}>
-          <span className="action-icon sage">
-            <ShoppingBag size={25} />
-          </span>
-          <div>
-            <h3>تحویل از کافه</h3>
-            <p>سفارش بده، سر راه بردار</p>
-          </div>
-          <ArrowUpLeft size={21} />
-        </Link>
-        <Link href="/reserve">
-          <span className="action-icon lavender">
-            <CalendarDays size={25} />
-          </span>
-          <div>
-            <h3>رزرو میز</h3>
-            <p>جای تو از قبل آماده‌ست</p>
-          </div>
-          <ArrowUpLeft size={21} />
-        </Link>
       </div>
       {data?.user && <MemberHome />}
-      <section>
+      <section className="home-menu-section">
         <SectionTitle
-          title="کافه بعدی‌ات را پیدا کن"
-          description="برای کار، گپ‌وگفت یا چند دقیقه آرامش"
+          title="از منوی کافه‌ها"
+          description="طعم بعدی‌ات را اینجا پیدا کن"
+          href="/menu"
+          label="همه منوها"
+        />
+        {products.length ? (
+          <div className="product-grid">
+            {products.slice(0, 4).map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        ) : (
+          <Empty
+            title="منوها در راه‌اند"
+            description="محصولات کافه‌ها پس از ثبت و فعال‌شدن، اینجا نمایش داده می‌شوند."
+            href="/cafes"
+            label="دیدن کافه‌ها"
+          />
+        )}
+      </section>
+      <section className="home-cafes-section">
+        <SectionTitle
+          title="قرار بعدی، کدام کافه؟"
+          description="فضاها و منوها را بشناس، بعد انتخاب کن"
           href="/cafes"
           label="همه کافه‌ها"
         />
-        <form
-          className="discovery-search"
-          onSubmit={(e) => {
-            e.preventDefault();
-            router.push('/cafes?q=' + encodeURIComponent(search));
-          }}
-        >
-          <Search size={21} />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="نام کافه یا محله"
-            placeholder="نام کافه، شهر یا محله…"
-          />
-          <button type="submit" className="button dark">
-            پیدا کن
-            <ArrowLeft size={17} />
-          </button>
-        </form>
-        <div className="discovery-pills">
+        <nav className="home-discovery-tags" aria-label="انتخاب فضای کافه">
           {[
-            { label: 'همه کافه‌ها', href: '/cafes', icon: Store },
             { label: 'مناسب کار', href: '/cafes?amenity=work', icon: Wifi },
-            { label: 'قرار دوستانه', href: '/cafes?amenity=outdoor', icon: Coffee },
+            { label: 'فضای باز', href: '/cafes?amenity=outdoor', icon: Leaf },
             { label: 'موسیقی زنده', href: '/cafes?amenity=music', icon: Music2 },
             { label: 'دورهمی خانوادگی', href: '/cafes?amenity=family', icon: Users },
-          ].map((x, i) => (
-            <Link key={x.label} className={i === 0 ? 'selected' : ''} href={x.href}>
-              <x.icon size={17} />
-              {x.label}
+          ].map((item) => (
+            <Link key={item.href} href={item.href}>
+              <item.icon size={16} />
+              {item.label}
             </Link>
           ))}
-        </div>
-        <div className="home-cafes">
-          {cafes.slice(0, 2).map((c) => (
-            <CafeCard key={c.id} cafe={c} />
-          ))}
-          <div className="discovery-story">
-            <div>
-              <span className="eyebrow">هر کافه، یک داستان</span>
-              <h3>
-                یک جای تازه،
-                <br />
-                یک خاطره تازه.
-              </h3>
-              <p>
-                فضا و منوی کافه‌ها را بشناس و<br />
-                جایی را پیدا کن که شبیه حال توست.
-              </p>
-              <Link href="/cafes" className="text-link">
-                بریم کافه‌گردی
-                <ArrowLeft size={17} />
-              </Link>
-            </div>
-            <img src="/images/discover.webp" alt="تصویر معرفی فضای کافه از ویترین" />
+        </nav>
+        {cafes.length ? (
+          <div className="home-cafe-grid">
+            {cafes.slice(0, 3).map((c) => (
+              <CafeCard key={c.id} cafe={c} />
+            ))}
           </div>
-        </div>
+        ) : (
+          <Empty
+            title="اولین کافه، اولین قرار"
+            description="هنوز کافه‌ای برای نمایش ثبت نشده است."
+            href="/dashboard"
+            label="ثبت کافه"
+            icon="store"
+          />
+        )}
       </section>
-      <section>
-        <SectionTitle
-          title="از منوی کافه‌ها"
-          description="قبل از رفتن، طعم دلخواهت را انتخاب کن"
-          href="/menu"
-          label="دیدن منوها"
-        />
-        <div className="product-grid">
-          {products.slice(0, 4).map((p) => (
-            <ProductCard key={p.id} product={p} />
-          ))}
-        </div>
-      </section>
-      <section className="owner-banner">
-        <div>
-          <span className="eyebrow">ویترینی برای کافه شما</span>
-          <h2>کافه‌تان را به قرار بعدی تبدیل کنید.</h2>
-          <p>منو، سفارش‌ها، رزروها و رویدادها؛ همه در یک‌جا.</p>
-          <Link className="button primary" href="/dashboard">
-            کافه‌ام را ثبت می‌کنم
-            <ArrowUpLeft size={18} />
-          </Link>
-        </div>
-        <img src="/images/cup.webp" alt="فنجان و دانه‌های قهوه" />
-      </section>
-    </>
+      <Link href="/dashboard" className="home-owner-link">
+        <span className="home-owner-icon">
+          <Store size={23} />
+        </span>
+        <span>
+          <strong>کافه‌ات را به ویتکو بیاور</strong>
+          <small>مدیریت منو، سفارش‌ها و رزروها در یک‌جا</small>
+        </span>
+        <ArrowUpLeft size={20} />
+      </Link>
+    </div>
   );
 }
 function MemberHome() {
-  const { data } = useApp();
   const recent = useResource<{ orders: Order[] }>('orders');
   const last = recent.data?.orders[0];
   return (
-    <div className="member-overview">
-      <Link href="/rewards">
-        <span className="action-icon peach">
-          <Sparkles size={24} />
-        </span>
-        <div>
-          <small>امتیازهای همراهی شما</small>
-          <strong>{digits(data?.user?.points || 0)} امتیاز</strong>
-        </div>
-        <ArrowLeft size={17} />
-      </Link>
-      {last ? (
-        <Link href={'/orders/' + last.id}>
-          <span className="action-icon sage">
+    <section className="home-recent">
+      <SectionTitle title="آخرین سفارش تو" href="/orders" label="همه سفارش‌ها" />
+      {recent.loading ? (
+        <Loading />
+      ) : recent.error ? (
+        <ErrorBox message={recent.error} retry={recent.reload} />
+      ) : last ? (
+        <Link className="home-order-card" href={'/orders/' + last.id}>
+          <span className="home-order-icon">
             <ShoppingBag size={24} />
           </span>
-          <div>
-            <small>آخرین سفارش شما</small>
+          <span className="home-order-copy">
             <strong>{last.cafe_name}</strong>
-          </div>
-          <span>{money(last.total)}</span>
+            <small>
+              {dateLabel(last.created_at)} ·{' '}
+              {last.mode === 'delivery' ? 'ارسال به آدرس' : 'تحویل از کافه'}
+            </small>
+          </span>
+          <span className="home-order-meta">
+            <Badge status={last.status} />
+            <strong>{money(last.total)}</strong>
+          </span>
+          <ChevronLeft size={18} aria-hidden="true" />
         </Link>
       ) : (
-        <Link href="/orders">
-          <span className="action-icon sage">
-            <ShoppingBag size={24} />
-          </span>
+        <div className="home-first-order">
+          <ShoppingBag size={24} />
           <div>
-            <small>سفارش‌های من</small>
-            <strong>منتظر اولین انتخاب تو</strong>
+            <h3>اولین طعم، اولین خاطره</h3>
+            <p>پس از ثبت سفارش، از همین‌جا پیگیرش باش.</p>
           </div>
-          <ArrowLeft size={17} />
-        </Link>
+          <Link href="/menu" className="text-link">
+            دیدن منو <ArrowLeft size={16} />
+          </Link>
+        </div>
       )}
-    </div>
+    </section>
   );
 }
 export function CafesView({ favorites = false }: { favorites?: boolean }) {
@@ -454,6 +433,7 @@ export function CafesView({ favorites = false }: { favorites?: boolean }) {
             <div className="view-toggle">
               <button
                 aria-label="نمای فهرست"
+                aria-pressed={view === 'grid'}
                 className={view === 'grid' ? 'selected' : ''}
                 onClick={() => setView('grid')}
               >
@@ -461,6 +441,7 @@ export function CafesView({ favorites = false }: { favorites?: boolean }) {
               </button>
               <button
                 aria-label="نمای نقشه"
+                aria-pressed={view === 'map'}
                 className={view === 'map' ? 'selected' : ''}
                 onClick={() => setView('map')}
               >
@@ -514,32 +495,7 @@ export function CafesView({ favorites = false }: { favorites?: boolean }) {
             <span>به ترتیب تازه‌ترین‌ها</span>
           </div>
           {view === 'map' ? (
-            <div className="panel">
-              <h2>موقعیت کافه‌ها</h2>
-              {cafes.filter((c) => c.latitude !== null && c.longitude !== null).length ? (
-                cafes
-                  .filter((c) => c.latitude !== null && c.longitude !== null)
-                  .map((c) => (
-                    <div key={c.id} className="list-row">
-                      <span>{c.name}</span>
-                      <a
-                        className="text-link"
-                        href={`https://www.openstreetmap.org/?mlat=${c.latitude}&mlon=${c.longitude}#map=17/${c.latitude}/${c.longitude}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        نمایش روی نقشه
-                        <Navigation size={16} />
-                      </a>
-                    </div>
-                  ))
-              ) : (
-                <Empty
-                  title="موقعیتی برای نمایش ثبت نشده"
-                  description="صاحبان کافه می‌توانند موقعیت دقیق کافه را ثبت کنند. نشانی‌های متنی در نمای فهرست در دسترس‌اند."
-                />
-              )}
-            </div>
+            <CafeMap cafes={cafes} />
           ) : cafes.length ? (
             <div className="cafe-grid">
               {cafes.map((c) => (
@@ -739,7 +695,7 @@ export function CafeView({ id }: { id: string }) {
   );
 }
 export function MenuView() {
-  const { data, mode, setMode } = useApp(),
+  const { data, mode, setMode, cart } = useApp(),
     q = useSearchParams();
   const [search, setSearch] = useState(''),
     [category, setCategory] = useState(''),
@@ -747,7 +703,7 @@ export function MenuView() {
   useEffect(() => {
     if (q.get('mode') === 'delivery' || q.get('mode') === 'pickup')
       setMode(q.get('mode') as 'delivery' | 'pickup');
-  }, []);
+  }, [q]);
   const products = data?.products || [];
   const filtered = products.filter(
     (p) =>
@@ -756,14 +712,14 @@ export function MenuView() {
       (!cafe || p.cafe_id === cafe),
   );
   return (
-    <>
+    <div className={'vitco-menu' + (cart.length ? ' has-cart-dock' : '')}>
       <PageTitle
-        title="یک انتخاب خوش‌طعم"
-        description="منوی کافه‌ها را ببین و طعم مورد علاقه‌ات را پیدا کن."
+        title="منوی کافه‌ها"
+        description="برای یک استراحت کوتاه، یک طعم تازه انتخاب کن."
         action={
-          <Link href="/cart" className="button primary">
+          <Link href="/cart" className="button primary" aria-label="سبد خرید">
             <ShoppingBag size={18} />
-            سبد خرید
+            <span>سبد خرید</span>
           </Link>
         }
       />
@@ -771,12 +727,17 @@ export function MenuView() {
         <div className="segmented">
           <button
             className={mode === 'delivery' ? 'active' : ''}
+            aria-pressed={mode === 'delivery'}
             onClick={() => setMode('delivery')}
           >
             <Bike size={18} />
             ارسال به آدرس
           </button>
-          <button className={mode === 'pickup' ? 'active' : ''} onClick={() => setMode('pickup')}>
+          <button
+            className={mode === 'pickup' ? 'active' : ''}
+            aria-pressed={mode === 'pickup'}
+            onClick={() => setMode('pickup')}
+          >
             <Store size={18} />
             تحویل از کافه
           </button>
@@ -799,17 +760,30 @@ export function MenuView() {
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
-      <div className="category-tabs">
-        <button className={!category ? 'active' : ''} onClick={() => setCategory('')}>
+      <div className="category-tabs" role="group" aria-label="دسته‌بندی منو">
+        <button
+          className={!category ? 'active' : ''}
+          aria-pressed={!category}
+          onClick={() => setCategory('')}
+        >
           <Utensils size={19} />
           همه طعم‌ها
         </button>
         {[...new Set(products.map((p) => p.category))].map((c) => (
-          <button key={c} className={category === c ? 'active' : ''} onClick={() => setCategory(c)}>
+          <button
+            key={c}
+            className={category === c ? 'active' : ''}
+            aria-pressed={category === c}
+            onClick={() => setCategory(c)}
+          >
             <Coffee size={19} />
             {c}
           </button>
         ))}
+      </div>
+      <div className="menu-results" role="status">
+        <span>{digits(filtered.length)} طعم برای انتخاب</span>
+        <small>{data?.cafes.find((item) => item.id === cafe)?.name || 'از منوی کافه‌ها'}</small>
       </div>
       {filtered.length ? (
         <div className="product-grid">
@@ -823,7 +797,18 @@ export function MenuView() {
           description="نام محصول یا دسته‌بندی دیگری را امتحان کن."
         />
       )}
-    </>
+      {cart.length > 0 && (
+        <Link href="/cart" className="menu-cart-dock">
+          <span className="dock-count">
+            {digits(cart.reduce((sum, item) => sum + item.quantity, 0))}
+          </span>
+          <span>انتخاب‌هایت در سبد منتظرند</span>
+          <strong>
+            مشاهده سبد <ArrowLeft size={18} />
+          </strong>
+        </Link>
+      )}
+    </div>
   );
 }
 export function ProductView({ id }: { id: string }) {
@@ -871,14 +856,14 @@ export function ProductView({ id }: { id: string }) {
     else if (cart[0]?.cafe_id !== p?.cafe_id) setReplace(true);
   }
   return (
-    <>
+    <div className="vitco-product">
       <PageTitle
         title="جزئیات محصول"
         back={'/cafes/' + cafe.id}
         action={
-          <Link className="button secondary" href="/cart">
+          <Link className="button secondary" href="/cart" aria-label="سبد خرید">
             <ShoppingBag size={18} />
-            سبد خرید
+            <span>سبد خرید</span>
           </Link>
         }
       />
@@ -896,7 +881,7 @@ export function ProductView({ id }: { id: string }) {
             {cafe.name}
             <ChevronLeft size={14} />
           </Link>
-          <h1>{p.name}</h1>
+          <h2 className="product-name">{p.name}</h2>
           <p>{p.description}</p>
           <strong className="product-price">{money(p.price)}</strong>
           {p.sizes.length > 0 && (
@@ -954,39 +939,63 @@ export function ProductView({ id }: { id: string }) {
               placeholder="اگر نکته‌ای هست، به کافه بگو…"
             />
           </Field>
-          <div className="product-total">
-            <Quantity value={quantity} onChange={setQuantity} />
-            <strong>{money(price * quantity)}</strong>
+          <div
+            className={
+              'product-purchase-bar' + (cafe.owner_id && cafe.active ? ' is-orderable' : '')
+            }
+          >
+            <div className="product-total">
+              <Quantity value={quantity} onChange={setQuantity} />
+              <span className="product-total-price">
+                <small>مجموع انتخاب شما</small>
+                <strong aria-live="polite">{money(price * quantity)}</strong>
+              </span>
+            </div>
+            {!cafe.owner_id || !cafe.active ? (
+              <div className="notice">
+                <Coffee size={20} />
+                <span>این منو برای مشاهده است. سفارش آنلاین کافه هنوز فعال نیست.</span>
+              </div>
+            ) : (
+              <button className="button primary full" disabled={!p.available} onClick={add}>
+                {p.available ? (
+                  <>
+                    <Plus size={20} />
+                    افزودن به سبد خرید
+                  </>
+                ) : (
+                  'این محصول موجود نیست'
+                )}
+              </button>
+            )}
           </div>
-          {!cafe.owner_id || !cafe.active ? (
-            <div className="notice">
-              <Coffee size={20} />
-              <span>این منو برای مشاهده است. سفارش آنلاین کافه هنوز فعال نیست.</span>
-            </div>
-          ) : (
-            <button className="button primary full" disabled={!p.available} onClick={add}>
-              {p.available ? (
-                <>
-                  <Plus size={20} />
-                  افزودن به سبد خرید
-                </>
-              ) : (
-                'این محصول موجود نیست'
-              )}
-            </button>
-          )}
-          {added && (
-            <div className="success-note">
-              <Check size={18} />
-              به سبد خرید اضافه شد.
-              <Link href="/cart">
-                مشاهده سبد
-                <ArrowLeft size={16} />
-              </Link>
-            </div>
-          )}
         </div>
       </div>
+      <Modal
+        open={added}
+        onClose={() => setAdded(false)}
+        title="به سبد خرید اضافه شد"
+        presentation="sheet"
+      >
+        <div className="added-summary">
+          <span className="added-check">
+            <Check size={26} />
+          </span>
+          <h3>{p.name}</h3>
+          <p>
+            {digits(quantity)} عدد · {money(price * quantity)}
+          </p>
+          <small>{line.option_names.join('، ')}</small>
+        </div>
+        <div className="stack">
+          <Link href="/cart" className="button primary full" onClick={() => setAdded(false)}>
+            مشاهده سبد خرید <ShoppingBag size={18} />
+          </Link>
+          <button className="button secondary full" onClick={() => setAdded(false)}>
+            ادامه انتخاب
+          </button>
+        </div>
+      </Modal>
       <Confirm
         open={replace}
         title="شروع یک سبد تازه؟"
@@ -999,7 +1008,7 @@ export function ProductView({ id }: { id: string }) {
           toast('سبد خرید جدید آماده است.');
         }}
       />
-    </>
+    </div>
   );
 }
 function EventList({ events }: { events: CafeEvent[] }) {
@@ -1104,9 +1113,9 @@ export function InfoView({ page }: { page: string }) {
   const content: Record<string, { title: string; intro: string; paragraphs: string[] }> = {
     about: {
       title: 'هر کافه، یک دنیای تازه',
-      intro: 'ویترین کافه؛ قرارِ لحظه‌های خوب',
+      intro: 'ویتکو؛ قرارِ لحظه‌های خوب',
       paragraphs: [
-        'در ویترین کافه، کافه‌های شهر را کشف می‌کنید، منوها و فضاها را می‌شناسید و برای دیدارهای بعدی برنامه می‌ریزید. از گوشه‌ای آرام برای کار تا یک دورهمی دوستانه؛ انتخاب با شماست.',
+        'در ویتکو، کافه‌های شهر را کشف می‌کنید، منوها و فضاها را می‌شناسید و برای دیدارهای بعدی برنامه می‌ریزید. از گوشه‌ای آرام برای کار تا یک دورهمی دوستانه؛ انتخاب با شماست.',
         'کافه‌ها می‌توانند صفحه خود را بسازند، منو و رویدادها را منتشر کنند و سفارش‌ها و رزروهایشان را در یک‌جا مدیریت کنند.',
         'اطلاعات اولیه کافه اعلا از وب‌سایت ویترین کافه دریافت شده است. سفارش و رزرو در این برنامه فقط برای کافه‌هایی فعال است که صاحب آن‌ها خدمات خود را در همین سامانه ارائه می‌کند.',
       ],
@@ -1141,7 +1150,7 @@ export function InfoView({ page }: { page: string }) {
         />
         <div className="panel prose">
           <HeadphonesIllustration />
-          <h2>گفت‌وگو با پشتیبانی ویترین</h2>
+          <h2>گفت‌وگو با پشتیبانی ویتکو</h2>
           <p>
             برای پیگیری سفارش یا مطرح کردن سؤال، یک درخواست در حساب خود ثبت کنید. درخواست‌های مرتبط
             با سفارش در پنل کافه نیز قابل مشاهده هستند.

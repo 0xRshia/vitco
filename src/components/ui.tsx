@@ -23,21 +23,47 @@ import {
   LoaderCircle,
   Store,
   ImageOff,
+  Sparkles,
+  ArrowUpLeft,
 } from 'lucide-react';
 import { digits, statusLabels } from '@/lib/format';
 import { useApp } from '@/lib/client';
 
 export function Brand({ small = false }: { small?: boolean }) {
   return (
-    <Link href="/" className={'brand ' + (small ? 'small' : '')} aria-label="ویترین کافه، خانه">
-      <span className="brand-mark">
+    <Link href="/" className={'brand ' + (small ? 'small' : '')} aria-label="ویتکو، خانه">
+      <span className="brand-mark" aria-hidden="true">
         <Coffee size={small ? 22 : 26} strokeWidth={1.8} />
       </span>
       <span>
         <strong>
-          ویترین کافه<span className="brand-dot">.</span>
+          ویتکو<span className="brand-dot">.</span>
         </strong>
         {!small && <small>قرارِ لحظه‌های خوب</small>}
+      </span>
+    </Link>
+  );
+}
+export function LoyaltyCard({ points }: { points: number }) {
+  return (
+    <Link
+      href="/rewards"
+      className="loyalty-card"
+      aria-label={`${digits(points)} امتیاز همراهی؛ جزئیات امتیازها`}
+    >
+      <span className="loyalty-card-top">
+        <span>
+          <Sparkles size={17} aria-hidden="true" /> باشگاه ویتکو
+        </span>
+        <ArrowUpLeft size={20} aria-hidden="true" />
+      </span>
+      <span className="loyalty-card-balance">
+        <strong>{digits(points)}</strong>
+        <span>امتیاز همراهی</span>
+      </span>
+      <span className="loyalty-card-bottom">
+        <span>برای طعم‌های بعدی</span>
+        <small>قابل استفاده در کافه صادرکننده</small>
       </span>
     </Link>
   );
@@ -285,11 +311,13 @@ export function Modal({
   onClose,
   title,
   children,
+  presentation = 'dialog',
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
+  presentation?: 'dialog' | 'sheet';
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -300,7 +328,7 @@ export function Modal({
     <dialog
       ref={ref}
       aria-label={title}
-      className="modal"
+      className={'modal' + (presentation === 'sheet' ? ' modal-sheet' : '')}
       onCancel={onClose}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -322,7 +350,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
   if (!data?.user)
     return (
       <Empty
-        title="جای شما در ویترین خالی است"
+        title="جای شما در ویتکو خالی است"
         description="برای دیدن این بخش وارد حساب خود شوید. قرارهای خوب از همین‌جا شروع می‌شوند."
         href="/login"
         label="ورود یا ساخت حساب"

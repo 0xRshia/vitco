@@ -1,7 +1,8 @@
-# ویترین کافه — Vitrin Cafe
+# ویتکو — Vitco
 
 A standalone Persian, RTL café discovery, ordering, and reservation application,
-implemented from the supplied `Vitco.fig` flow and Vitrin Cafe's identity.
+implemented from the supplied `Vitco.fig` flow. First-party branding is Vitco;
+imported Vitrin Cafe catalog and asset provenance are retained explicitly.
 
 ## Run locally
 
@@ -24,11 +25,11 @@ customer account can be used to exercise the customer flow.
 
 ## Included views and behavior
 
-- Responsive home, search, café directory/filter/map links, café detail, real
+- Responsive home, search, café directory/filter/interactive map, café detail, real
   reviews, favorites, menus, product sizes/addons/notes, and QR/link navigation.
 - Email registration/login, optional SMS login/verification, optional email
   password recovery, profile/avatar editing, password changes, and logout.
-- Persistent cart, delivery/pickup selection, address CRUD/geolocation, scheduled
+- Persistent cart, delivery/pickup selection, address CRUD/map selection/geolocation, scheduled
   pickup, coupons, café-specific loyalty points, and server-calculated checkout.
 - Order confirmation, current/history filters, delivery/pickup tracking, cancellation,
   reorder, printable receipt, and support.
@@ -111,6 +112,18 @@ transactional database. The native SQLite API emits an experimental warning on
 Node 22; this is not a failed build.
 
 ## Validate
+
+For configuration checks that do not send messages or print credentials:
+
+```sh
+npm run check:readiness
+npm run check:readiness -- --production
+```
+
+The production check requires a canonical public HTTPS `APP_ORIGIN`. Optional SMS
+and email may remain disabled; a partially configured provider is an error.
+This check does not validate provider credentials or guarantee production readiness.
+See [the current preparation and verification report](docs/release-readiness.md).
 
 ```sh
 npm run typecheck

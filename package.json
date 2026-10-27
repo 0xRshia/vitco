@@ -12,18 +12,21 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
+    "check:readiness": "node --env-file-if-exists=.env.local scripts/check-readiness.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "dependencies": {
     "@fontsource/vazirmatn": "^5.2.5",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",
-    "next": "^16.2.9",
+    "next": "^16.4.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.0",
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^22.19.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

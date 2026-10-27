@@ -176,7 +176,7 @@ export function Application() {
           onClick={() => setMobile(false)}
         />
       )}
-      <aside className={'sidebar ' + (mobile ? 'is-open' : '')}>
+      <aside id="primary-navigation" className={'sidebar ' + (mobile ? 'is-open' : '')}>
         <div className="sidebar-brand">
           <Brand />
           <button
@@ -187,7 +187,7 @@ export function Application() {
             <X />
           </button>
         </div>
-        <span className="nav-label">دنیای ویترین</span>
+        <span className="nav-label">دنیای ویتکو</span>
         <nav aria-label="پیمایش اصلی">
           {navigation.map((n) => (
             <Link
@@ -209,6 +209,10 @@ export function Application() {
         <div className="sidebar-separator" />
         <span className="nav-label">همراه شما</span>
         <nav>
+          <Link className={'nav-item ' + (page === 'scan' ? 'active' : '')} href="/scan">
+            <ScanLine size={20} />
+            اسکن منوی کافه
+          </Link>
           <Link className={'nav-item ' + (page === 'support' ? 'active' : '')} href="/support">
             <Headphones size={20} />
             پشتیبانی
@@ -223,7 +227,7 @@ export function Application() {
             <Store size={22} />
           </span>
           <h3>صاحب کافه‌اید؟</h3>
-          <p>کافه‌تان را به ویترین شهر اضافه کنید.</p>
+          <p>کافه‌تان را به ویتکو اضافه کنید.</p>
           <Link href="/dashboard">
             ثبت و مدیریت کافه
             <ArrowUpLeft size={17} />
@@ -238,7 +242,7 @@ export function Application() {
             )}
           </div>
           <span>
-            <strong>{data?.user?.name || 'به ویترین خوش آمدید'}</strong>
+            <strong>{data?.user?.name || 'به ویتکو خوش آمدید'}</strong>
             <small>{data?.user ? 'حساب کاربری من' : 'ورود یا ساخت حساب'}</small>
           </span>
           <ChevronDown size={16} />
@@ -250,6 +254,8 @@ export function Application() {
             <button
               className="icon-button mobile-menu"
               aria-label="باز کردن منو"
+              aria-expanded={mobile}
+              aria-controls="primary-navigation"
               onClick={() => setMobile(true)}
             >
               <Menu />
@@ -322,7 +328,7 @@ export function Application() {
           )}
         </main>
         <footer className="footer">
-          <span>ویترین کافه؛ جایی برای قرارهای خوب.</span>
+          <span>ویتکو؛ جایی برای قرارهای خوب.</span>
           <div>
             <Link href="/about">درباره ما</Link>
             <Link href="/contact">تماس با ما</Link>
@@ -336,12 +342,27 @@ export function Application() {
           { href: '/cafes', icon: Store, label: 'کافه‌ها' },
           { href: '/orders', icon: ReceiptText, label: 'سفارش‌ها' },
           { href: '/profile', icon: UserRound, label: 'حساب من' },
-        ].map((n) => (
-          <Link key={n.href} href={n.href} className={path === n.href ? 'active' : ''}>
-            <n.icon size={22} />
-            <span>{n.label}</span>
-          </Link>
-        ))}
+        ].map((n) => {
+          const active =
+            n.href === '/cafes'
+              ? ['cafes', 'menu', 'products', 'favorites'].includes(page)
+              : n.href === '/profile'
+                ? ['profile', 'settings', 'addresses', 'payment', 'rewards'].includes(page)
+                : path === n.href || (n.href !== '/' && path.startsWith(n.href + '/'));
+          return (
+            <Link
+              key={n.href}
+              href={n.href}
+              className={active ? 'active' : ''}
+              aria-current={active ? 'page' : undefined}
+            >
+              <span className="bottom-nav-icon" aria-hidden="true">
+                <n.icon size={22} strokeWidth={active ? 2 : 1.7} />
+              </span>
+              <span>{n.label}</span>
+            </Link>
+          );
+        })}
       </nav>
     </div>
   );
