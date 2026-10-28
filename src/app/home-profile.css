@@ -1,0 +1,689 @@
+/* Stage two: home and profile composition built on the shared foundations. */
+.vitco-home,
+.vitco-profile {
+  max-width: 1120px;
+  margin-inline: auto;
+}
+
+.home-greeting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.home-greeting .eyebrow,
+.home-greeting p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.home-greeting h1 {
+  margin-block: 4px;
+  overflow-wrap: anywhere;
+}
+
+.home-greeting > div {
+  min-width: 0;
+}
+
+.home-location {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.home-start-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 24px;
+}
+
+.loyalty-card,
+.home-welcome-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px;
+  border: 1px solid #505055;
+  border-radius: 20px;
+  background: radial-gradient(ellipse at 5% 120%, #b6825c66, transparent 60%), #29292d;
+  color: #ffffff;
+  min-height: 220px;
+}
+
+.loyalty-card:after,
+.home-welcome-card:after {
+  content: '';
+  position: absolute;
+  width: 210px;
+  height: 210px;
+  border: 1px solid #ffffff15;
+  border-radius: 50%;
+  inset-inline-end: -95px;
+  top: -70px;
+  z-index: -1;
+  box-shadow:
+    0 0 0 28px #ffffff04,
+    0 0 0 56px #ffffff03;
+  pointer-events: none;
+}
+
+.loyalty-card-top,
+.loyalty-card-top > span,
+.loyalty-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.loyalty-card-top {
+  font-size: 13px;
+}
+
+.loyalty-card-top > span {
+  color: #ffe0c4;
+}
+
+.loyalty-card-balance {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.loyalty-card-balance strong {
+  font-size: 42px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.loyalty-card-balance > span,
+.loyalty-card-bottom {
+  font-size: 12px;
+  color: #e0dce1;
+}
+
+.loyalty-card-bottom {
+  padding-top: 12px;
+  border-top: 1px solid #ffffff25;
+}
+
+.loyalty-card-bottom small {
+  font-size: 11px;
+  text-align: end;
+}
+
+.welcome-caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffe0c4;
+  font-size: 12px;
+}
+
+.home-welcome-card h2 {
+  font-size: 25px;
+  line-height: 1.65;
+}
+
+.welcome-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: fit-content;
+  min-height: 44px;
+  padding: 8px 16px;
+  background: #ffe0c4;
+  color: #29292d;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.home-start-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.home-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px 4px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+  min-width: 0;
+}
+
+.home-search input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding-inline: 0;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.home-search input:focus-visible {
+  outline: none;
+}
+
+.home-search:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.home-search button {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--on-primary);
+  background: var(--primary);
+}
+
+.home-services {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.home-services a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 4px;
+  text-align: center;
+  border-radius: var(--radius);
+}
+
+.home-services a:hover {
+  background: var(--surface);
+}
+
+.home-services a > span {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: var(--peach);
+  color: var(--text);
+}
+
+.home-services strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.home-services small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.vitco-home > section,
+.home-owner-link {
+  margin-top: 32px;
+}
+
+.vitco-home .section-title {
+  margin-bottom: 16px;
+}
+
+.vitco-home .section-title h2 {
+  font-size: 18px;
+}
+
+.vitco-home .section-title > a {
+  min-height: 44px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.home-menu-section .product-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: 16px;
+}
+
+.home-menu-section .product-card h3 {
+  font-size: 14px;
+}
+
+.home-menu-section .product-card p {
+  font-size: 12px;
+  height: 44px;
+}
+
+.home-menu-section .product-card .media {
+  height: 180px;
+}
+
+.home-discovery-tags {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  padding-block: 4px;
+}
+
+.home-discovery-tags a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 12px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+}
+
+.home-cafe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 16px;
+}
+
+.home-cafe-grid > .cafe-card:only-child {
+  max-width: 540px;
+}
+
+.home-order-card,
+.home-first-order,
+.home-owner-link {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.home-order-icon,
+.home-owner-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--surface-alt);
+  flex-shrink: 0;
+}
+
+.home-order-copy,
+.home-owner-link > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.home-order-copy strong,
+.home-owner-link strong,
+.home-first-order h3 {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.home-order-copy small,
+.home-owner-link small,
+.home-first-order p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.home-order-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: end;
+  gap: 8px;
+}
+
+.home-order-meta > strong {
+  font-size: 13px;
+}
+
+.home-first-order > .text-link {
+  margin-inline-start: auto;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+
+.home-owner-link {
+  background: var(--peach);
+}
+
+.profile-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  align-items: start;
+  gap: 32px;
+}
+
+.profile-summary {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.profile-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.profile-identity h2 {
+  margin-block: 6px 4px;
+  overflow-wrap: anywhere;
+}
+
+.profile-identity p {
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.profile-identity-copy {
+  max-width: 100%;
+}
+
+.profile-group-title {
+  margin: 0 4px 16px;
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.vitco-profile .profile-links,
+.profile-public-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: 24px;
+}
+
+.vitco-profile .profile-links > a,
+.profile-public-links > a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 68px;
+  padding: 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.vitco-profile .profile-links > a:last-child,
+.profile-public-links > a:last-child {
+  border-bottom: 0;
+}
+
+.vitco-profile .profile-links > a:hover,
+.profile-public-links > a:hover {
+  background: var(--surface-alt);
+}
+
+.vitco-profile .profile-links .action-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.vitco-profile .profile-links h3 {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.vitco-profile .profile-links p {
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.profile-details > .danger-outline {
+  width: 100%;
+}
+
+.profile-guest-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.profile-guest-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  text-align: center;
+}
+
+.profile-guest-card p {
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 300px;
+}
+
+.profile-guest-card .text-link {
+  min-height: 44px;
+}
+
+.profile-public-links > a > span {
+  flex: 1;
+  font-size: 13px;
+}
+
+.profile-public-links > a > svg:last-child {
+  color: var(--muted);
+}
+
+@media (max-width: 760px) {
+  .home-greeting {
+    margin-bottom: 20px;
+    align-items: start;
+    gap: 8px;
+  }
+
+  .home-greeting h1 {
+    font-size: 22px;
+  }
+
+  .home-greeting .eyebrow {
+    font-size: 11px;
+  }
+
+  .home-location {
+    font-size: 11px;
+    margin-top: 24px;
+  }
+
+  .home-location > svg:last-child {
+    display: none;
+  }
+
+  .home-start-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .home-start-actions {
+    display: contents;
+  }
+
+  .home-search {
+    order: -2;
+  }
+
+  .home-search input {
+    font-size: 16px;
+  }
+
+  .home-start-grid > .loyalty-card,
+  .home-welcome-card {
+    order: -1;
+  }
+
+  .loyalty-card,
+  .home-welcome-card {
+    min-height: 200px;
+    padding: 20px;
+    gap: 16px;
+  }
+
+  .home-welcome-card h2 {
+    font-size: 23px;
+  }
+
+  .home-services {
+    gap: 8px;
+  }
+
+  .home-services a {
+    gap: 8px;
+    padding-block: 4px;
+  }
+
+  .home-services strong {
+    font-size: 12px;
+  }
+
+  .home-services small {
+    display: none;
+  }
+
+  .vitco-home > section {
+    margin-top: 28px;
+  }
+
+  .vitco-home .section-title h2 {
+    font-size: 17px;
+  }
+
+  .vitco-home .section-title p {
+    font-size: 12px;
+  }
+
+  .vitco-home .section-title > a {
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .home-menu-section .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .home-menu-section .product-card .media {
+    height: 144px;
+  }
+
+  .home-menu-section .product-card h3 {
+    font-size: 13px;
+  }
+
+  .home-menu-section .product-card p {
+    font-size: 11px;
+  }
+
+  .home-order-card,
+  .home-first-order {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .home-order-copy {
+    min-width: calc(100% - 60px);
+  }
+
+  .home-order-meta {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex: 1;
+  }
+
+  .home-first-order > div {
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .home-first-order > .text-link {
+    margin-inline-start: 36px;
+  }
+
+  .home-owner-link {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .home-owner-link strong {
+    font-size: 13px;
+  }
+
+  .home-owner-link small {
+    font-size: 11px;
+  }
+
+  .profile-layout,
+  .profile-guest-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+
+  .profile-summary {
+    gap: 20px;
+  }
+
+  .profile-identity {
+    padding-block: 8px;
+    gap: 12px;
+  }
+
+  .profile-identity h2 {
+    font-size: 20px;
+  }
+
+  .profile-guest-card {
+    padding: 28px 20px;
+  }
+}

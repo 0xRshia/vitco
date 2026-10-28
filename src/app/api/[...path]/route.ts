@@ -229,7 +229,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           run(
             'INSERT INTO users (id,name,phone,created_at) VALUES (?,?,?,?)',
             account.id,
-            'همراه ویترین',
+            'همراه ویتکو',
             phone,
             new Date().toISOString(),
           );

@@ -21,15 +21,17 @@ export function PersianDateInput({
   onChange,
   defaultValue,
   min,
+  initialOpen = false,
 }: {
   name?: string;
   value?: string;
   onChange?: (v: string) => void;
   defaultValue?: string;
   min?: string;
+  initialOpen?: boolean;
 }) {
   const [local, setLocal] = useState(defaultValue || ''),
-    [open, setOpen] = useState(false),
+    [open, setOpen] = useState(initialOpen),
     [month, setMonth] = useState(() => startOfMonth(value || defaultValue || today()));
   const selected = value ?? local,
     start = (month.getUTCDay() + 1) % 7;

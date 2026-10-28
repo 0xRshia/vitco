@@ -35,6 +35,7 @@ import {
   ArrowUpLeft,
 } from 'lucide-react';
 import { api, useApp, useResource } from '@/lib/client';
+import { LocationPicker, hasPosition } from './location-map';
 import { digits, dateLabel, latin } from '@/lib/format';
 import type { Address, Ticket } from '@/lib/types';
 import {
@@ -48,6 +49,7 @@ import {
   Confirm,
   LoginGate,
   Form,
+  LoyaltyCard,
 } from './ui';
 
 export function AuthView({ page }: { page: string }) {
@@ -68,6 +70,9 @@ export function AuthView({ page }: { page: string }) {
     verify = page === 'verify',
     forgot = page === 'forgot-password',
     reset = page === 'reset-password';
+  const requestedNext = query.get('next') || '';
+  const returnTo =
+    requestedNext === '/cart' || /^\/reserve(?:\?[^#]*)?$/.test(requestedNext) ? requestedNext : '';
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
@@ -77,11 +82,11 @@ export function AuthView({ page }: { page: string }) {
         if (!accepted) throw new Error('برای ساخت حساب، شرایط استفاده را بپذیرید.');
         await api('auth/register', 'POST', { email, password, name });
         await refresh();
-        router.push('/profile');
+        router.push(returnTo || '/profile');
       } else if (verify) {
         await api('auth/verify', 'POST', { phone, code });
         await refresh();
-        router.push('/profile');
+        router.push(returnTo || '/profile');
       } else if (forgot) {
         await api('auth/forgot', 'POST', { email });
         router.push('/reset-password?email=' + encodeURIComponent(email));
@@ -90,11 +95,15 @@ export function AuthView({ page }: { page: string }) {
         router.push('/login?reset=1');
       } else if (method === 'phone') {
         await api('auth/phone', 'POST', { phone });
-        router.push('/verify?phone=' + encodeURIComponent(phone));
+        router.push(
+          '/verify?phone=' +
+            encodeURIComponent(phone) +
+            (returnTo ? '&next=' + encodeURIComponent(returnTo) : ''),
+        );
       } else {
         await api('auth/login', 'POST', { email, password });
         await refresh();
-        router.push('/');
+        router.push(returnTo || '/');
       }
     } catch (e) {
       setError((e as Error).message);
@@ -103,7 +112,7 @@ export function AuthView({ page }: { page: string }) {
     }
   }
   const title = register
-    ? 'یک قرار تازه با ویترین'
+    ? 'یک قرار تازه با ویتکو'
     : verify
       ? 'کد تأیید را وارد کن'
       : forgot
@@ -274,7 +283,7 @@ export function AuthView({ page }: { page: string }) {
                       ? 'ذخیره رمز جدید'
                       : method === 'phone'
                         ? 'دریافت کد ورود'
-                        : 'ورود به ویترین'}
+                        : 'ورود به ویتکو'}
             <ArrowLeft size={18} />
           </button>
         </fieldset>
@@ -301,9 +310,14 @@ export function AuthView({ page }: { page: string }) {
         </div>
       ) : (
         <p className="auth-bottom">
-          {register ? 'قبلاً عضو ویترین شدی؟' : 'هنوز حساب نداری؟'}
-          <Link href={register ? '/login' : '/register'}>
-            {register ? 'وارد شو' : 'ثبت‌نام در ویترین'}
+          {register ? 'قبلاً عضو ویتکو شدی؟' : 'هنوز حساب نداری؟'}
+          <Link
+            href={
+              (register ? '/login' : '/register') +
+              (returnTo ? '?next=' + encodeURIComponent(returnTo) : '')
+            }
+          >
+            {register ? 'وارد شو' : 'ثبت‌نام در ویتکو'}
           </Link>
         </p>
       )}
@@ -372,140 +386,190 @@ export function ProfileView() {
     [logout, setLogout] = useState(false),
     [avatar, setAvatar] = useState(data?.user?.avatar || '');
   return (
-    <>
-      <PageTitle title="حساب من" description="قرارها، سلیقه‌ها و اطلاعات شما در یک‌جا." />
-      <LoginGate>
-        {data?.user && (
-          <>
-            <div className="profile-banner">
-              <div className="avatar large">
-                {data.user.avatar ? (
-                  <img src={data.user.avatar} alt="تصویر حساب" />
-                ) : (
-                  <UserRound size={44} />
-                )}
-              </div>
-              <div>
-                <span className="eyebrow">همراه ویترین</span>
-                <h2>{data.user.name}</h2>
-                <p dir="auto">{data.user.email || digits(data.user.phone)}</p>
-              </div>
-              <button className="button secondary" onClick={() => setEdit(true)}>
-                <Pencil size={16} />
-                ویرایش پروفایل
+    <div className="vitco-profile">
+      <PageTitle
+        title="حساب من"
+        action={
+          <Link href="/settings" className="icon-button" aria-label="تنظیمات حساب">
+            <Settings size={22} />
+          </Link>
+        }
+      />
+      {data?.user ? (
+        <>
+          <div className="profile-layout">
+            <div className="profile-summary">
+              <section className="profile-identity">
+                <div className="avatar large">
+                  {data.user.avatar ? (
+                    <img src={data.user.avatar} alt="تصویر حساب" />
+                  ) : (
+                    <UserRound size={44} />
+                  )}
+                </div>
+                <div className="profile-identity-copy">
+                  <span className="eyebrow">همراه ویتکو</span>
+                  <h2>{data.user.name}</h2>
+                  <p dir="auto">{data.user.email || digits(data.user.phone)}</p>
+                </div>
+                <button
+                  className="button secondary compact"
+                  onClick={() => {
+                    setAvatar(data?.user?.avatar || '');
+                    setEdit(true);
+                  }}
+                >
+                  <Pencil size={16} />
+                  ویرایش پروفایل
+                </button>
+              </section>
+              <LoyaltyCard points={data.user.points} />
+            </div>
+            <div className="profile-details">
+              <h2 className="profile-group-title">قرارها و حساب تو</h2>
+              <nav className="profile-links" aria-label="بخش‌های حساب کاربری">
+                {[
+                  {
+                    href: '/orders',
+                    icon: ReceiptText,
+                    label: 'سفارش‌های من',
+                    desc: 'پیگیری سفارش‌ها و تاریخچه',
+                  },
+                  {
+                    href: '/reservations',
+                    icon: CalendarCheck,
+                    label: 'رزروهای من',
+                    desc: 'قرارهای آینده و گذشته',
+                  },
+                  {
+                    href: '/addresses',
+                    icon: MapPin,
+                    label: 'آدرس‌های من',
+                    desc: 'مدیریت نشانی‌های تحویل',
+                  },
+                  {
+                    href: '/favorites',
+                    icon: Heart,
+                    label: 'علاقه‌مندی‌ها',
+                    desc: 'کافه‌هایی که دوست داری',
+                  },
+                  {
+                    href: '/payment',
+                    icon: CreditCard,
+                    label: 'روش پرداخت',
+                    desc: 'پرداخت در کافه یا هنگام تحویل',
+                  },
+                  {
+                    href: '/rewards',
+                    icon: Gift,
+                    label: 'امتیازهای من',
+                    desc: digits(data.user.points) + ' امتیاز همراهی',
+                  },
+                  {
+                    href: '/dashboard',
+                    icon: Store,
+                    label: 'مدیریت کافه',
+                    desc: 'کافه و منوی خودت را بساز',
+                  },
+                  {
+                    href: '/settings',
+                    icon: Settings,
+                    label: 'تنظیمات',
+                    desc: 'ظاهر برنامه و امنیت حساب',
+                  },
+                  {
+                    href: '/support',
+                    icon: Headphones,
+                    label: 'پشتیبانی',
+                    desc: 'همیشه راهی برای گفت‌وگو هست',
+                  },
+                ].map((x) => (
+                  <Link key={x.href} href={x.href}>
+                    <span className="action-icon peach">
+                      <x.icon size={22} />
+                    </span>
+                    <div>
+                      <h3>{x.label}</h3>
+                      <p>{x.desc}</p>
+                    </div>
+                    <ChevronLeft size={18} />
+                  </Link>
+                ))}
+              </nav>
+              <button className="button danger-outline" onClick={() => setLogout(true)}>
+                <LogOut size={18} />
+                خروج از حساب
               </button>
             </div>
-            <div className="profile-links">
-              {[
-                {
-                  href: '/orders',
-                  icon: ReceiptText,
-                  label: 'سفارش‌های من',
-                  desc: 'پیگیری سفارش‌ها و تاریخچه',
-                },
-                {
-                  href: '/reservations',
-                  icon: CalendarCheck,
-                  label: 'رزروهای من',
-                  desc: 'قرارهای آینده و گذشته',
-                },
-                {
-                  href: '/addresses',
-                  icon: MapPin,
-                  label: 'آدرس‌های من',
-                  desc: 'مدیریت نشانی‌های تحویل',
-                },
-                {
-                  href: '/favorites',
-                  icon: Heart,
-                  label: 'علاقه‌مندی‌ها',
-                  desc: 'کافه‌هایی که دوست داری',
-                },
-                {
-                  href: '/payment',
-                  icon: CreditCard,
-                  label: 'روش پرداخت',
-                  desc: 'پرداخت در کافه یا هنگام تحویل',
-                },
-                {
-                  href: '/rewards',
-                  icon: Gift,
-                  label: 'امتیازهای من',
-                  desc: digits(data.user.points) + ' امتیاز همراهی',
-                },
-                {
-                  href: '/dashboard',
-                  icon: Store,
-                  label: 'مدیریت کافه',
-                  desc: 'کافه و منوی خودت را بساز',
-                },
-                {
-                  href: '/settings',
-                  icon: Settings,
-                  label: 'تنظیمات',
-                  desc: 'ظاهر برنامه و امنیت حساب',
-                },
-                {
-                  href: '/support',
-                  icon: Headphones,
-                  label: 'پشتیبانی',
-                  desc: 'همیشه راهی برای گفت‌وگو هست',
-                },
-              ].map((x) => (
-                <Link key={x.href} href={x.href}>
-                  <span className="action-icon peach">
-                    <x.icon size={22} />
-                  </span>
-                  <div>
-                    <h3>{x.label}</h3>
-                    <p>{x.desc}</p>
-                  </div>
-                  <ChevronLeft size={18} />
-                </Link>
-              ))}
-            </div>
-            <button className="button danger-outline" onClick={() => setLogout(true)}>
-              <LogOut size={18} />
-              خروج از حساب
-            </button>
-            <Modal title="ویرایش پروفایل" open={edit} onClose={() => setEdit(false)}>
-              <Form
-                onSubmit={async (form) => {
-                  await api('profile', 'PATCH', { name: form.get('name'), avatar });
-                  await refresh();
-                  setEdit(false);
-                  toast('پروفایل به‌روز شد.');
-                }}
-              >
-                <ImageUpload value={avatar} onChange={setAvatar} label="پروفایل" />
-                <Field label="نام و نام خانوادگی">
-                  <input name="name" defaultValue={data.user.name} />
-                </Field>
-                <Field label="ایمیل">
-                  <input value={data.user.email} readOnly dir="auto" />
-                </Field>
-              </Form>
-            </Modal>
-            <Confirm
-              open={logout}
-              title="از حساب خارج می‌شوی؟"
-              description="برای دیدن سفارش‌ها و رزروها می‌توانی دوباره وارد شوی."
-              onClose={() => setLogout(false)}
-              onConfirm={async () => {
-                try {
-                  await api('auth/logout', 'POST', {});
-                  setCart([]);
-                  await refresh();
-                  router.push('/');
-                } catch (e) {
-                  toast((e as Error).message);
-                }
+          </div>
+          <Modal title="ویرایش پروفایل" open={edit} onClose={() => setEdit(false)}>
+            <Form
+              onSubmit={async (form) => {
+                await api('profile', 'PATCH', { name: form.get('name'), avatar });
+                await refresh();
+                setEdit(false);
+                toast('پروفایل به‌روز شد.');
               }}
-            />
-          </>
-        )}
-      </LoginGate>
-    </>
+            >
+              <ImageUpload value={avatar} onChange={setAvatar} label="پروفایل" />
+              <Field label="نام و نام خانوادگی">
+                <input name="name" defaultValue={data.user.name} />
+              </Field>
+              <Field label="ایمیل">
+                <input value={data.user.email} readOnly dir="auto" />
+              </Field>
+            </Form>
+          </Modal>
+          <Confirm
+            open={logout}
+            title="از حساب خارج می‌شوی؟"
+            description="برای دیدن سفارش‌ها و رزروها می‌توانی دوباره وارد شوی."
+            onClose={() => setLogout(false)}
+            onConfirm={async () => {
+              try {
+                await api('auth/logout', 'POST', {});
+                setCart([]);
+                await refresh();
+                router.push('/');
+              } catch (e) {
+                toast((e as Error).message);
+              }
+            }}
+          />
+        </>
+      ) : (
+        <div className="profile-guest-layout">
+          <section className="profile-guest-card">
+            <span className="avatar large">
+              <UserRound size={38} />
+            </span>
+            <span className="eyebrow">جای تو اینجاست</span>
+            <h2>پروفایل تو، قرارهای تو</h2>
+            <p>وارد شو تا سفارش‌ها، رزروها و امتیازهای همراهی‌ات را یک‌جا ببینی.</p>
+            <Link href="/login" className="button primary full">
+              ورود به ویتکو <ArrowLeft size={17} />
+            </Link>
+            <Link href="/register" className="text-link">
+              تازه اینجایی؟ حساب بساز
+            </Link>
+          </section>
+          <nav className="profile-public-links" aria-label="راهنما و تنظیمات">
+            {[
+              { href: '/settings', label: 'تنظیمات برنامه', icon: Settings },
+              { href: '/support', label: 'پشتیبانی', icon: Headphones },
+              { href: '/about', label: 'درباره ویتکو', icon: Coffee },
+              { href: '/terms', label: 'شرایط استفاده', icon: ShieldCheck },
+            ].map((item) => (
+              <Link key={item.href} href={item.href}>
+                <item.icon size={20} />
+                <span>{item.label}</span>
+                <ChevronLeft size={17} />
+              </Link>
+            ))}
+          </nav>
+        </div>
+      )}
+    </div>
   );
 }
 export function SettingsView() {
@@ -513,7 +577,7 @@ export function SettingsView() {
   const [success, setSuccess] = useState(false);
   return (
     <>
-      <PageTitle title="تنظیمات" description="ویترین را به سلیقه خودت بچین." />
+      <PageTitle title="تنظیمات" description="ویتکو را به سلیقه خودت بچین." />
       <div className="two-columns">
         <section className="panel form">
           <h2>ظاهر برنامه</h2>
@@ -679,6 +743,7 @@ export function AddressView() {
       </LoginGate>
       <Modal
         open={editing !== undefined}
+        presentation="sheet"
         title={editing ? 'ویرایش آدرس' : 'یک نشانی تازه'}
         onClose={() => setEditing(undefined)}
       >
@@ -696,6 +761,10 @@ export function AddressView() {
               toast('آدرس ذخیره شد.');
             }}
           >
+            <LocationPicker
+              value={hasPosition(coordinates) ? coordinates : null}
+              onChange={(point) => setCoordinates(point || { latitude: null, longitude: null })}
+            />
             <button
               type="button"
               className="button secondary full"
@@ -708,7 +777,7 @@ export function AddressView() {
             {coordinates.latitude !== null && (
               <div className="success-note">
                 <Check size={17} />
-                موقعیت روی نقشه دریافت شد.
+                موقعیت انتخاب‌شده همراه آدرس ذخیره می‌شود.
                 <a
                   target="_blank"
                   rel="noreferrer"
@@ -802,7 +871,7 @@ export function PaymentView() {
         </div>
         <div className="notice">
           <ShieldCheck size={22} />
-          <span>اطلاعات کارت بانکی در ویترین دریافت یا ذخیره نمی‌شود.</span>
+          <span>اطلاعات کارت بانکی در ویتکو دریافت یا ذخیره نمی‌شود.</span>
         </div>
         <Link className="button primary" href="/cart">
           بازگشت به سبد خرید
@@ -822,7 +891,7 @@ export function RewardsView() {
       />
       <LoginGate>
         <section className="rewards-card">
-          <span className="eyebrow">باشگاه همراهان ویترین</span>
+          <span className="eyebrow">باشگاه همراهان ویتکو</span>
           <div>
             <strong>{digits(data?.user?.points || 0)}</strong>
             <Gift size={40} />
@@ -860,7 +929,7 @@ export function NotificationsView() {
   return (
     <>
       <PageTitle
-        title="خبرهای ویترین"
+        title="خبرهای ویتکو"
         description="آخرین وضعیت سفارش‌ها، رزروها و قرارهای شما."
         action={
           Boolean(data?.notifications.some((n) => !n.read)) && (

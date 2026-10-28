@@ -87,8 +87,9 @@ export function notify(userId: string, title: string, body: string, href: string
   );
 }
 export const smsAvailable = () =>
-  Boolean(process.env.KAVENEGAR_API_KEY && process.env.KAVENEGAR_TEMPLATE);
-export const mailAvailable = () => Boolean(process.env.RESEND_API_KEY && process.env.MAIL_FROM);
+  Boolean(process.env.KAVENEGAR_API_KEY?.trim() && process.env.KAVENEGAR_TEMPLATE?.trim());
+export const mailAvailable = () =>
+  Boolean(process.env.RESEND_API_KEY?.trim() && process.env.MAIL_FROM?.trim());
 export async function sendCode(target: string, purpose: 'phone' | 'reset') {
   ensure(
     purpose === 'phone' ? smsAvailable() : mailAvailable(),
@@ -130,7 +131,7 @@ export async function sendCode(target: string, purpose: 'phone' | 'reset') {
         body: JSON.stringify({
           from: process.env.MAIL_FROM,
           to: [target],
-          subject: 'بازیابی رمز عبور ویترین کافه',
+          subject: 'بازیابی رمز عبور ویتکو',
           text: `کد بازیابی رمز عبور شما: ${code}\nاین کد تا ده دقیقه معتبر است. اگر این درخواست را ثبت نکرده‌اید، این پیام را نادیده بگیرید.`,
         }),
         signal: AbortSignal.timeout(15000),

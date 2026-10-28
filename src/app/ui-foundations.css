@@ -1,0 +1,561 @@
+/* Shared Vitco foundations. Page composition remains in globals.css.
+   Values are the approved visual direction, pending exact Figma token access. */
+:root {
+  --bg: #f7f7fa;
+  --surface: #ffffff;
+  --surface-alt: #f0f0f4;
+  --text: #2f2f33;
+  --muted: #6d6d78;
+  --line: #e7e7ed;
+  --accent: #935426;
+  --accent-hover: #743d18;
+  --peach: #fff0e2;
+  --peach-strong: #ffc58f;
+  --primary: #333336;
+  --primary-hover: #1e1e21;
+  --on-primary: #ffffff;
+  --focus: #a75b25;
+  --green: #36744e;
+  --sage: #eaf5ed;
+  --lavender: #efedf8;
+  --danger: #b13c49;
+  --on-danger: #ffffff;
+  --info: #6c548e;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius: 16px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --font-body: 'Vazirmatn', sans-serif;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-heading: 20px;
+  --text-title: clamp(24px, 2.2vw, 30px);
+  --control-height: 48px;
+  --shadow: 0 4px 20px #22222b06;
+  --bottom-nav-height: 80px;
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --bg: #18181b;
+  --surface: #232326;
+  --surface-alt: #2d2d32;
+  --text: #f6f5f8;
+  --muted: #b5b3be;
+  --line: #3b3b43;
+  --accent: #ffc58f;
+  --accent-hover: #ffdbbb;
+  --peach: #3e3028;
+  --peach-strong: #ffc58f;
+  --primary: #f6f5f8;
+  --primary-hover: #dfdde5;
+  --on-primary: #232326;
+  --focus: #ffc58f;
+  --green: #9bd4ac;
+  --sage: #243a2c;
+  --lavender: #332e43;
+  --danger: #ffabb3;
+  --on-danger: #46151d;
+  --info: #c9b3ee;
+  --shadow: none;
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.85;
+}
+
+h1,
+.page-title h1 {
+  font-size: var(--text-title);
+  font-weight: 700;
+  line-height: 1.6;
+  letter-spacing: -0.5px;
+}
+
+h2,
+.section-title h2 {
+  font-size: var(--text-heading);
+  font-weight: 700;
+  line-height: 1.65;
+}
+
+h3 {
+  font-weight: 600;
+}
+
+.page-title p,
+.section-title p {
+  font-size: var(--text-sm);
+  line-height: 1.9;
+}
+
+.button {
+  min-height: var(--control-height);
+  border-radius: var(--radius-pill);
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  gap: var(--space-2);
+  transition:
+    background 160ms,
+    border-color 160ms,
+    color 160ms;
+}
+
+.button:hover:not(:disabled) {
+  transform: none;
+}
+
+.button.primary,
+.button.dark {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.button.primary:hover:not(:disabled),
+.button.dark:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+[data-theme='dark'] .button.primary {
+  color: var(--on-primary);
+}
+
+.button.secondary {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.button.compact {
+  min-height: 40px;
+  font-size: var(--text-xs);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  transform: none;
+}
+
+.button.danger {
+  color: var(--on-danger);
+}
+
+.icon-button,
+.round-button,
+.topbar .icon-button {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: var(--radius-pill);
+}
+
+.round-button {
+  background: var(--peach);
+  color: var(--text);
+}
+
+input:where(:not([type='checkbox']):not([type='radio']):not([type='hidden'])),
+textarea,
+select {
+  border-radius: var(--radius-md);
+  border-color: var(--line);
+  background: var(--surface);
+  min-height: var(--control-height);
+  font-size: var(--text-base);
+  color: var(--text);
+  padding: var(--space-3) var(--space-4);
+}
+
+:where(input, textarea, select)::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+:where(input, textarea, select):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+.image-upload label:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  background: var(--surface-alt);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.field > label,
+.field > small,
+.form-grid .field > label {
+  font-size: var(--text-xs);
+}
+
+.header-search,
+.search-input,
+.discovery-search {
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  min-height: var(--control-height);
+}
+
+.header-search input,
+.search-input input,
+.discovery-search input {
+  min-width: 0;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding-inline: 0;
+  box-shadow: none;
+}
+
+.header-search input:focus-visible,
+.search-input input:focus-visible,
+.discovery-search input:focus-visible {
+  outline: none;
+}
+
+.header-search:focus-within,
+.search-input:focus-within,
+.discovery-search:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.panel,
+.cafe-card,
+.product-card,
+.profile-links > a,
+.quick-actions > a,
+.member-overview > a,
+.filter-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.panel {
+  padding: var(--space-5);
+}
+
+.product-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.product-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.product-card-bottom {
+  margin-top: auto;
+  padding-top: var(--space-4);
+}
+
+.no-photo {
+  color: var(--muted);
+}
+
+.cafe-card .media,
+.product-card .media,
+.option-row,
+.notice,
+.error-box,
+.success-note {
+  border-radius: var(--radius-md);
+}
+
+.category-tabs button,
+.discovery-pills a,
+.amenity-tags > span,
+.badge {
+  border-radius: var(--radius-pill);
+}
+
+.category-tabs button,
+.discovery-pills a,
+.tabs > button,
+.segmented button {
+  min-height: 44px;
+  font-size: var(--text-xs);
+}
+
+.category-tabs button.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.segmented,
+.view-toggle {
+  background: var(--surface-alt);
+  border-radius: var(--radius-pill);
+  padding: var(--space-1);
+}
+
+.segmented button,
+.view-toggle button {
+  border-radius: var(--radius-pill);
+}
+
+.segmented button.active,
+.view-toggle .selected {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.option-row {
+  min-height: 56px;
+  font-size: var(--text-sm);
+}
+
+.option-row:has(input:checked),
+.option-row.selected {
+  background: var(--peach);
+  border-color: var(--peach-strong);
+}
+
+.status-preparing,
+.status-delivering {
+  color: var(--info);
+}
+
+.quantity > button {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--surface-alt);
+  border-color: transparent;
+}
+
+.modal {
+  border-radius: var(--radius-lg);
+}
+
+.brand {
+  gap: var(--space-3);
+}
+
+.brand-mark,
+.brand.small .brand-mark,
+.topbar .brand.small .brand-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.brand-mark:after {
+  content: none;
+}
+
+.brand strong,
+.sidebar .brand strong {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+.brand.small strong,
+.topbar .brand.small strong {
+  font-size: 23px;
+}
+
+.brand small {
+  font-size: 11px;
+}
+
+.brand-dot {
+  color: var(--accent);
+}
+
+.nav-label,
+.nav-item,
+.sidebar .nav-item {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.nav-item.active {
+  background: var(--peach);
+  color: var(--text);
+}
+
+.nav-item.active:after {
+  content: none;
+}
+
+.topbar {
+  background: var(--bg);
+}
+
+.header-user {
+  min-height: 44px;
+  font-size: var(--text-xs);
+}
+
+.footer {
+  font-size: var(--text-xs);
+}
+
+.footer a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.empty-state {
+  border-style: solid;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+@media screen and (max-width: 760px) {
+  html {
+    scroll-padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+  }
+
+  .app-shell {
+    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+  }
+
+  .topbar {
+    height: 76px;
+    padding-inline: var(--space-4);
+    gap: var(--space-2);
+    background: var(--surface);
+  }
+
+  .topbar-start {
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .topbar-actions {
+    gap: 0;
+  }
+
+  .topbar-actions > a[href='/scan'],
+  .topbar-actions > .header-user {
+    display: none;
+  }
+
+  .main-content {
+    padding: var(--space-5) var(--space-4) var(--space-6);
+  }
+
+  .bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    min-height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+    padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom));
+    background: var(--surface);
+    box-shadow: 0 -4px 20px #22222b05;
+  }
+
+  .bottom-nav a {
+    min-width: 0;
+    min-height: 60px;
+    justify-content: center;
+    gap: var(--space-1);
+    font-size: 11px;
+    line-height: 1.5;
+    border-radius: var(--radius-md);
+  }
+
+  .bottom-nav-icon {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 30px;
+    border-radius: var(--radius-pill);
+  }
+
+  .bottom-nav a.active {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .bottom-nav a.active .bottom-nav-icon {
+    background: var(--peach);
+  }
+
+  .bottom-nav a.active svg {
+    fill: none;
+  }
+
+  .footer {
+    padding-bottom: var(--space-5);
+  }
+
+  .toast {
+    bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + var(--space-3));
+  }
+
+  :is(.main-content, .auth-form, .modal)
+    :where(input, textarea, select):not([type='checkbox']):not([type='radio']):not(
+      [type='hidden']
+    ) {
+    font-size: 16px;
+  }
+
+  .panel {
+    padding: var(--space-4);
+  }
+
+  .page-title > .button,
+  .catalog-toolbar > .button,
+  .discovery-search .button,
+  .profile-banner .button {
+    min-height: 44px;
+    font-size: var(--text-xs);
+  }
+}
+
+@media screen and (max-width: 360px) {
+  .topbar {
+    padding-inline: var(--space-2);
+    gap: 0;
+  }
+
+  .topbar-start {
+    gap: var(--space-1);
+  }
+
+  .topbar .brand.small {
+    gap: var(--space-2);
+  }
+}
