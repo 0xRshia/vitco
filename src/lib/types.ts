@@ -73,6 +73,14 @@ export type CartLine = {
   quantity: number;
   note: string;
 };
+export type PaymentMethod = 'offline' | 'zarinpal';
+export type PaymentStatus = 'unpaid' | 'pending' | 'paid' | 'failed' | 'refund_required';
+export type OnlinePaymentConfig = {
+  available: boolean;
+  cafe_ids: string[];
+  all_cafes: boolean;
+  sandbox: boolean;
+};
 export type Order = {
   id: string;
   user_id: string;
@@ -82,6 +90,9 @@ export type Order = {
   mode: 'delivery' | 'pickup' | 'dine_in';
   reservation_id: string;
   status: string;
+  payment_method: PaymentMethod;
+  payment_status: PaymentStatus;
+  payment_ref: string;
   items: CartLine[];
   subtotal: number;
   discount: number;
@@ -106,6 +117,8 @@ export type Reservation = {
   table_id: string;
   table_name: string;
   order_id?: string;
+  payment_method?: PaymentMethod;
+  payment_status?: PaymentStatus;
   note: string;
   status: string;
   created_at: string;
@@ -191,6 +204,7 @@ export type Ticket = {
   replies: { id: string; body: string; created_at: string; name: string }[];
 };
 export type Bootstrap = {
+  onlinePayment: OnlinePaymentConfig;
   user: User | null;
   cafes: Cafe[];
   products: Product[];

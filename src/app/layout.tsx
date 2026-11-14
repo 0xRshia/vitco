@@ -13,6 +13,7 @@ import './locations-reservations.css';
 import './discovery-updates.css';
 import './owner-dashboard.css';
 import './reservation-updates.css';
+import './payment-updates.css';
 import { Provider } from '@/lib/client';
 export const metadata: Metadata = {
   title: { default: 'ویتکو | قرارِ لحظه‌های خوب', template: '%s | ویتکو' },

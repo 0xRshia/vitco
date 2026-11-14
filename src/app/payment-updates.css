@@ -1,0 +1,65 @@
+.payment-method-picker {
+  display: grid;
+  gap: 10px;
+  margin-block: 18px;
+}
+.payment-method-picker > legend {
+  margin-block-end: 8px;
+  font-weight: 700;
+}
+.payment-method-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.payment-method-option.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+.payment-method-option > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.payment-method-option small,
+.payment-security-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+.order-payment-status {
+  padding-block: 18px;
+  border-block: 1px solid var(--line);
+  margin-block: 18px;
+}
+.order-payment-status h3 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.payment-status-label {
+  font-weight: 700;
+}
+.payment-status-paid {
+  color: var(--green, #357451);
+}
+.payment-status-pending,
+.payment-status-refund_required {
+  color: var(--accent);
+}
+.payment-reference {
+  overflow-wrap: anywhere;
+}
+.payment-security-note {
+  display: flex;
+  align-items: start;
+  gap: 6px;
+}
+.payment-account-options .option-row {
+  flex-wrap: wrap;
+  gap: 12px;
+}

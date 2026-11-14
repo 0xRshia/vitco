@@ -3,6 +3,7 @@ import { all, one, run, hydrate, transaction } from './database';
 import { ensure, object, text, integer, list, date, time } from './validation';
 import { notify } from './auth';
 import { today } from './format';
+import { isCafeOnlinePayable } from './zarinpal';
 import type {
   Cafe,
   CafeTable,
@@ -132,6 +133,15 @@ function createOrderRecord(user: User, input: Record<string, unknown>) {
   );
   if (existing) return existing.id;
   const q = quote(user, input);
+  const paymentMethod = text(input.payment_method ?? 'offline', 'روش پرداخت', 1, 20);
+  ensure(['offline', 'zarinpal'].includes(paymentMethod), 'روش پرداخت معتبر نیست.');
+  if (paymentMethod === 'zarinpal') {
+    ensure(isCafeOnlinePayable(q.cafe.id), 'پرداخت آنلاین این کافه هنوز فعال نیست.', 409);
+    ensure(
+      q.total > 0 && q.total <= 100000000,
+      'برای پرداخت آنلاین مبلغ سفارش باید بیشتر از صفر و حداکثر صد میلیون تومان باشد.',
+    );
+  }
   if (input.expected_total !== undefined)
     ensure(
       integer(input.expected_total, 'مبلغ مورد انتظار', 0, Number.MAX_SAFE_INTEGER) === q.total,
@@ -190,7 +200,7 @@ function createOrderRecord(user: User, input: Record<string, unknown>) {
   const id = randomUUID(),
     now = new Date().toISOString();
   run(
-    'INSERT INTO orders (id,user_id,cafe_id,mode,status,items,subtotal,discount,delivery_fee,points_used,total,address,pickup_at,note,created_at,updated_at,request_key,reservation_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    'INSERT INTO orders (id,user_id,cafe_id,mode,status,items,subtotal,discount,delivery_fee,points_used,total,address,pickup_at,note,created_at,updated_at,request_key,reservation_id,payment_method) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
     id,
     user.id,
     q.cafe.id,
@@ -209,6 +219,7 @@ function createOrderRecord(user: User, input: Record<string, unknown>) {
     now,
     requestKey,
     reservationId,
+    paymentMethod,
   );
   if (q.points_used) {
     run('UPDATE users SET points=points-? WHERE id=?', q.points_used, user.id);
@@ -243,6 +254,19 @@ function transitionOrderRecord(user: User, id: string, status: string) {
   const cafe = cafeById(order.cafe_id);
   const owner = cafe.owner_id === user.id;
   ensure(owner || order.user_id === user.id, 'دسترسی مجاز نیست.', 403);
+  if (order.payment_method === 'zarinpal') {
+    ensure(
+      order.payment_status !== 'pending',
+      'نتیجه پرداخت هنوز مشخص نیست. ابتدا وضعیت پرداخت را بررسی کنید.',
+      409,
+    );
+    if (status !== 'cancelled')
+      ensure(
+        order.payment_status === 'paid',
+        'پیش از آماده‌سازی سفارش باید پرداخت آنلاین تأیید شود.',
+        409,
+      );
+  }
   if (!owner)
     ensure(status === 'cancelled' && order.status === 'pending', 'این سفارش دیگر قابل لغو نیست.');
   const transitions: Record<string, string[]> = {
@@ -255,6 +279,19 @@ function transitionOrderRecord(user: User, id: string, status: string) {
   };
   ensure(transitions[order.status]?.includes(status), 'تغییر وضعیت سفارش مجاز نیست.');
   run('UPDATE orders SET status=?,updated_at=? WHERE id=?', status, new Date().toISOString(), id);
+  if (
+    status === 'cancelled' &&
+    order.payment_method === 'zarinpal' &&
+    order.payment_status === 'paid'
+  ) {
+    run("UPDATE orders SET payment_status='refund_required' WHERE id=?", id);
+    notify(
+      cafe.owner_id!,
+      'درخواست بازگشت وجه',
+      'یک سفارش پرداخت‌شده لغو شد. بازگشت وجه باید در حساب پذیرنده پیگیری و تأیید شود.',
+      '/dashboard?tab=orders',
+    );
+  }
   if (status === 'cancelled' && order.points_used) {
     run('UPDATE users SET points=points+? WHERE id=?', order.points_used, order.user_id);
     run(
@@ -398,6 +435,7 @@ export function createReservation(user: User, input: Record<string, unknown>) {
         request_key: 'reserve:' + id,
         note: input.note ?? '',
         expected_total: input.expected_total,
+        payment_method: input.payment_method,
       });
     }
     notify(

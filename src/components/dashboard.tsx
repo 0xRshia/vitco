@@ -36,6 +36,7 @@ import type {
 import { PageTitle, Empty, Loading, ErrorBox, Field, Modal, Form, LoginGate, Badge } from './ui';
 import { ImageUpload } from './account';
 import { PersianDateInput, PersianTimeInput } from './persian-date';
+import { paymentIsPending, paymentStatusLabels } from './payment-status';
 import { OwnerInsights, CategoryPricing } from './owner-insights';
 import { menuCategories, productCategory } from '@/lib/catalog';
 
@@ -81,6 +82,20 @@ export function DashboardView() {
       toast('وضعیت به‌روز شد.');
     } catch (e) {
       toast((e as Error).message);
+    }
+  }
+  async function checkOrderPayment(id: string) {
+    try {
+      const result = await api<{ status: Order['payment_status'] }>(
+        'payments/' + id + '/verify',
+        'POST',
+        {},
+      );
+      resource.reload();
+      await refresh();
+      toast(paymentStatusLabels[result.status]);
+    } catch (error) {
+      toast((error as Error).message);
     }
   }
   const tabs = [
@@ -341,6 +356,23 @@ export function DashboardView() {
                           <Badge status={o.status} />
                         </div>
                         <p>{o.items.map((i) => `${digits(i.quantity)} × ${i.name}`).join('، ')}</p>
+                        {o.payment_method === 'zarinpal' && (
+                          <p className={'payment-status-label payment-status-' + o.payment_status}>
+                            {paymentStatusLabels[o.payment_status]}
+                            {o.payment_ref && (
+                              <>
+                                {' '}
+                                · شماره پیگیری: <bdi>{o.payment_ref}</bdi>
+                              </>
+                            )}
+                          </p>
+                        )}
+                        {o.payment_status === 'refund_required' && (
+                          <p className="notice">
+                            بازگشت وجه باید در حساب پذیرنده پیگیری شود؛ بازگشت خودکار انجام نشده
+                            است.
+                          </p>
+                        )}
                         <div className="list-row">
                           <span>
                             {o.mode === 'dine_in'
@@ -356,16 +388,28 @@ export function DashboardView() {
                           <button className="button secondary compact" onClick={() => setOrder(o)}>
                             جزئیات سفارش
                           </button>
+                          {paymentIsPending(o) && (
+                            <button
+                              className="button secondary compact"
+                              onClick={() => void checkOrderPayment(o.id)}
+                            >
+                              بررسی پرداخت
+                            </button>
+                          )}
                           {o.status === 'pending' && (
                             <>
                               <button
                                 className="button primary compact"
+                                disabled={
+                                  o.payment_method === 'zarinpal' && o.payment_status !== 'paid'
+                                }
                                 onClick={() => status('orders', o.id, 'preparing')}
                               >
                                 تأیید و آماده‌سازی
                               </button>
                               <button
                                 className="button danger-outline compact"
+                                disabled={paymentIsPending(o)}
                                 onClick={() => status('orders', o.id, 'cancelled')}
                               >
                                 رد سفارش
@@ -449,6 +493,9 @@ export function DashboardView() {
                           {['pending', 'confirmed'].includes(r.status) && (
                             <button
                               className="button danger-outline compact"
+                              disabled={
+                                r.payment_method === 'zarinpal' && r.payment_status === 'pending'
+                              }
                               onClick={() => status('reservations', r.id, 'cancelled')}
                             >
                               لغو رزرو
@@ -704,7 +751,21 @@ export function DashboardView() {
                       <p>سفارش برای پذیرایی در کافه و متصل به رزرو میز است.</p>
                     )}
                     <p>{order.note}</p>
-                    <strong>مبلغ قابل دریافت: {money(order.total)}</strong>
+                    <p>
+                      {order.payment_method === 'zarinpal'
+                        ? paymentStatusLabels[order.payment_status]
+                        : 'پرداخت هنگام دریافت'}
+                      {order.payment_ref && (
+                        <>
+                          {' '}
+                          · شماره پیگیری: <bdi>{order.payment_ref}</bdi>
+                        </>
+                      )}
+                    </p>
+                    <strong>
+                      {order.payment_status === 'paid' ? 'مبلغ پرداخت‌شده: ' : 'مبلغ سفارش: '}
+                      {money(order.total)}
+                    </strong>
                   </div>
                 )}
               </Modal>

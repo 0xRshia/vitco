@@ -16,7 +16,6 @@ import {
   Plus,
   TicketPercent,
   Gift,
-  CreditCard,
   ReceiptText,
   Headphones,
   PackageCheck,
@@ -34,6 +33,14 @@ import { LocationMap, hasPosition } from './location-map';
 import { money, digits, dateLabel, daysAhead, today, statusLabels, amenities } from '@/lib/format';
 import type { Address, Order, Reservation, CafeTable, CartLine } from '@/lib/types';
 import { ReservationMenu } from './reservation-menu';
+import {
+  PaymentMethodPicker,
+  PaymentStatus,
+  onlinePaymentForCafe,
+  paymentIsPending,
+  paymentStatusLabels,
+  type PaymentMethod,
+} from './payment-status';
 import {
   PageTitle,
   SectionTitle,
@@ -65,7 +72,8 @@ const orderModeLabels = {
 };
 export function CartView() {
   const { data, cart, setCart, mode, setMode, refresh, toast } = useApp(),
-    router = useRouter();
+    router = useRouter(),
+    query = useSearchParams();
   const addresses = useResource<{ addresses: Address[] }>(data?.user ? 'addresses' : null);
   const [address, setAddress] = useState(''),
     [couponInput, setCouponInput] = useState(''),
@@ -81,9 +89,14 @@ export function CartView() {
     [clear, setClear] = useState(false),
     [removeKey, setRemoveKey] = useState<string | null>(null),
     [couponOpen, setCouponOpen] = useState(false),
-    [pickupOpen, setPickupOpen] = useState(false);
+    [pickupOpen, setPickupOpen] = useState(false),
+    [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
+      query.get('payment') === 'zarinpal' ? 'zarinpal' : 'offline',
+    );
   const requestKey = useRef({ signature: '', key: '' });
   const cafe = data?.cafes.find((c) => c.id === cart[0]?.cafe_id);
+  const onlineAvailable = onlinePaymentForCafe(data?.onlinePayment, cafe?.id);
+  const selectedPaymentMethod = onlineAvailable ? paymentMethod : 'offline';
   const removing = cart.find((item) => item.key === removeKey);
   const estimated = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const cafePoints = data?.rewards.find((r) => r.cafe_id === cafe?.id)?.points || 0;
@@ -124,6 +137,7 @@ export function CartView() {
         address_id: address,
         note,
         pickup_at: pickup ? pickup + 'T' + pickupTime + ':00+03:30' : '',
+        payment_method: selectedPaymentMethod,
       };
       const signature = JSON.stringify(payload);
       if (requestKey.current.signature !== signature)
@@ -360,13 +374,13 @@ export function CartView() {
           {!data?.user && (
             <p className="guest-quote-note">مبلغ نهایی و هزینه ارسال پس از ورود محاسبه می‌شود.</p>
           )}
-          <div className="payment-info">
-            <CreditCard size={20} />
-            <div>
-              <strong>پرداخت هنگام دریافت</strong>
-              <small>مستقیماً به کافه پرداخت می‌کنید.</small>
-            </div>
-          </div>
+          <PaymentMethodPicker
+            available={onlineAvailable}
+            sandbox={Boolean(data?.onlinePayment?.sandbox)}
+            value={selectedPaymentMethod}
+            onChange={setPaymentMethod}
+            disabled={busy}
+          />
           {error && <ErrorBox message={error} />}
           <button
             className="button primary full"
@@ -374,9 +388,24 @@ export function CartView() {
               busy ||
               (Boolean(data?.user) && (!quote || quoting || (mode === 'delivery' && !address)))
             }
-            onClick={() => (data?.user ? void checkout() : router.push('/login?next=%2Fcart'))}
+            onClick={() =>
+              data?.user
+                ? void checkout()
+                : router.push(
+                    '/login?next=' +
+                      encodeURIComponent(
+                        selectedPaymentMethod === 'zarinpal' ? '/cart?payment=zarinpal' : '/cart',
+                      ),
+                  )
+            }
           >
-            {busy ? 'در حال ثبت سفارش…' : data?.user ? 'ثبت سفارش' : 'ورود و ادامه سفارش'}
+            {busy
+              ? 'در حال ثبت سفارش…'
+              : data?.user
+                ? selectedPaymentMethod === 'zarinpal'
+                  ? 'ثبت سفارش و ادامه پرداخت'
+                  : 'ثبت سفارش'
+                : 'ورود و ادامه سفارش'}
             <ArrowLeft size={18} />
           </button>
           <p className="checkout-terms">
@@ -518,16 +547,25 @@ export function OrdersView({ id }: { id?: string }) {
           <ErrorBox message={resource.error} retry={resource.reload} />
         ) : order ? (
           <>
-            {query.get('success') === '1' && (
+            {query.get('success') === '1' && order.status !== 'cancelled' && (
               <div className="order-success">
                 <span>
                   <Check size={28} />
                 </span>
                 <div>
                   <h2>سفارش شما ثبت شد!</h2>
-                  <p>درخواست برای کافه ارسال شد. پس از تأیید کافه، وضعیت آن اینجا به‌روز می‌شود.</p>
+                  <p>
+                    {order.payment_method === 'zarinpal' && order.payment_status !== 'paid'
+                      ? 'برای ادامه سفارش، پرداخت آنلاین را از بخش پرداخت تکمیل کنید.'
+                      : 'درخواست برای کافه ارسال شد. پس از تأیید کافه، وضعیت آن اینجا به‌روز می‌شود.'}
+                  </p>
                   <strong className="success-order-total">{money(order.total)}</strong>
-                  <small>پرداخت هنگام دریافت · {orderModeLabels[order.mode]}</small>
+                  <small>
+                    {order.payment_method === 'zarinpal'
+                      ? paymentStatusLabels[order.payment_status]
+                      : 'پرداخت هنگام دریافت'}{' '}
+                    · {orderModeLabels[order.mode]}
+                  </small>
                   <Link className="button primary" href={'/orders/' + order.id}>
                     پیگیری سفارش <ArrowLeft size={17} />
                   </Link>
@@ -629,7 +667,7 @@ export function OrdersView({ id }: { id?: string }) {
                   <span>مبلغ نهایی</span>
                   <strong>{money(order.total)}</strong>
                 </div>
-                <p className="muted">روش پرداخت: هنگام دریافت</p>
+                <PaymentStatus order={order} onUpdated={resource.reload} />
                 <div className="stack">
                   <Link href={'/support?order=' + order.id} className="button secondary">
                     <Headphones size={18} />
@@ -639,7 +677,7 @@ export function OrdersView({ id }: { id?: string }) {
                     <Printer size={18} />
                     چاپ رسید
                   </button>
-                  {order.status === 'pending' && (
+                  {order.status === 'pending' && !paymentIsPending(order) && (
                     <button className="button danger-outline" onClick={() => setCancel(true)}>
                       لغو سفارش
                     </button>
@@ -656,10 +694,18 @@ export function OrdersView({ id }: { id?: string }) {
             <Confirm
               open={cancel}
               title="سفارش لغو شود؟"
-              description="پس از لغو، امتیازهای استفاده‌شده به حساب شما برمی‌گردد."
+              description={
+                order.payment_method === 'zarinpal' && order.payment_status === 'paid'
+                  ? 'با لغو سفارش، امتیازها برمی‌گردد. بازگشت مبلغ پرداخت‌شده نیاز به هماهنگی با کافه یا پشتیبانی دارد و خودکار نیست.'
+                  : 'پس از لغو، امتیازهای استفاده‌شده به حساب شما برمی‌گردد.'
+              }
               onClose={() => setCancel(false)}
               onConfirm={async () => {
                 if (busy) return;
+                if (paymentIsPending(order)) {
+                  toast('پیش از لغو، نتیجه پرداخت را بررسی کنید.');
+                  return;
+                }
                 setBusy(true);
                 try {
                   await api('orders/' + order.id, 'PATCH', { status: 'cancelled' });
@@ -714,6 +760,9 @@ export function OrdersView({ id }: { id?: string }) {
                       <small>
                         {orderModeLabels[o.mode]} · {dateLabel(o.created_at, true)}
                       </small>
+                      {o.payment_method === 'zarinpal' && (
+                        <small>{paymentStatusLabels[o.payment_status]}</small>
+                      )}
                     </div>
                     <div className="order-card-end">
                       <Badge status={o.status} />
@@ -780,7 +829,10 @@ export function ReserveView() {
     [tableId, setTableId] = useState(query.get('table') || ''),
     [section, setSection] = useState<'reservation' | 'menu'>('reservation'),
     [orderId, setOrderId] = useState(''),
-    [retryPending, setRetryPending] = useState(false);
+    [retryPending, setRetryPending] = useState(false),
+    [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
+      query.get('payment') === 'zarinpal' ? 'zarinpal' : 'offline',
+    );
   const key = useRef({ signature: '', key: '' });
   const pendingRequest = useRef<{
     payload: Record<string, unknown>;
@@ -799,6 +851,9 @@ export function ReserveView() {
       : null,
   );
   const selectedItems = cart.filter((item) => item.cafe_id === cafeId);
+  const onlineAvailable =
+    selectedItems.length > 0 && onlinePaymentForCafe(data?.onlinePayment, cafeId);
+  const selectedPaymentMethod = onlineAvailable ? paymentMethod : 'offline';
   const selectedTable = slots.data?.tables.find((table) => table.id === tableId);
   const hasTables = Boolean(cafe?.tables?.length);
   const itemsPayload = JSON.stringify(selectedItems);
@@ -831,7 +886,16 @@ export function ReserveView() {
       active = false;
     };
   }, [quoteSignature]);
-  const draft = JSON.stringify({ cafeId, date, time, guests, tableId, note, itemsPayload });
+  const draft = JSON.stringify({
+    cafeId,
+    date,
+    time,
+    guests,
+    tableId,
+    note,
+    itemsPayload,
+    paymentMethod,
+  });
   useEffect(() => {
     if (pendingRequest.current?.draft !== draft) setRetryPending(false);
   }, [draft]);
@@ -883,6 +947,7 @@ export function ReserveView() {
             table_id: tableId,
             note,
             items: selectedItems,
+            payment_method: selectedPaymentMethod,
             ...(selectedItems.length && reservationQuote
               ? { expected_total: reservationQuote.total }
               : {}),
@@ -898,9 +963,11 @@ export function ReserveView() {
       });
       setOrderId(result.order_id || '');
       if (selectedItems.length) setCart(cart.filter((item) => item.cafe_id !== cafeId));
-      setSuccess(true);
+      if (selectedPaymentMethod !== 'zarinpal' || !result.order_id) setSuccess(true);
       setRetryPending(false);
       await refresh();
+      if (selectedPaymentMethod === 'zarinpal' && result.order_id)
+        router.push('/orders/' + result.order_id + '?success=1');
     } catch (e) {
       setError((e as Error).message);
       const status = (e as Error & { status?: number }).status;
@@ -975,6 +1042,7 @@ export function ReserveView() {
                   value={cafeId}
                   onChange={(e) => {
                     setCafeId(e.target.value);
+                    setPaymentMethod('offline');
                     setTime('');
                     setTableId('');
                     setError('');
@@ -1231,8 +1299,16 @@ export function ReserveView() {
                     {data?.user
                       ? 'مبلغ نهایی از قیمت‌های فعلی کافه محاسبه می‌شود.'
                       : 'مبلغ تخمینی است؛ قیمت پس از ورود بررسی می‌شود.'}{' '}
-                    پرداخت در کافه انجام می‌شود.
+                    {selectedPaymentMethod === 'zarinpal'
+                      ? 'پرداخت از صفحه سفارش و در درگاه زرین‌پال ادامه پیدا می‌کند.'
+                      : 'پرداخت در کافه انجام می‌شود.'}
                   </p>
+                  <PaymentMethodPicker
+                    available={onlineAvailable}
+                    sandbox={Boolean(data?.onlinePayment?.sandbox)}
+                    value={selectedPaymentMethod}
+                    onChange={setPaymentMethod}
+                  />
                 </div>
               )}
               <p className="muted">
@@ -1277,7 +1353,8 @@ export function ReserveView() {
             )}
             <strong>
               {selectedItems.length
-                ? money(reservationQuote?.total ?? estimatedTotal) + ' · پرداخت در کافه'
+                ? money(reservationQuote?.total ?? estimatedTotal) +
+                  (selectedPaymentMethod === 'zarinpal' ? ' · پرداخت آنلاین' : ' · پرداخت در کافه')
                 : 'بدون سفارش غذا'}
             </strong>
           </div>
@@ -1305,6 +1382,7 @@ export function ReserveView() {
                       guests: String(guests),
                       table: tableId,
                       note,
+                      payment: selectedPaymentMethod,
                     });
                   router.push('/login?next=' + encodeURIComponent(next));
                   return;
@@ -1318,7 +1396,9 @@ export function ReserveView() {
                   ? 'بررسی دوباره درخواست قبلی'
                   : data?.user
                     ? selectedItems.length
-                      ? 'ثبت رزرو و سفارش'
+                      ? selectedPaymentMethod === 'zarinpal'
+                        ? 'ثبت رزرو و ادامه پرداخت'
+                        : 'ثبت رزرو و سفارش'
                       : 'ثبت درخواست رزرو'
                     : 'ورود و ادامه رزرو'}
               <ArrowLeft size={18} />
@@ -1366,7 +1446,9 @@ export function ReserveView() {
           </Link>
           {orderId && (
             <Link className="button secondary" href={'/orders/' + orderId}>
-              مشاهده سفارش و مبلغ پرداخت در کافه
+              {selectedPaymentMethod === 'zarinpal'
+                ? 'مشاهده سفارش و ادامه پرداخت آنلاین'
+                : 'مشاهده سفارش و مبلغ پرداخت در کافه'}
             </Link>
           )}
         </div>
@@ -1465,17 +1547,30 @@ export function ReservationsView() {
                     مشاهده سفارش این رزرو
                   </Link>
                 )}
+                {r.payment_method === 'zarinpal' && (
+                  <p className="muted">
+                    {r.payment_status
+                      ? paymentStatusLabels[r.payment_status]
+                      : 'وضعیت پرداخت را از صفحه سفارش بررسی کنید.'}
+                  </p>
+                )}
+                {r.payment_method === 'zarinpal' && r.payment_status === 'pending' && (
+                  <p className="notice">
+                    پرداخت در حال بررسی است؛ پیش از لغو، نتیجه پرداخت را از صفحه سفارش بررسی کنید.
+                  </p>
+                )}
                 {r.note && <p className="muted">{r.note}</p>}
                 <div className="card-bottom">
                   <Link href={'/cafes/' + r.cafe_id} className="text-link">
                     مشاهده کافه
                     <ChevronLeft size={16} />
                   </Link>
-                  {['pending', 'confirmed'].includes(r.status) && (
-                    <button className="text-link danger-text" onClick={() => setCancel(r)}>
-                      لغو رزرو
-                    </button>
-                  )}
+                  {['pending', 'confirmed'].includes(r.status) &&
+                    !(r.payment_method === 'zarinpal' && r.payment_status === 'pending') && (
+                      <button className="text-link danger-text" onClick={() => setCancel(r)}>
+                        لغو رزرو
+                      </button>
+                    )}
                 </div>
               </article>
             ))}
@@ -1492,10 +1587,19 @@ export function ReservationsView() {
       <Confirm
         open={Boolean(cancel)}
         title="این قرار لغو شود؟"
-        description="با لغو رزرو، ظرفیت آزاد و سفارش غذای در انتظار تأیید آن هم لغو می‌شود. اگر آماده‌سازی غذا شروع شده باشد، برای لغو با کافه هماهنگ کنید."
+        description={
+          'با لغو رزرو، ظرفیت آزاد و سفارش غذای در انتظار تأیید آن هم لغو می‌شود. اگر آماده‌سازی غذا شروع شده باشد، برای لغو با کافه هماهنگ کنید.' +
+          (cancel?.payment_method === 'zarinpal' && cancel.payment_status === 'paid'
+            ? ' بازگشت وجه پرداخت‌شده نیاز به هماهنگی با کافه یا پشتیبانی دارد و خودکار نیست.'
+            : '')
+        }
         onClose={() => setCancel(null)}
         onConfirm={async () => {
           try {
+            if (cancel?.payment_method === 'zarinpal' && cancel.payment_status === 'pending') {
+              toast('پیش از لغو، نتیجه پرداخت را بررسی کنید.');
+              return;
+            }
             await api('reservations/' + cancel?.id, 'PATCH', { status: 'cancelled' });
             setCancel(null);
             resource.reload();

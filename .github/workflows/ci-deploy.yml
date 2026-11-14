@@ -1,0 +1,168 @@
+name: Validate and deploy Vitco preview
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24.21.0'
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  checks:
+    name: Validate and package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check formatting
+        run: npm run format:check
+      - name: Check TypeScript
+        run: npm run typecheck
+      - name: Run unit tests
+        run: npm run test
+      - name: Build production application
+        run: npm run build
+        env:
+          BUILD_COMMIT: ${{ github.sha }}
+      - name: Install Chromium and browser dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Run browser tests
+        run: npm run test:e2e
+      - name: Package standalone release
+        env:
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: node scripts/package-release.mjs --commit "$RELEASE_COMMIT" --out-dir release-artifacts
+      - name: Retain verified release
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: vitco-release-${{ github.sha }}
+          path: release-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: vitco-browser-failure-${{ github.sha }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  deploy:
+    name: Activate preview release
+    needs: checks
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: preview
+      url: https://vitco.hmghadam.com
+    concurrency:
+      group: vitco-preview-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Download verified release
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: vitco-release-${{ github.sha }}
+          path: release-artifacts
+      - name: Check current main commit
+        id: current-main
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          current_main="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq '.sha')"
+          [[ "$current_main" =~ ^[a-f0-9]{40}$ ]] || { printf '::error::Could not verify the current main commit.\n'; exit 1; }
+          if [[ "$current_main" == "$RELEASE_COMMIT" ]]; then
+            printf 'current=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'current=false\n' >> "$GITHUB_OUTPUT"
+            printf '::notice::Skipping a stale release because main has advanced.\n'
+          fi
+      - name: Transfer and activate release
+        if: steps.current-main.outputs.current == 'true'
+        shell: bash
+        env:
+          RELEASE_COMMIT: ${{ github.sha }}
+          VITCO_DEPLOY_HOST: ${{ secrets.VITCO_DEPLOY_HOST }}
+          VITCO_DEPLOY_PORT: ${{ secrets.VITCO_DEPLOY_PORT }}
+          VITCO_DEPLOY_USER: ${{ secrets.VITCO_DEPLOY_USER }}
+          VITCO_DEPLOY_SSH_KEY: ${{ secrets.VITCO_DEPLOY_SSH_KEY }}
+          VITCO_DEPLOY_KNOWN_HOSTS: ${{ secrets.VITCO_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for variable in VITCO_DEPLOY_HOST VITCO_DEPLOY_PORT VITCO_DEPLOY_USER VITCO_DEPLOY_SSH_KEY VITCO_DEPLOY_KNOWN_HOSTS; do
+            if [[ -z "${!variable:-}" ]]; then
+              printf '::error::Required deployment secret %s is missing.\n' "$variable"
+              exit 1
+            fi
+          done
+          [[ "$RELEASE_COMMIT" =~ ^[a-f0-9]{40}$ ]] || { printf '::error::Invalid release commit.\n'; exit 1; }
+          [[ "$VITCO_DEPLOY_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]] || { printf '::error::Deployment host must be a DNS name or IPv4 address.\n'; exit 1; }
+          [[ "$VITCO_DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { printf '::error::Invalid deployment user.\n'; exit 1; }
+          [[ "$VITCO_DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]] && (( 10#$VITCO_DEPLOY_PORT >= 1 && 10#$VITCO_DEPLOY_PORT <= 65535 )) || { printf '::error::Deployment port must be between 1 and 65535.\n'; exit 1; }
+          deploy_port="$((10#$VITCO_DEPLOY_PORT))"
+          archive="release-artifacts/$RELEASE_COMMIT.tgz"
+          checksum="$archive.sha256"
+          [[ -f "$archive" && ! -L "$archive" && -f "$checksum" && ! -L "$checksum" ]] || { printf '::error::Release files are missing or invalid.\n'; exit 1; }
+          [[ "$(wc -l < "$checksum")" -eq 1 ]] && grep -Eq "^[a-f0-9]{64}  $RELEASE_COMMIT\.tgz$" "$checksum" || { printf '::error::Release checksum manifest is invalid.\n'; exit 1; }
+          (cd release-artifacts && sha256sum --check --strict "$RELEASE_COMMIT.tgz.sha256")
+          key_directory="$(mktemp -d)"
+          trap 'rm -rf -- "$key_directory"' EXIT
+          chmod 700 "$key_directory"
+          printf '%s\n' "$VITCO_DEPLOY_SSH_KEY" > "$key_directory/key"
+          printf '%s\n' "$VITCO_DEPLOY_KNOWN_HOSTS" > "$key_directory/known_hosts"
+          chmod 600 "$key_directory/key" "$key_directory/known_hosts"
+          unset VITCO_DEPLOY_SSH_KEY VITCO_DEPLOY_KNOWN_HOSTS
+          ssh-keygen -y -P '' -f "$key_directory/key" > /dev/null
+          known_host="$VITCO_DEPLOY_HOST"
+          if (( deploy_port != 22 )); then known_host="[$VITCO_DEPLOY_HOST]:$deploy_port"; fi
+          ssh-keygen -F "$known_host" -f "$key_directory/known_hosts" > /dev/null || { printf '::error::Pinned known_hosts has no entry for the deployment endpoint.\n'; exit 1; }
+          ssh_options=(-i "$key_directory/key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$key_directory/known_hosts" -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          destination="$VITCO_DEPLOY_USER@$VITCO_DEPLOY_HOST"
+          ssh "${ssh_options[@]}" -p "$deploy_port" "$destination" 'test -d /opt/vitco-web/incoming && test -w /opt/vitco-web/incoming'
+          scp "${ssh_options[@]}" -P "$deploy_port" "$archive" "$checksum" "$destination:/opt/vitco-web/incoming/"
+          ssh "${ssh_options[@]}" -p "$deploy_port" "$destination" "/usr/local/bin/vitco-activate $RELEASE_COMMIT"
+      - name: Verify public release commit
+        if: steps.current-main.outputs.current == 'true'
+        shell: bash
+        env:
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if health="$(curl --fail --silent --show-error --proto '=https' --tlsv1.2 --max-time 10 -H 'Cache-Control: no-cache' https://vitco.hmghadam.com/api/health)"; then
+              if printf '%s' "$health" | node --input-type=module -e 'let body=""; for await (const chunk of process.stdin) body+=chunk; try { const data=JSON.parse(body); if (data.status !== "ok" || data.commit !== process.env.RELEASE_COMMIT) process.exit(1); } catch { process.exit(1); }'; then
+                printf 'Preview is serving the verified release commit.\n'
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+          printf '::error::Preview did not report the deployed commit.\n'
+          exit 1

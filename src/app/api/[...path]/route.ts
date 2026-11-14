@@ -35,6 +35,8 @@ import {
 import { ownerAnalytics } from '@/lib/owner-analytics';
 import { adjustCategoryPrices } from '@/lib/pricing';
 import { productCategory } from '@/lib/catalog';
+import { zarinpalPublicConfig } from '@/lib/zarinpal';
+import { startPayment, checkPayment, paymentCallback } from '@/lib/payments';
 import type { Cafe, CafeTable, Product, Order, Reservation, User, Ticket } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -46,7 +48,7 @@ const cafeSql =
 const orderSql =
   'SELECT o.*,c.name cafe_name,u.name customer_name FROM orders o JOIN cafes c ON c.id=o.cafe_id JOIN users u ON u.id=o.user_id';
 const reservationSql =
-  'SELECT r.*,c.name cafe_name,u.name customer_name,(SELECT id FROM orders WHERE reservation_id=r.id) order_id FROM reservations r JOIN cafes c ON c.id=r.cafe_id JOIN users u ON u.id=r.user_id';
+  'SELECT r.*,c.name cafe_name,u.name customer_name,(SELECT id FROM orders WHERE reservation_id=r.id) order_id,(SELECT payment_method FROM orders WHERE reservation_id=r.id) payment_method,(SELECT payment_status FROM orders WHERE reservation_id=r.id) payment_status FROM reservations r JOIN cafes c ON c.id=r.cafe_id JOIN users u ON u.id=r.user_id';
 function ticketWithReplies(ticket: Ticket) {
   return {
     ...ticket,
@@ -157,8 +159,35 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       }
     }
     const user = currentUser(request);
+    if (resource === 'health' && method === 'GET') {
+      one('SELECT 1 healthy');
+      const release = await readFile(resolve('BUILD_COMMIT'), 'utf8').catch(() => '');
+      return json({
+        status: 'ok',
+        commit: /^[a-f0-9]{40}$/.test(release.trim()) ? release.trim() : null,
+      });
+    }
+    if (resource === 'payments' && id === 'callback' && method === 'GET') {
+      const query = request.nextUrl.searchParams;
+      const paymentId = v.text(query.get('payment'), 'شناسه پرداخت', 36, 36);
+      limit('payment-callback:' + paymentId, 20, 60);
+      const result = await paymentCallback({
+        payment: paymentId,
+        state: query.get('state') || '',
+        Authority: query.get('Authority') || '',
+        Status: query.get('Status') || '',
+      });
+      const response = NextResponse.redirect(
+        new URL('/orders/' + result.orderId + '?payment=' + result.result, result.origin),
+        303,
+      );
+      response.headers.set('Cache-Control', 'no-store');
+      response.headers.set('Referrer-Policy', 'no-referrer');
+      return response;
+    }
     if (resource === 'bootstrap' && method === 'GET')
       return json({
+        onlinePayment: zarinpalPublicConfig(),
         user,
         rewards: user
           ? all(
@@ -400,6 +429,12 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
         points_used: q.points_used,
         total: q.total,
       });
+    }
+    if (resource === 'payments' && method === 'POST') {
+      limit('payment:' + account.id, 15, 60);
+      if (!id) return json(await startPayment(account, v.text(input.order_id, 'سفارش', 1, 100)));
+      if (action === 'verify')
+        return json(await checkPayment(account, v.text(id, 'سفارش', 1, 100)));
     }
     if (resource === 'orders') {
       if (method === 'POST') return json({ id: createOrder(account, input) }, 201);

@@ -43,6 +43,9 @@ export function database() {
     ['reservations', 'table_id', "TEXT NOT NULL DEFAULT ''"],
     ['reservations', 'table_name', "TEXT NOT NULL DEFAULT ''"],
     ['orders', 'reservation_id', "TEXT NOT NULL DEFAULT ''"],
+    ['orders', 'payment_method', "TEXT NOT NULL DEFAULT 'offline'"],
+    ['orders', 'payment_status', "TEXT NOT NULL DEFAULT 'unpaid'"],
+    ['orders', 'payment_ref', "TEXT NOT NULL DEFAULT ''"],
   ]) {
     const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
     if (!columns.some((c) => c.name === column))
@@ -52,6 +55,19 @@ export function database() {
     CREATE UNIQUE INDEX IF NOT EXISTS orders_reservation ON orders(reservation_id) WHERE reservation_id <> '';
     CREATE INDEX IF NOT EXISTS orders_cafe_created ON orders(cafe_id,created_at);
     CREATE TABLE IF NOT EXISTS price_adjustments (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id), cafe_id TEXT NOT NULL REFERENCES cafes(id), category TEXT NOT NULL, reason TEXT NOT NULL, mode TEXT NOT NULL, amount REAL NOT NULL, changes TEXT NOT NULL, created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS payments (
+      id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id),
+      authority TEXT NOT NULL DEFAULT '', merchant_id TEXT NOT NULL,
+      sandbox INTEGER NOT NULL, amount_rial INTEGER NOT NULL CHECK(amount_rial>0),
+      callback_origin TEXT NOT NULL, state_hash TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('creating','pending','unknown','paid','failed')),
+      ref_id TEXT NOT NULL DEFAULT '', provider_code INTEGER,
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+      verify_lock_until INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS payments_authority ON payments(authority) WHERE authority <> '';
+    CREATE UNIQUE INDEX IF NOT EXISTS payments_active_order ON payments(order_id) WHERE status IN ('creating','pending','unknown');
+    CREATE INDEX IF NOT EXISTS payments_order ON payments(order_id,created_at);
   `);
   const cafe = source.cafe;
   db.prepare(

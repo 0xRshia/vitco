@@ -1,0 +1,28 @@
+[Unit]
+Description=Vitco cafe ordering and reservations
+After=network.target
+
+[Service]
+Type=simple
+User=vitco
+Group=vitco
+WorkingDirectory=/opt/vitco-web/current
+EnvironmentFile=/etc/vitco/app.env
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3030
+ExecStart=/opt/vitco-runtime/node-v24.21.0-linux-x64/bin/node /opt/vitco-web/current/server.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vitco /opt/vitco/data /opt/vitco-web/current/.next/cache
+UMask=0027
+MemoryMax=768M
+
+[Install]
+WantedBy=multi-user.target

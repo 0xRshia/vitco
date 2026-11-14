@@ -851,16 +851,20 @@ export function AddressView() {
   );
 }
 export function PaymentView() {
+  const { data, loading, error } = useApp();
+  const config = data?.onlinePayment;
+  const onlineCafes = data?.cafes.filter((cafe) => config?.cafe_ids.includes(cafe.id)) || [];
   return (
     <>
-      <PageTitle title="روش پرداخت" description="شفاف، ساده و در زمان تحویل." />
-      <div className="panel narrow form">
+      <PageTitle title="روش پرداخت" description="روش‌های فعال پرداخت و وضعیت تراکنش سفارش شما." />
+      <div className="panel narrow form payment-account-options">
         <span className="action-icon sage">
           <CreditCard size={28} />
         </span>
-        <h2>پرداخت در کافه یا هنگام تحویل</h2>
+        <h2>پرداخت سفارش</h2>
         <p>
-          مبلغ نهایی سفارش در زمان ثبت نمایش داده می‌شود. هزینه را مستقیماً به کافه پرداخت می‌کنید.
+          مبلغ نهایی سفارش در زمان ثبت نمایش داده می‌شود. روش پرداخت را پیش از ثبت انتخاب می‌کنید.
+          در روش پرداخت هنگام دریافت، هزینه مستقیماً به کافه پرداخت می‌شود.
         </p>
         <div className="option-row selected">
           <span>
@@ -869,6 +873,43 @@ export function PaymentView() {
           </span>
           <span className="badge status-confirmed">فعال</span>
         </div>
+        {loading ? (
+          <Loading />
+        ) : error ? (
+          <ErrorBox message={error} />
+        ) : config?.available ? (
+          <>
+            <div className="option-row selected">
+              <span>
+                <CreditCard size={20} /> پرداخت آنلاین با زرین‌پال
+              </span>
+              <span className="badge status-confirmed">{config.sandbox ? 'آزمایشی' : 'فعال'}</span>
+            </div>
+            <p>
+              {config.all_cafes
+                ? 'درگاه برای کافه‌های فعال این سامانه در دسترس است.'
+                : 'پرداخت آنلاین فقط برای کافه‌های تعیین‌شده فعال است: ' +
+                  (onlineCafes.map((cafe) => cafe.name).join('، ') ||
+                    'کافه‌های مجاز در زمان ثبت سفارش نمایش داده می‌شوند.')}
+            </p>
+            {config.sandbox && (
+              <p className="notice">درگاه در حالت آزمایشی است و برای پرداخت واقعی فعال نیست.</p>
+            )}
+            <p>
+              پس از انتخاب پرداخت آنلاین و ثبت سفارش، از صفحه همان سفارش به درگاه زرین‌پال بروید.
+              فقط پس از تأیید تراکنش توسط درگاه، وضعیت سفارش «پرداخت تأیید شده» می‌شود.
+            </p>
+            <p className="notice">
+              اگر سفارش پرداخت‌شده لغو شود، برای بازگشت وجه با کافه یا پشتیبانی هماهنگ کنید. بازگشت
+              وجه خودکار نیست.
+            </p>
+          </>
+        ) : (
+          <p className="notice">
+            پرداخت آنلاین در حال حاضر فعال نیست. می‌توانید هنگام دریافت سفارش مستقیماً به کافه
+            پرداخت کنید.
+          </p>
+        )}
         <div className="notice">
           <ShieldCheck size={22} />
           <span>اطلاعات کارت بانکی در ویتکو دریافت یا ذخیره نمی‌شود.</span>

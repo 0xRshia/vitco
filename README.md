@@ -48,7 +48,10 @@ customer account can be used to exercise the customer flow.
 - Category-wide percentage/fixed base-price changes with a server preview and
   stale-preview protection, alongside individual product price editing.
 - Owner-configured tables and optional menu preorders submitted atomically with
-  a reservation. Meal orders use the existing payment-at-café method.
+  a reservation, with the existing payment-at-café method available.
+- Optional Zarinpal payments, enabled only for an explicitly configured merchant,
+  environment, café scope, and callback origin. The current local setup does not
+  enable live payment.
 
 See [the expansion requirements and verification](docs/cafe-management-expansion.md)
 for report definitions and integration details.
@@ -79,14 +82,29 @@ into the repository. Its checkerboard screenshots are not used as app assets.
 | `KAVENEGAR_API_KEY`, `KAVENEGAR_TEMPLATE` | Real Kavenegar Verify Lookup SMS login                                          |
 | `RESEND_API_KEY`, `MAIL_FROM`             | Real Resend password-recovery email from a verified sender                      |
 | `SUPPORT_USER_ID`                         | UUID of a trusted existing account allowed to read/reply to all support tickets |
+| `ZARINPAL_MERCHANT_ID`                    | Complete merchant UUID; keep private and out of tracked files                   |
+| `ZARINPAL_ENV`                            | Explicit `live` or `sandbox`; sandbox does not charge real money                |
+| `ZARINPAL_CAFE_IDS`                       | Comma-separated café IDs without spaces, or explicit `*` for all managed cafés  |
 
 SMS and recovery screens explicitly explain when their service is not configured.
 No verification codes are exposed through the API or logs. Codes expire and are
 rate-limited. External delivery was not exercised because no provider credentials
 were supplied.
 
-Payment is **at the café or on delivery**. No card is charged or collected.
-Online payment requires a separately selected payment provider and credentials.
+Payment **at the café or on delivery** remains available. Optional Zarinpal online
+payment requires complete valid configuration and a public HTTPS callback origin
+for live use. All enabled cafés use one configured merchant account; separate café
+payouts and automatic split settlement are not implemented. Cancelling a paid
+order does not automatically refund a payment.
+
+The preview target is `vitco.hmghadam.com` on the existing VPS, with all three
+`ZARINPAL_*` variables empty and live payment disabled. The future `vitco.ir` domain
+has not yet been purchased. Live activation requires domain ownership, deployment
+with HTTPS, updating the terminal's registered domain from the reported
+`vitrincafe.ir`, and confirming server-IP settings. No live or external sandbox
+transaction has been run. See [Zarinpal configuration and payment
+operations](docs/zarinpal-payments.md) for the provider contract and limitations.
+
 Reservations are requests until the café owner confirms them. Each reservation
 holds capacity for one hour. Owner hours currently support a single same-day
 opening interval. Owners can configure named tables with seat counts; cafés
@@ -144,8 +162,10 @@ npm run check:readiness
 npm run check:readiness -- --production
 ```
 
-The production check requires a canonical public HTTPS `APP_ORIGIN`. Optional SMS
-and email may remain disabled; a partially configured provider is an error.
+The production check requires a canonical public HTTPS `APP_ORIGIN`. Optional SMS,
+email, and Zarinpal may remain disabled; a partially configured provider is an
+error. Live Zarinpal requires a public HTTPS origin even in the local readiness
+check. No readiness check sends a provider request or validates domain ownership.
 This check does not validate provider credentials or guarantee production readiness.
 See [the current preparation and verification report](docs/release-readiness.md).
 

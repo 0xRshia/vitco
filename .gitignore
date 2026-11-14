@@ -7,4 +7,5 @@ public/uploads/
 *.tsbuildinfo
 test-results/
 playwright-report/
+release-artifacts/
 .DS_Store

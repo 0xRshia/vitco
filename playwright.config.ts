@@ -28,6 +28,9 @@ export default defineConfig({
     env: {
       DATABASE_PATH: join(mkdtempSync(join(tmpdir(), 'vitrin-e2e-')), 'test.sqlite'),
       APP_ORIGIN: 'http://localhost:3100',
+      ZARINPAL_MERCHANT_ID: '',
+      ZARINPAL_ENV: '',
+      ZARINPAL_CAFE_IDS: '',
     },
   },
 });
