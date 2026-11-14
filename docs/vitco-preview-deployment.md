@@ -2,11 +2,22 @@
 
 ## Verification status
 
-The server and existing preview were inspected on **2026-11-14**. The new
-standalone rollout and automatic deployment are prepared in this repository;
-this document does **not** yet claim that the new release is serving publicly.
-The final deployed commit and completed health checks must be recorded after
-cutover and GitHub Actions verification.
+Deployment completed on **2026-11-14** at **https://vitco.hmghadam.com**. The first
+standalone release was `bb18ac1acd9d7ae2732d633a1bc8b4d2ab4df13e`; both local and
+public health checks reported that exact commit. The first automatic
+[GitHub Actions deployment](https://github.com/0xRshia/vitco/actions/runs/43588632231)
+also completed successfully. The live `/api/health` response identifies the
+currently active commit after subsequent deployments.
+
+The existing database passed `PRAGMA quick_check`, and its café, product, user,
+order, and reservation counts were preserved. The old container was stopped and
+its restart policy disabled after public verification; its files and image are
+retained for rollback. Only the Vitco Nginx upstream changed. No DNS or certificate
+changes were needed.
+
+Read-only desktop and mobile browser checks passed for the home, cafés, menu,
+payment, and reservation pages: HTTPS `200`, Persian/RTL, no horizontal overflow,
+and no browser errors. No test accounts or orders were created on the live site.
 
 The user explicitly requested deploying the changes and configuring automatic
 deployment after merging to `main`. Committing and pushing the application and
@@ -61,7 +72,10 @@ its routing merely by provisioning the new service.
 
 All three `ZARINPAL_*` variables remain empty on this preview. No gateway request,
 real charge, external sandbox transaction, refund, or payout is part of this
-deployment. See [payment configuration and limitations](zarinpal-payments.md).
+deployment. The supplied merchant configuration is stored separately in private,
+root-owned `/etc/vitco/zarinpal.pending.env`; the service does not load it. The
+gateway's registered domain must be approved before activation. See
+[payment configuration and limitations](zarinpal-payments.md).
 
 ## Release and cutover procedure
 
@@ -110,7 +124,7 @@ checks do not receive deployment secrets. Deployment is serialized without
 cancelling a release already being activated, and a stale-main guard skips a
 release when `main` has advanced.
 
-Configure these GitHub Actions secrets for this repository:
+These GitHub Actions secrets were configured for this repository:
 
 | Secret                     | Purpose                                                          |
 | -------------------------- | ---------------------------------------------------------------- |
@@ -125,9 +139,10 @@ pinned host key, uploads only the verified release, requests activation, and
 checks the public health commit. The preview environment URL is
 `https://vitco.hmghadam.com`.
 
-The initial local validation reported **44 unit tests and 16 browser tests**.
-This is the initial verification result, not a claim about the final workflow
-run; the final code and workflow must be checked again after integration.
+Local validation and the first GitHub Actions run passed **44 unit tests and 16
+desktop/mobile browser tests**, TypeScript, formatting, the standalone build,
+privacy-filtered packaging, restricted-key transfer, activation, and public health
+verification. Uploads were tested and unrelated SSH commands were rejected.
 
 ## Health checks and rollback
 
