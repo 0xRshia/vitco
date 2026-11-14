@@ -35,6 +35,24 @@ export function database() {
     CREATE INDEX IF NOT EXISTS bookings_slot ON reservations(cafe_id,date,time,status);
     CREATE INDEX IF NOT EXISTS products_cafe ON products(cafe_id);
   `);
+  // Additive migrations preserve existing operator data and booking history.
+  for (const [table, column, definition] of [
+    ['cafes', 'images', "TEXT NOT NULL DEFAULT '[]'"],
+    ['cafes', 'tables', "TEXT NOT NULL DEFAULT '[]'"],
+    ['events', 'end_time', "TEXT NOT NULL DEFAULT ''"],
+    ['reservations', 'table_id', "TEXT NOT NULL DEFAULT ''"],
+    ['reservations', 'table_name', "TEXT NOT NULL DEFAULT ''"],
+    ['orders', 'reservation_id', "TEXT NOT NULL DEFAULT ''"],
+  ]) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!columns.some((c) => c.name === column))
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS orders_reservation ON orders(reservation_id) WHERE reservation_id <> '';
+    CREATE INDEX IF NOT EXISTS orders_cafe_created ON orders(cafe_id,created_at);
+    CREATE TABLE IF NOT EXISTS price_adjustments (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id), cafe_id TEXT NOT NULL REFERENCES cafes(id), category TEXT NOT NULL, reason TEXT NOT NULL, mode TEXT NOT NULL, amount REAL NOT NULL, changes TEXT NOT NULL, created_at TEXT NOT NULL);
+  `);
   const cafe = source.cafe;
   db.prepare(
     `INSERT OR IGNORE INTO cafes (id,owner_id,name,description,city,address,phone,amenities,capacity,pickup,active,source) VALUES (?,NULL,?,?,?,?,?,?,0,0,0,?)`,
@@ -96,7 +114,7 @@ export function transaction<T>(work: () => T): T {
     throw error;
   }
 }
-const jsonColumns = new Set(['amenities', 'sizes', 'addons', 'items']);
+const jsonColumns = new Set(['amenities', 'sizes', 'addons', 'items', 'images', 'tables']);
 const booleanColumns = new Set([
   'active',
   'available',

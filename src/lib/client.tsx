@@ -12,9 +12,16 @@ export async function api<T = Record<string, unknown>>(
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
     cache: 'no-store',
+  }).catch(() => {
+    throw new Error('ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی و دوباره تلاش کنید.');
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'ارتباط با سرور برقرار نشد.');
+  const data = await response.json().catch(() => {
+    throw new Error('پاسخ سرور قابل دریافت نبود. دوباره وضعیت درخواست را بررسی کنید.');
+  });
+  if (!response.ok)
+    throw Object.assign(new Error(data.error || 'ارتباط با سرور برقرار نشد.'), {
+      status: response.status,
+    });
   return data;
 }
 type Context = {

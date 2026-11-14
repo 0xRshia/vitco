@@ -36,6 +36,8 @@ import type {
 import { PageTitle, Empty, Loading, ErrorBox, Field, Modal, Form, LoginGate, Badge } from './ui';
 import { ImageUpload } from './account';
 import { PersianDateInput, PersianTimeInput } from './persian-date';
+import { OwnerInsights, CategoryPricing } from './owner-insights';
+import { menuCategories, productCategory } from '@/lib/catalog';
 
 type Dashboard = {
   cafes: Cafe[];
@@ -53,8 +55,17 @@ export function DashboardView() {
   const [tab, setTab] = useState(query.get('tab') || 'cafes'),
     [modal, setModal] = useState<'cafe' | 'product' | 'coupon' | 'event' | null>(null),
     [editing, setEditing] = useState<Cafe | Product | CafeEvent | null>(null),
-    [order, setOrder] = useState<Order | null>(null);
+    [order, setOrder] = useState<Order | null>(null),
+    [selectedCafe, setSelectedCafe] = useState(''),
+    [productCafe, setProductCafe] = useState(''),
+    [productCategoryFilter, setProductCategoryFilter] = useState('');
   const data = resource.data;
+  const filteredProducts =
+    data?.products.filter(
+      (product) =>
+        (!productCafe || product.cafe_id === productCafe) &&
+        (!productCategoryFilter || productCategory(product.category) === productCategoryFilter),
+    ) || [];
   async function updated() {
     await refresh();
     resource.reload();
@@ -75,6 +86,8 @@ export function DashboardView() {
   const tabs = [
     { id: 'cafes', label: 'کافه‌های من', icon: Store },
     { id: 'products', label: 'مدیریت منو', icon: Coffee },
+    { id: 'crm', label: 'مدیریت مشتریان', icon: Users },
+    { id: 'sales', label: 'مدیریت و فروش', icon: CircleDollarSign },
     { id: 'orders', label: 'سفارش‌ها', icon: ReceiptText },
     { id: 'reservations', label: 'رزروها', icon: CalendarCheck },
     { id: 'events', label: 'رویدادها', icon: CalendarDays },
@@ -173,6 +186,27 @@ export function DashboardView() {
                           </span>
                         </div>
                         <div className="button-row">
+                          <button
+                            className="button primary"
+                            onClick={() => {
+                              setProductCafe(c.id);
+                              setTab('products');
+                            }}
+                          >
+                            <Pencil size={16} />
+                            تغییر آیتم و دسته‌بندی
+                          </button>
+                          <button
+                            className="button secondary"
+                            onClick={() => {
+                              setSelectedCafe(c.id);
+                              setEditing(null);
+                              setModal('event');
+                            }}
+                          >
+                            <CalendarDays size={16} />
+                            ایجاد رویداد جدید
+                          </button>
                           <Link className="button secondary" href={'/cafes/' + c.id}>
                             مشاهده
                             <ArrowUpLeft size={16} />
@@ -205,6 +239,7 @@ export function DashboardView() {
                       className="button primary"
                       disabled={!data.cafes.length}
                       onClick={() => {
+                        setSelectedCafe(productCafe);
                         setEditing(null);
                         setModal('product');
                       }}
@@ -213,7 +248,33 @@ export function DashboardView() {
                       محصول جدید
                     </button>
                   </div>
-                  {data.products.length ? (
+                  <CategoryPricing cafes={data.cafes} products={data.products} onDone={updated} />
+                  <div className="owner-filters">
+                    <Field label="کافه محصولات">
+                      <select value={productCafe} onChange={(e) => setProductCafe(e.target.value)}>
+                        <option value="">همه کافه‌های من</option>
+                        {data.cafes.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="دسته‌بندی محصولات">
+                      <select
+                        value={productCategoryFilter}
+                        onChange={(e) => setProductCategoryFilter(e.target.value)}
+                      >
+                        <option value="">همه دسته‌بندی‌ها</option>
+                        {menuCategories(data.products).map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                  {filteredProducts.length ? (
                     <div className="table-wrap">
                       <table>
                         <thead>
@@ -226,7 +287,7 @@ export function DashboardView() {
                           </tr>
                         </thead>
                         <tbody>
-                          {data.products.map((p) => (
+                          {filteredProducts.map((p) => (
                             <tr key={p.id}>
                               <td>{p.name}</td>
                               <td>{p.category}</td>
@@ -251,11 +312,22 @@ export function DashboardView() {
                     </div>
                   ) : (
                     <Empty
-                      title="منوی شما از اینجا شروع می‌شود"
-                      description="پس از ثبت کافه، محصولات، قیمت‌ها و افزودنی‌های واقعی منو را وارد کنید."
+                      title={
+                        data.products.length
+                          ? 'محصولی با این فیلتر پیدا نشد'
+                          : 'منوی شما از اینجا شروع می‌شود'
+                      }
+                      description={
+                        data.products.length
+                          ? 'کافه یا دسته‌بندی دیگری انتخاب کنید.'
+                          : 'پس از ثبت کافه، محصولات، قیمت‌ها و افزودنی‌های واقعی منو را وارد کنید.'
+                      }
                     />
                   )}
                 </>
+              )}
+              {(tab === 'crm' || tab === 'sales') && (
+                <OwnerInsights cafes={data.cafes} view={tab} />
               )}
               {tab === 'orders' &&
                 (data.orders.length ? (
@@ -271,8 +343,12 @@ export function DashboardView() {
                         <p>{o.items.map((i) => `${digits(i.quantity)} × ${i.name}`).join('، ')}</p>
                         <div className="list-row">
                           <span>
-                            {o.mode === 'pickup' ? 'تحویل از کافه' : 'ارسال به آدرس'} ·{' '}
-                            {dateLabel(o.created_at, true)}
+                            {o.mode === 'dine_in'
+                              ? 'سفارش میز'
+                              : o.mode === 'pickup'
+                                ? 'تحویل از کافه'
+                                : 'ارسال به آدرس'}{' '}
+                            · {dateLabel(o.created_at, true)}
                           </span>
                           <strong>{money(o.total)}</strong>
                         </div>
@@ -300,10 +376,18 @@ export function DashboardView() {
                             <button
                               className="button primary compact"
                               onClick={() =>
-                                status('orders', o.id, o.mode === 'pickup' ? 'ready' : 'delivering')
+                                status(
+                                  'orders',
+                                  o.id,
+                                  o.mode === 'delivery' ? 'delivering' : 'ready',
+                                )
                               }
                             >
-                              {o.mode === 'pickup' ? 'آماده دریافت' : 'تحویل به پیک'}
+                              {o.mode === 'delivery'
+                                ? 'تحویل به پیک'
+                                : o.mode === 'dine_in'
+                                  ? 'آماده پذیرایی'
+                                  : 'آماده دریافت'}
                             </button>
                           )}
                           {['ready', 'delivering'].includes(o.status) && (
@@ -338,6 +422,12 @@ export function DashboardView() {
                         <p>
                           {dateLabel(r.date)} · ساعت {digits(r.time)} · {digits(r.guests)} نفر
                         </p>
+                        {r.table_name && <p>میز انتخابی: {r.table_name}</p>}
+                        {r.order_id && (
+                          <p className="muted">
+                            سفارش منو همراه این رزرو ثبت شده است؛ جزئیات را در بخش سفارش‌ها ببینید.
+                          </p>
+                        )}
                         {r.note && <p className="muted">{r.note}</p>}
                         <div className="button-row">
                           {r.status === 'pending' && (
@@ -428,6 +518,7 @@ export function DashboardView() {
                       className="button primary"
                       disabled={!data.cafes.length}
                       onClick={() => {
+                        setSelectedCafe('');
                         setEditing(null);
                         setModal('event');
                       }}
@@ -535,6 +626,8 @@ export function DashboardView() {
                     key={editing?.id || 'new'}
                     product={editing as Product | null}
                     cafes={data.cafes}
+                    initialCafe={selectedCafe}
+                    categories={menuCategories(data.products)}
                     onDone={updated}
                   />
                 )}
@@ -549,6 +642,7 @@ export function DashboardView() {
                     key={editing?.id || 'new'}
                     event={editing as CafeEvent | null}
                     cafes={data.cafes}
+                    initialCafe={selectedCafe}
                     onDone={updated}
                   />
                 )}
@@ -606,6 +700,9 @@ export function DashboardView() {
                       </div>
                     )}
                     {order.pickup_at && <p>زمان دریافت: {dateLabel(order.pickup_at, true)}</p>}
+                    {order.mode === 'dine_in' && (
+                      <p>سفارش برای پذیرایی در کافه و متصل به رزرو میز است.</p>
+                    )}
                     <p>{order.note}</p>
                     <strong>مبلغ قابل دریافت: {money(order.total)}</strong>
                   </div>
@@ -618,10 +715,22 @@ export function DashboardView() {
     </>
   );
 }
-function CafeSelect({ cafes, value }: { cafes: Cafe[]; value?: string }) {
+function CafeSelect({
+  cafes,
+  value,
+  initialValue,
+}: {
+  cafes: Cafe[];
+  value?: string;
+  initialValue?: string;
+}) {
   return (
     <Field label="کافه">
-      <select name="cafe_id" defaultValue={value || cafes[0]?.id} disabled={Boolean(value)}>
+      <select
+        name="cafe_id"
+        defaultValue={value || initialValue || cafes[0]?.id}
+        disabled={Boolean(value)}
+      >
         {cafes.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
@@ -635,7 +744,9 @@ function CafeSelect({ cafes, value }: { cafes: Cafe[]; value?: string }) {
 function CafeEditor({ cafe, onDone }: { cafe: Cafe | null; onDone: () => Promise<void> }) {
   const [image, setImage] = useState(cafe?.image || ''),
     [latitude, setLatitude] = useState(cafe?.latitude?.toString() || ''),
-    [longitude, setLongitude] = useState(cafe?.longitude?.toString() || '');
+    [longitude, setLongitude] = useState(cafe?.longitude?.toString() || ''),
+    [images, setImages] = useState<string[]>(cafe?.images || []),
+    [tables, setTables] = useState<Cafe['tables']>(cafe?.tables || []);
   const { toast } = useApp();
   return (
     <Form
@@ -644,6 +755,8 @@ function CafeEditor({ cafe, onDone }: { cafe: Cafe | null; onDone: () => Promise
           ...Object.fromEntries(form),
           id: cafe?.id,
           image,
+          images: images.filter(Boolean),
+          tables,
           latitude,
           longitude,
           amenities: form.getAll('amenities'),
@@ -655,6 +768,38 @@ function CafeEditor({ cafe, onDone }: { cafe: Cafe | null; onDone: () => Promise
       }}
     >
       <ImageUpload value={image} onChange={setImage} label="کافه" />
+      <fieldset className="option-group">
+        <legend>عکس‌های بیشتر کافه</legend>
+        <div className="owner-gallery-editor">
+          {images.map((src, index) => (
+            <div key={index}>
+              <ImageUpload
+                value={src}
+                onChange={(value) =>
+                  setImages(images.map((item, i) => (i === index ? value : item)))
+                }
+                label={'کافه، عکس ' + digits(index + 1)}
+              />
+              <button
+                type="button"
+                className="text-link"
+                onClick={() => setImages(images.filter((_, i) => i !== index))}
+              >
+                حذف این عکس
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="text-link"
+          disabled={images.length >= 10}
+          onClick={() => setImages([...images, ''])}
+        >
+          <Plus size={16} />
+          افزودن عکس
+        </button>
+      </fieldset>
       <Field label="نام کافه">
         <input name="name" defaultValue={cafe?.name} />
       </Field>
@@ -735,6 +880,62 @@ function CafeEditor({ cafe, onDone }: { cafe: Cafe | null; onDone: () => Promise
           defaultValue={cafe?.capacity || 20}
         />
       </Field>
+      <fieldset className="option-group">
+        <legend>میزهای قابل رزرو</legend>
+        <p className="muted">
+          نام و ظرفیت هر میز را ثبت کنید تا مشتری بتواند میز دلخواهش را انتخاب کند. ظرفیت کلی کافه
+          همچنان بررسی می‌شود.
+        </p>
+        {tables.map((table, index) => (
+          <div className="owner-table-editor" key={table.id}>
+            <Field label={'نام میز ' + digits(index + 1)}>
+              <input
+                value={table.name}
+                maxLength={80}
+                onChange={(e) =>
+                  setTables(
+                    tables.map((item, i) =>
+                      i === index ? { ...item, name: e.target.value } : item,
+                    ),
+                  )
+                }
+              />
+            </Field>
+            <Field label={'ظرفیت میز ' + digits(index + 1)}>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={table.seats}
+                onChange={(e) =>
+                  setTables(
+                    tables.map((item, i) =>
+                      i === index ? { ...item, seats: Number(e.target.value) } : item,
+                    ),
+                  )
+                }
+              />
+            </Field>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={'حذف میز ' + (table.name || digits(index + 1))}
+              onClick={() => setTables(tables.filter((_, i) => i !== index))}
+            >
+              <Trash2 size={17} />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="text-link"
+          disabled={tables.length >= 50}
+          onClick={() => setTables([...tables, { id: crypto.randomUUID(), name: '', seats: 2 }])}
+        >
+          <Plus size={16} />
+          افزودن میز
+        </button>
+      </fieldset>
       <fieldset className="option-group">
         <legend>امکانات کافه</legend>
         <div className="amenities-checkboxes">
@@ -830,10 +1031,14 @@ function OptionEditor({
 function ProductEditor({
   product,
   cafes,
+  initialCafe,
+  categories,
   onDone,
 }: {
   product: Product | null;
   cafes: Cafe[];
+  initialCafe?: string;
+  categories: string[];
   onDone: () => Promise<void>;
 }) {
   const [image, setImage] = useState(product?.image || ''),
@@ -853,7 +1058,7 @@ function ProductEditor({
         await onDone();
       }}
     >
-      <CafeSelect cafes={cafes} value={product?.cafe_id} />
+      <CafeSelect cafes={cafes} value={product?.cafe_id} initialValue={initialCafe} />
       <ImageUpload value={image} onChange={setImage} label="محصول" />
       <Field label="نام محصول">
         <input name="name" defaultValue={product?.name} />
@@ -863,7 +1068,17 @@ function ProductEditor({
       </Field>
       <div className="form-grid">
         <Field label="دسته‌بندی">
-          <input name="category" defaultValue={product?.category} placeholder="مثلاً نوشیدنی گرم" />
+          <input
+            name="category"
+            list="owner-menu-categories"
+            defaultValue={product ? productCategory(product.category) : ''}
+            placeholder="دسته‌بندی را انتخاب یا وارد کنید"
+          />
+          <datalist id="owner-menu-categories">
+            {categories.map((category) => (
+              <option key={category} value={category} />
+            ))}
+          </datalist>
         </Field>
         <Field label="قیمت پایه (تومان)">
           <input name="price" type="number" min={0} defaultValue={product?.price} />
@@ -890,10 +1105,12 @@ function ProductEditor({
 function EventEditor({
   event,
   cafes,
+  initialCafe,
   onDone,
 }: {
   event: CafeEvent | null;
   cafes: Cafe[];
+  initialCafe?: string;
   onDone: () => Promise<void>;
 }) {
   const [image, setImage] = useState(event?.image || '');
@@ -908,7 +1125,7 @@ function EventEditor({
         await onDone();
       }}
     >
-      <CafeSelect cafes={cafes} value={event?.cafe_id} />
+      <CafeSelect cafes={cafes} value={event?.cafe_id} initialValue={initialCafe} />
       <ImageUpload value={image} onChange={setImage} label="رویداد" />
       <Field label="عنوان رویداد">
         <input name="title" defaultValue={event?.title} />
@@ -924,6 +1141,23 @@ function EventEditor({
           <PersianTimeInput name="time" defaultValue={event?.time} />
         </Field>
       </div>
+      <Field
+        label="ساعت پایان رویداد"
+        hint="برای نمایش رویداد در بخش در حال برگزاری، پایان آن را پس از ساعت شروع و در همان روز مشخص کنید."
+      >
+        <select name="end_time" defaultValue={event?.end_time || ''}>
+          <option value="">ساعت پایان مشخص نشده</option>
+          {Array.from({ length: 48 }, (_, index) => {
+            const time =
+              String(Math.floor(index / 2)).padStart(2, '0') + ':' + (index % 2 ? '30' : '00');
+            return (
+              <option key={time} value={time}>
+                {digits(time)}
+              </option>
+            );
+          })}
+        </select>
+      </Field>
       <Field label="ظرفیت مهمان‌ها">
         <input name="capacity" type="number" min={1} max={500} defaultValue={event?.capacity} />
       </Field>

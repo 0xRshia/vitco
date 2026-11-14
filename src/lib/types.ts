@@ -6,6 +6,7 @@ export type User = {
   points: number;
   avatar: string;
 };
+export type CafeTable = { id: string; name: string; seats: number };
 export type Cafe = {
   id: string;
   owner_id: string | null;
@@ -15,6 +16,8 @@ export type Cafe = {
   address: string;
   phone: string;
   image: string;
+  images: string[];
+  tables: CafeTable[];
   amenities: string[];
   latitude: number | null;
   longitude: number | null;
@@ -76,7 +79,8 @@ export type Order = {
   cafe_id: string;
   cafe_name: string;
   customer_name?: string;
-  mode: 'delivery' | 'pickup';
+  mode: 'delivery' | 'pickup' | 'dine_in';
+  reservation_id: string;
   status: string;
   items: CartLine[];
   subtotal: number;
@@ -99,6 +103,9 @@ export type Reservation = {
   date: string;
   time: string;
   guests: number;
+  table_id: string;
+  table_name: string;
+  order_id?: string;
   note: string;
   status: string;
   created_at: string;
@@ -111,10 +118,50 @@ export type CafeEvent = {
   description: string;
   date: string;
   time: string;
+  end_time: string;
   capacity: number;
   image: string;
   registered: number;
   joined: boolean;
+};
+export type OwnerAnalytics = {
+  from: string;
+  to: string;
+  previous_from: string;
+  previous_to: string;
+  order_count: number;
+  completed_order_count: number;
+  sales: number;
+  previous_sales: number;
+  sales_change_percent: number | null;
+  new_customer_count: number;
+  customers: {
+    user_id: string;
+    customer_name: string;
+    cafe_id: string;
+    cafe_name: string;
+    first_order_at: string;
+    latest_order: Order;
+  }[];
+  daily_sales: { date: string; sales: number; order_count: number }[];
+  top_items: {
+    product_id: string;
+    name: string;
+    quantity: number;
+    order_count: number;
+    revenue: number;
+  }[];
+  item_customers: {
+    product_id: string;
+    name: string;
+    user_id: string;
+    customer_name: string;
+    cafe_id: string;
+    cafe_name: string;
+    quantity: number;
+    order_count: number;
+    last_order_at: string;
+  }[];
 };
 export type Review = { id: string; name: string; rating: number; body: string; created_at: string };
 export type Coupon = {

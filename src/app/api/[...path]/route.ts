@@ -28,10 +28,14 @@ import {
   createOrder,
   transitionOrder,
   availableSlots,
+  availableTables,
   createReservation,
   transitionReservation,
 } from '@/lib/commerce';
-import type { Cafe, Product, Order, Reservation, User, Ticket } from '@/lib/types';
+import { ownerAnalytics } from '@/lib/owner-analytics';
+import { adjustCategoryPrices } from '@/lib/pricing';
+import { productCategory } from '@/lib/catalog';
+import type { Cafe, CafeTable, Product, Order, Reservation, User, Ticket } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,7 +46,7 @@ const cafeSql =
 const orderSql =
   'SELECT o.*,c.name cafe_name,u.name customer_name FROM orders o JOIN cafes c ON c.id=o.cafe_id JOIN users u ON u.id=o.user_id';
 const reservationSql =
-  'SELECT r.*,c.name cafe_name,u.name customer_name FROM reservations r JOIN cafes c ON c.id=r.cafe_id JOIN users u ON u.id=r.user_id';
+  'SELECT r.*,c.name cafe_name,u.name customer_name,(SELECT id FROM orders WHERE reservation_id=r.id) order_id FROM reservations r JOIN cafes c ON c.id=r.cafe_id JOIN users u ON u.id=r.user_id';
 function ticketWithReplies(ticket: Ticket) {
   return {
     ...ticket,
@@ -67,6 +71,22 @@ function options(value: unknown) {
       price: v.integer(o.price, 'قیمت', 0, 100000000),
     };
   });
+}
+function cafeTables(value: unknown): CafeTable[] {
+  const tables = v.list(value, 50).map((value) => {
+    const table = v.object(value);
+    return {
+      id: v.text(table.id, 'شناسه میز', 1, 100),
+      name: v.text(table.name, 'نام میز', 1, 80),
+      seats: v.integer(table.seats, 'ظرفیت میز', 1, 20),
+    };
+  });
+  v.ensure(
+    new Set(tables.map((t) => t.id)).size === tables.length &&
+      new Set(tables.map((t) => t.name)).size === tables.length,
+    'نام و شناسه میزها نباید تکراری باشند.',
+  );
+  return tables;
 }
 async function handle(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   try {
@@ -273,7 +293,20 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
     if (resource === 'products' && method === 'GET') return json({ product: productById(id) });
     if (resource === 'slots' && method === 'GET') {
       const selectedDate = v.date(request.nextUrl.searchParams.get('date'));
-      return json({ slots: availableSlots(cafeById(id), selectedDate) });
+      const cafe = cafeById(id),
+        selectedTime = request.nextUrl.searchParams.get('time');
+      const guests = v.integer(
+        request.nextUrl.searchParams.get('guests') ?? 1,
+        'تعداد نفرات',
+        1,
+        20,
+      );
+      return json({
+        slots: availableSlots(cafe, selectedDate),
+        tables: selectedTime
+          ? availableTables(cafe, selectedDate, v.time(selectedTime), guests)
+          : [],
+      });
     }
     const account = requireUser(request);
     if (method !== 'GET') limit('write:' + account.id, 100, 60);
@@ -360,6 +393,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
     if (resource === 'quote' && method === 'POST') {
       const q = quote(account, input);
       return json({
+        items: q.items,
         subtotal: q.subtotal,
         discount: q.discount,
         delivery_fee: q.delivery_fee,
@@ -386,7 +420,16 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       }
     }
     if (resource === 'reservations') {
-      if (method === 'POST') return json({ id: createReservation(account, input) }, 201);
+      if (method === 'POST') {
+        const id = createReservation(account, input);
+        return json(
+          {
+            id,
+            order_id: one<{ id: string }>('SELECT id FROM orders WHERE reservation_id=?', id)?.id,
+          },
+          201,
+        );
+      }
       if (method === 'GET')
         return json({
           reservations: all(
@@ -482,7 +525,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
     }
     if (resource === 'events' && method === 'POST') {
       transaction(() => {
-        const event = one<{ capacity: number; date: string; time: string }>(
+        const event = one<{ capacity: number; date: string; time: string; end_time: string }>(
           'SELECT * FROM events WHERE id=?',
           id,
         );
@@ -491,8 +534,9 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           run('DELETE FROM event_registrations WHERE event_id=? AND user_id=?', id, account.id);
         else {
           v.ensure(
-            new Date(event.date + 'T' + event.time + ':00+03:30').getTime() > Date.now(),
-            'زمان رویداد گذشته است.',
+            new Date(event.date + 'T' + (event.end_time || event.time) + ':00+03:30').getTime() >
+              Date.now(),
+            'مهلت ثبت‌نام این رویداد گذشته است.',
           );
           const count = one<{ n: number }>(
             'SELECT COUNT(*) n FROM event_registrations WHERE event_id=?',
@@ -513,6 +557,15 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       return json({ ok: true });
     }
     if (resource === 'dashboard') {
+      if (id === 'analytics' && method === 'GET')
+        return json(
+          ownerAnalytics(account, {
+            from: request.nextUrl.searchParams.get('from'),
+            to: request.nextUrl.searchParams.get('to'),
+            cafe: request.nextUrl.searchParams.get('cafe') || undefined,
+          }),
+        );
+      if (id === 'prices' && method === 'POST') return json(adjustCategoryPrices(account, input));
       if (method === 'GET') {
         const cafes = all(cafeSql + ' WHERE c.owner_id=?', account.id).map(hydrate<Cafe>);
         return json({
@@ -543,7 +596,14 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
         });
       }
       if (id === 'cafes' && (method === 'POST' || method === 'PUT')) {
-        if (method === 'PUT') ownerCafe(account, v.text(input.id, 'کافه', 1, 100));
+        const existing =
+          method === 'PUT' ? ownerCafe(account, v.text(input.id, 'کافه', 1, 100)) : null;
+        const tables = cafeTables(input.tables ?? existing?.tables ?? []);
+        const images = v.list(input.images ?? existing?.images ?? [], 10).map(v.imagePath);
+        v.ensure(
+          images.every(Boolean) && new Set(images).size === images.length,
+          'تصاویر گالری باید معتبر و غیرتکراری باشند.',
+        );
         const opens = v.time(input.opens),
           closes = v.time(input.closes);
         v.ensure(opens < closes, 'ساعت پایان باید بعد از شروع باشد.');
@@ -571,22 +631,59 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           v.flag(input.pickup) ? 1 : 0,
           v.integer(input.delivery_fee ?? 0, 'هزینه ارسال', 0, 10000000),
           v.flag(input.active) ? 1 : 0,
+          JSON.stringify(images),
+          JSON.stringify(tables),
         ];
         const cafeId = method === 'PUT' ? String(input.id) : randomUUID();
-        if (method === 'PUT')
-          run(
-            'UPDATE cafes SET name=?,description=?,city=?,address=?,phone=?,image=?,amenities=?,latitude=?,longitude=?,opens=?,closes=?,capacity=?,delivery=?,pickup=?,delivery_fee=?,active=? WHERE id=? AND owner_id=?',
-            ...values,
-            cafeId,
-            account.id,
-          );
-        else
-          run(
-            'INSERT INTO cafes (name,description,city,address,phone,image,amenities,latitude,longitude,opens,closes,capacity,delivery,pickup,delivery_fee,active,id,owner_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            ...values,
-            cafeId,
-            account.id,
-          );
+        transaction(() => {
+          if (method === 'PUT') {
+            const bookings = all<Reservation>(
+              "SELECT * FROM reservations WHERE cafe_id=? AND status IN ('pending','confirmed') AND date>=?",
+              cafeId,
+              today(),
+            ).filter((r) => Date.parse(r.date + 'T' + r.time + ':00+03:30') + 3600000 > Date.now());
+            for (const booking of bookings) {
+              if (booking.table_id)
+                v.ensure(
+                  tables.some((t) => t.id === booking.table_id && t.seats >= booking.guests),
+                  'میز دارای رزرو فعال را نمی‌توان حذف کرد یا ظرفیت آن را کاهش داد.',
+                  409,
+                );
+              const minutes = (time: string) =>
+                Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+              v.ensure(
+                minutes(booking.time) >= minutes(opens) &&
+                  minutes(booking.time) + 60 <= minutes(closes),
+                'ساعت کاری جدید نباید رزروهای فعال را خارج از ساعت پذیرش قرار دهد.',
+                409,
+              );
+              const occupancy = bookings
+                .filter(
+                  (r) =>
+                    r.date === booking.date &&
+                    Math.abs(minutes(r.time) - minutes(booking.time)) < 60,
+                )
+                .reduce((sum, r) => sum + r.guests, 0);
+              v.ensure(
+                Number(values[11]) >= occupancy,
+                'ظرفیت کافه نمی‌تواند کمتر از مهمانان رزروهای فعال باشد.',
+                409,
+              );
+            }
+            run(
+              'UPDATE cafes SET name=?,description=?,city=?,address=?,phone=?,image=?,amenities=?,latitude=?,longitude=?,opens=?,closes=?,capacity=?,delivery=?,pickup=?,delivery_fee=?,active=?,images=?,tables=? WHERE id=? AND owner_id=?',
+              ...values,
+              cafeId,
+              account.id,
+            );
+          } else
+            run(
+              'INSERT INTO cafes (name,description,city,address,phone,image,amenities,latitude,longitude,opens,closes,capacity,delivery,pickup,delivery_fee,active,images,tables,id,owner_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+              ...values,
+              cafeId,
+              account.id,
+            );
+        });
         return json({ id: cafeId });
       }
       if (id === 'products' && (method === 'POST' || method === 'PUT')) {
@@ -606,7 +703,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
         const values = [
           v.text(input.name, 'نام محصول', 2, 100),
           v.text(input.description ?? '', 'توضیحات', 0, 2000),
-          v.text(input.category, 'دسته‌بندی', 2, 60),
+          productCategory(v.text(input.category, 'دسته‌بندی', 2, 60)),
           v.integer(input.price, 'قیمت', 0, 100000000),
           v.imagePath(input.image),
           v.flag(input.available) ? 1 : 0,
@@ -654,6 +751,11 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       if (id === 'events' && (method === 'POST' || method === 'PUT')) {
         const cafeId = v.text(input.cafe_id, 'کافه', 1, 100);
         ownerCafe(account, cafeId);
+        const endTime = input.end_time ? v.time(input.end_time) : '';
+        v.ensure(
+          !endTime || endTime > v.time(input.time),
+          'ساعت پایان رویداد باید پس از ساعت شروع باشد.',
+        );
         const values = [
           v.text(input.title, 'عنوان', 3, 120),
           v.text(input.description, 'توضیحات', 5, 3000),
@@ -661,6 +763,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           v.time(input.time),
           v.integer(input.capacity, 'ظرفیت', 1, 500),
           v.imagePath(input.image),
+          endTime,
         ];
         v.ensure(
           new Date(values[2] + 'T' + values[3] + ':00+03:30').getTime() > Date.now(),
@@ -682,13 +785,13 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
             409,
           );
           run(
-            'UPDATE events SET title=?,description=?,date=?,time=?,capacity=?,image=? WHERE id=?',
+            'UPDATE events SET title=?,description=?,date=?,time=?,capacity=?,image=?,end_time=? WHERE id=?',
             ...values,
             String(input.id),
           );
         } else
           run(
-            'INSERT INTO events (title,description,date,time,capacity,image,id,cafe_id) VALUES (?,?,?,?,?,?,?,?)',
+            'INSERT INTO events (title,description,date,time,capacity,image,end_time,id,cafe_id) VALUES (?,?,?,?,?,?,?,?,?)',
             ...values,
             randomUUID(),
             cafeId,

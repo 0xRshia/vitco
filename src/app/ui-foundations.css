@@ -76,6 +76,11 @@ body {
   line-height: 1.85;
 }
 
+.skip-link:not(:focus) {
+  clip-path: inset(50%);
+  pointer-events: none;
+}
+
 h1,
 .page-title h1 {
   font-size: var(--text-title);

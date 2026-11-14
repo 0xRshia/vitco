@@ -34,6 +34,8 @@ import {
 import { api, useApp, useResource } from '@/lib/client';
 import { CafeMap } from './location-map';
 import { money, digits, dateLabel, amenities, today } from '@/lib/format';
+import { MENU_CATEGORIES, menuCategories, productCategory } from '@/lib/catalog';
+import { eventPhase, eventPhaseLabels } from '@/lib/event-time';
 import type { Cafe, Product, Review, CafeEvent, Order } from '@/lib/types';
 import {
   PageTitle,
@@ -51,6 +53,66 @@ import {
   LoyaltyCard,
   Badge,
 } from './ui';
+
+export function MenuCategories({
+  products,
+  value,
+  onChange,
+  label = 'دسته‌بندی منو',
+}: {
+  products: Pick<Product, 'category'>[];
+  value: string;
+  onChange: (category: string) => void;
+  label?: string;
+}) {
+  return (
+    <div className="category-tabs shared-menu-categories" role="group" aria-label={label}>
+      {['', ...menuCategories(products)].map((category) => (
+        <button
+          key={category}
+          type="button"
+          className={value === category ? 'active' : ''}
+          aria-pressed={value === category}
+          onClick={() => onChange(category)}
+        >
+          {category ? <Coffee size={17} /> : <Utensils size={17} />}
+          {category || 'همه طعم‌ها'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function CartDock() {
+  const { data, cart } = useApp();
+  if (!cart.length) return null;
+  return (
+    <aside className="menu-cart-dock selection-cart-dock" aria-label="خلاصه انتخاب‌های سفارش">
+      <div className="selection-cart-heading">
+        <span className="dock-count">
+          {digits(cart.reduce((sum, item) => sum + item.quantity, 0))}
+        </span>
+        <span>{data?.cafes.find((c) => c.id === cart[0].cafe_id)?.name || 'انتخاب‌های شما'}</span>
+        <strong>{money(cart.reduce((sum, item) => sum + item.price * item.quantity, 0))}</strong>
+      </div>
+      <ul className="selection-cart-lines">
+        {cart.map((item) => (
+          <li key={item.key}>
+            <span>
+              {digits(item.quantity)} × {item.name}
+              {item.option_names.length > 0 && <small>{item.option_names.join('، ')}</small>}
+              {item.note && <small>{item.note}</small>}
+            </span>
+            <span>{money(item.price * item.quantity)}</span>
+          </li>
+        ))}
+      </ul>
+      <Link href="/cart" className="selection-cart-checkout">
+        مشاهده سبد و پرداخت <ArrowLeft size={18} />
+      </Link>
+    </aside>
+  );
+}
 
 export function FavoriteButton({ id }: { id: string }) {
   const { data, refresh, toast } = useApp();
@@ -148,7 +210,7 @@ export function ProductCard({ product }: { product: Product }) {
         <Media src={product.image} alt={product.name} />
       </Link>
       <div className="product-card-body">
-        <span className="category-caption">{product.category}</span>
+        <span className="category-caption">{productCategory(product.category)}</span>
         {!product.available && <span className="badge product-unavailable">ناموجود</span>}
         <Link href={'/products/' + product.id}>
           <h3>{product.name}</h3>
@@ -257,6 +319,13 @@ export function HomeView() {
           href="/menu"
           label="همه منوها"
         />
+        <nav className="home-discovery-tags" aria-label="دسته‌بندی منوی کافه‌ها">
+          {MENU_CATEGORIES.map((category) => (
+            <Link key={category} href={'/menu?category=' + encodeURIComponent(category)}>
+              {category}
+            </Link>
+          ))}
+        </nav>
         {products.length ? (
           <div className="product-grid">
             {products.slice(0, 4).map((p) => (
@@ -289,6 +358,17 @@ export function HomeView() {
             <Link key={item.href} href={item.href}>
               <item.icon size={16} />
               {item.label}
+            </Link>
+          ))}
+        </nav>
+        <nav
+          className="home-discovery-tags menu-discovery-links"
+          aria-label="انتخاب کافه بر اساس منو"
+        >
+          {MENU_CATEGORIES.map((category) => (
+            <Link key={category} href={'/cafes?category=' + encodeURIComponent(category)}>
+              <Coffee size={16} />
+              {category}
             </Link>
           ))}
         </nav>
@@ -340,7 +420,11 @@ function MemberHome() {
             <strong>{last.cafe_name}</strong>
             <small>
               {dateLabel(last.created_at)} ·{' '}
-              {last.mode === 'delivery' ? 'ارسال به آدرس' : 'تحویل از کافه'}
+              {last.mode === 'delivery'
+                ? 'ارسال به آدرس'
+                : last.mode === 'dine_in'
+                  ? 'مصرف در کافه'
+                  : 'تحویل از کافه'}
             </small>
           </span>
           <span className="home-order-meta">
@@ -369,20 +453,45 @@ export function CafesView({ favorites = false }: { favorites?: boolean }) {
     query = useSearchParams(),
     router = useRouter();
   const [search, setSearch] = useState(query.get('q') || ''),
-    [city, setCity] = useState(''),
+    [city, setCity] = useState(query.get('city') || ''),
+    [category, setCategory] = useState(productCategory(query.get('category') || '')),
     [amenity, setAmenity] = useState(query.get('amenity') || ''),
-    [online, setOnline] = useState(false),
+    [online, setOnline] = useState(query.get('online') === '1'),
     [view, setView] = useState('grid'),
     [filters, setFilters] = useState(false);
   useEffect(() => {
     setSearch(query.get('q') || '');
+    setCity(query.get('city') || '');
+    setCategory(productCategory(query.get('category') || ''));
     setAmenity(query.get('amenity') || '');
+    setOnline(query.get('online') === '1');
   }, [query]);
+  function updateFilters(patch: Record<string, string>) {
+    const parameters = new URLSearchParams({
+      q: search,
+      city,
+      category,
+      amenity,
+      online: online ? '1' : '',
+      ...patch,
+    });
+    for (const [key, value] of [...parameters]) if (!value) parameters.delete(key);
+    router.replace(
+      (favorites ? '/favorites' : '/cafes') + (parameters.size ? '?' + parameters : ''),
+      {
+        scroll: false,
+      },
+    );
+  }
   const cafes = (data?.cafes || []).filter(
     (c) =>
       (!favorites || data?.favorites.includes(c.id)) &&
       (!search || [c.name, c.city, c.address].some((v) => v.includes(search))) &&
       (!city || c.city === city) &&
+      (!category ||
+        data?.products.some(
+          (p) => p.cafe_id === c.id && p.available && productCategory(p.category) === category,
+        )) &&
       (!amenity || c.amenities.includes(amenity)) &&
       (!online || (c.active && c.owner_id)),
   );
@@ -428,7 +537,7 @@ export function CafesView({ favorites = false }: { favorites?: boolean }) {
               onClick={() => setFilters(!filters)}
             >
               <SlidersHorizontal size={18} />
-              فیلترها{(city || amenity || online) && <span className="tiny-dot" />}
+              فیلترها{(city || category || amenity || online) && <span className="tiny-dot" />}
             </button>
             <div className="view-toggle">
               <button
@@ -449,18 +558,44 @@ export function CafesView({ favorites = false }: { favorites?: boolean }) {
               </button>
             </div>
           </div>
+          <div className="discovery-location-categories panel">
+            <Field label="موقعیت کافه">
+              <select
+                value={city}
+                onChange={(e) => {
+                  setCity(e.target.value);
+                  updateFilters({ city: e.target.value });
+                }}
+              >
+                <option value="">همه شهرها</option>
+                {[...new Set(data?.cafes.map((c) => c.city))].map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+            </Field>
+            <div>
+              <strong>کافه‌ای با طعم دلخواهت پیدا کن</strong>
+              <MenuCategories
+                products={data?.products || []}
+                value={category}
+                label="فیلتر کافه بر اساس دسته‌بندی منو"
+                onChange={(value) => {
+                  setCategory(value);
+                  updateFilters({ category: value });
+                }}
+              />
+            </div>
+          </div>
           {filters && (
             <div className="filter-panel">
-              <Field label="شهر">
-                <select value={city} onChange={(e) => setCity(e.target.value)}>
-                  <option value="">همه شهرها</option>
-                  {[...new Set(data?.cafes.map((c) => c.city))].map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
-                </select>
-              </Field>
               <Field label="امکانات">
-                <select value={amenity} onChange={(e) => setAmenity(e.target.value)}>
+                <select
+                  value={amenity}
+                  onChange={(e) => {
+                    setAmenity(e.target.value);
+                    updateFilters({ amenity: e.target.value });
+                  }}
+                >
                   <option value="">همه امکانات</option>
                   {Object.entries(amenities).map(([key, value]) => (
                     <option key={key} value={key}>
@@ -473,7 +608,10 @@ export function CafesView({ favorites = false }: { favorites?: boolean }) {
                 <input
                   type="checkbox"
                   checked={online}
-                  onChange={(e) => setOnline(e.target.checked)}
+                  onChange={(e) => {
+                    setOnline(e.target.checked);
+                    updateFilters({ online: e.target.checked ? '1' : '' });
+                  }}
                 />
                 رزرو و سفارش فعال
               </label>
@@ -481,9 +619,11 @@ export function CafesView({ favorites = false }: { favorites?: boolean }) {
                 className="text-link"
                 onClick={() => {
                   setCity('');
+                  setCategory('');
                   setAmenity('');
                   setOnline(false);
                   setSearch('');
+                  router.replace(favorites ? '/favorites' : '/cafes', { scroll: false });
                 }}
               >
                 پاک کردن فیلترها
@@ -521,7 +661,7 @@ export function CafesView({ favorites = false }: { favorites?: boolean }) {
   );
 }
 export function CafeView({ id }: { id: string }) {
-  const { data: app, toast } = useApp(),
+  const { data: app, toast, cart } = useApp(),
     router = useRouter();
   const { data, loading, error, reload } = useResource<{
     cafe: Cafe;
@@ -529,14 +669,19 @@ export function CafeView({ id }: { id: string }) {
     reviews: Review[];
   }>('cafes/' + id);
   const [tab, setTab] = useState('menu'),
+    [category, setCategory] = useState(''),
     [rating, setRating] = useState(5),
     [review, setReview] = useState(''),
     [busy, setBusy] = useState(false);
   if (loading) return <Loading />;
   if (error || !data) return <ErrorBox message={error || 'کافه پیدا نشد.'} />;
   const { cafe, products, reviews } = data;
+  const photos = [...new Set([cafe.image, ...(cafe.images || [])].filter(Boolean))];
+  const filteredProducts = products.filter(
+    (p) => !category || productCategory(p.category) === category,
+  );
   return (
-    <>
+    <div className={'cafe-discovery-page' + (cart.length ? ' has-cart-dock' : '')}>
       <PageTitle
         title={cafe.name}
         description={cafe.description}
@@ -544,7 +689,38 @@ export function CafeView({ id }: { id: string }) {
         action={<FavoriteButton id={id} />}
       />
       <div className="cafe-detail-top">
-        <Media className="cafe-cover" src={cafe.image} alt={cafe.name} kind="store" />
+        <div className="cafe-gallery">
+          <Media className="cafe-cover" src={photos[0] || ''} alt={cafe.name} kind="store" />
+          {photos.length > 1 && (
+            <div className="cafe-gallery-extra" aria-label="عکس‌های کافه">
+              {photos.slice(1).map((photo, index) => (
+                <Media
+                  key={photo}
+                  src={photo}
+                  alt={`${cafe.name}، عکس ${digits(index + 2)}`}
+                  kind="store"
+                />
+              ))}
+            </div>
+          )}
+          <div className="cafe-photo-filters">
+            {cafe.amenities.length > 0 && (
+              <div className="amenity-tags" aria-label="امکانات کافه">
+                {cafe.amenities.map((a) => (
+                  <span key={a}>{amenities[a] || a}</span>
+                ))}
+              </div>
+            )}
+            <MenuCategories
+              products={products}
+              value={category}
+              onChange={(value) => {
+                setCategory(value);
+                setTab('menu');
+              }}
+            />
+          </div>
+        </div>
         <div className="panel cafe-information">
           <span className="eyebrow">یک قرار تازه در {cafe.city}</span>
           <h2>{cafe.name}</h2>
@@ -558,11 +734,6 @@ export function CafeView({ id }: { id: string }) {
               {digits(cafe.opens)} تا {digits(cafe.closes)}
             </p>
           )}
-          <div className="amenity-tags">
-            {cafe.amenities.map((a) => (
-              <span key={a}>{amenities[a] || a}</span>
-            ))}
-          </div>
           {cafe.owner_id ? (
             <div className="button-row">
               <Link href={'/reserve?cafe=' + id} className="button primary">
@@ -596,28 +767,66 @@ export function CafeView({ id }: { id: string }) {
           )}
         </div>
       </div>
+      <nav className="cafe-main-actions" aria-label="خدمات اصلی کافه">
+        {cafe.owner_id && cafe.active ? (
+          <Link href={'/reserve?cafe=' + id} className="panel cafe-main-action">
+            <CalendarDays size={26} />
+            <span>
+              <strong>رزرو و سفارش</strong>
+              <small>منو را ببین، میزت را انتخاب کن و سفارش بده</small>
+            </span>
+            <ArrowLeft size={20} />
+          </Link>
+        ) : (
+          <button className="panel cafe-main-action" onClick={() => setTab('menu')}>
+            <Utensils size={26} />
+            <span>
+              <strong>منو و رزرو</strong>
+              <small>مشاهده منو؛ پذیرش سفارش و رزرو غیرفعال است</small>
+            </span>
+            <ArrowLeft size={20} />
+          </button>
+        )}
+        <button className="panel cafe-main-action" onClick={() => setTab('events')}>
+          <CalendarDays size={26} />
+          <span>
+            <strong>مشاهده و شرکت در رویداد</strong>
+            <small>تمام رویدادها، پیش رو و در حال برگزاری</small>
+          </span>
+          <ArrowLeft size={20} />
+        </button>
+      </nav>
       <div className="tabs">
         {[
           { id: 'menu', label: 'منوی کافه' },
           { id: 'reviews', label: 'نظرهای کاربران' },
           { id: 'events', label: 'رویدادهای کافه' },
         ].map((t) => (
-          <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>
+          <button
+            key={t.id}
+            aria-pressed={tab === t.id}
+            className={tab === t.id ? 'active' : ''}
+            onClick={() => setTab(t.id)}
+          >
             {t.label}
           </button>
         ))}
       </div>
       {tab === 'menu' &&
-        (products.length ? (
+        (filteredProducts.length ? (
           <div className="product-grid">
-            {products.map((p) => (
+            {filteredProducts.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
           </div>
         ) : (
           <Empty
-            title="منوی این کافه هنوز ثبت نشده"
-            description="پس از ثبت محصولات توسط کافه، منو همین‌جا نمایش داده می‌شود."
+            title={category ? 'در این دسته محصولی ثبت نشده' : 'منوی این کافه هنوز ثبت نشده'}
+            description={
+              category
+                ? 'دسته‌بندی دیگری را برای دیدن منو انتخاب کن.'
+                : 'پس از ثبت محصولات توسط کافه، منو همین‌جا نمایش داده می‌شود.'
+            }
           />
         ))}
       {tab === 'reviews' && (
@@ -691,16 +900,19 @@ export function CafeView({ id }: { id: string }) {
         </div>
       )}
       {tab === 'events' && <EventList events={app?.events.filter((e) => e.cafe_id === id) || []} />}
-    </>
+      <CartDock />
+    </div>
   );
 }
 export function MenuView() {
   const { data, mode, setMode, cart } = useApp(),
     q = useSearchParams();
   const [search, setSearch] = useState(''),
-    [category, setCategory] = useState(''),
+    [category, setCategory] = useState(productCategory(q.get('category') || '')),
     [cafe, setCafe] = useState(q.get('cafe') || '');
   useEffect(() => {
+    setCategory(productCategory(q.get('category') || ''));
+    setCafe(q.get('cafe') || '');
     if (q.get('mode') === 'delivery' || q.get('mode') === 'pickup')
       setMode(q.get('mode') as 'delivery' | 'pickup');
   }, [q]);
@@ -708,7 +920,7 @@ export function MenuView() {
   const filtered = products.filter(
     (p) =>
       (!search || p.name.includes(search) || p.description.includes(search)) &&
-      (!category || p.category === category) &&
+      (!category || productCategory(p.category) === category) &&
       (!cafe || p.cafe_id === cafe),
   );
   return (
@@ -760,27 +972,11 @@ export function MenuView() {
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
-      <div className="category-tabs" role="group" aria-label="دسته‌بندی منو">
-        <button
-          className={!category ? 'active' : ''}
-          aria-pressed={!category}
-          onClick={() => setCategory('')}
-        >
-          <Utensils size={19} />
-          همه طعم‌ها
-        </button>
-        {[...new Set(products.map((p) => p.category))].map((c) => (
-          <button
-            key={c}
-            className={category === c ? 'active' : ''}
-            aria-pressed={category === c}
-            onClick={() => setCategory(c)}
-          >
-            <Coffee size={19} />
-            {c}
-          </button>
-        ))}
-      </div>
+      <MenuCategories
+        products={products.filter((p) => !cafe || p.cafe_id === cafe)}
+        value={category}
+        onChange={setCategory}
+      />
       <div className="menu-results" role="status">
         <span>{digits(filtered.length)} طعم برای انتخاب</span>
         <small>{data?.cafes.find((item) => item.id === cafe)?.name || 'از منوی کافه‌ها'}</small>
@@ -797,17 +993,7 @@ export function MenuView() {
           description="نام محصول یا دسته‌بندی دیگری را امتحان کن."
         />
       )}
-      {cart.length > 0 && (
-        <Link href="/cart" className="menu-cart-dock">
-          <span className="dock-count">
-            {digits(cart.reduce((sum, item) => sum + item.quantity, 0))}
-          </span>
-          <span>انتخاب‌هایت در سبد منتظرند</span>
-          <strong>
-            مشاهده سبد <ArrowLeft size={18} />
-          </strong>
-        </Link>
-      )}
+      <CartDock />
     </div>
   );
 }
@@ -1011,37 +1197,84 @@ export function ProductView({ id }: { id: string }) {
     </div>
   );
 }
+function useEventNow() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+  return now;
+}
+
 function EventList({ events }: { events: CafeEvent[] }) {
-  return events.length ? (
-    <div className="cafe-grid">
-      {events.map((e) => (
-        <article className="event-card panel" key={e.id}>
-          <Media src={e.image} alt={e.title} />
-          <span className="eyebrow">{e.cafe_name}</span>
-          <h3>{e.title}</h3>
-          <p>
-            <CalendarDays size={16} />
-            {dateLabel(e.date)} · {digits(e.time)}
-          </p>
-          <Link className="button secondary" href={'/events/' + e.id}>
-            جزئیات رویداد
-            <ArrowLeft size={16} />
-          </Link>
-        </article>
-      ))}
-    </div>
-  ) : (
-    <Empty
-      title="قرارهای تازه در راه‌اند"
-      description="هنوز رویدادی ثبت نشده است. کافه‌ها پس از انتشار رویداد، همین‌جا میزبان شما خواهند بود."
-      href="/cafes"
-    />
+  const [filter, setFilter] = useState('all');
+  const now = useEventNow();
+  const filtered = events.filter((event) => filter === 'all' || eventPhase(event, now) === filter);
+  return (
+    <section className="event-discovery">
+      <div className="tabs event-filters" role="group" aria-label="زمان برگزاری رویدادها">
+        {[
+          { id: 'all', label: 'تمام رویدادها' },
+          { id: 'upcoming', label: 'رویدادهای آینده' },
+          { id: 'ongoing', label: 'در حال برگزاری' },
+        ].map((item) => (
+          <button
+            key={item.id}
+            aria-pressed={filter === item.id}
+            className={filter === item.id ? 'active' : ''}
+            onClick={() => setFilter(item.id)}
+          >
+            {item.label}
+            <span>
+              {digits(
+                events.filter((event) => item.id === 'all' || eventPhase(event, now) === item.id)
+                  .length,
+              )}
+            </span>
+          </button>
+        ))}
+      </div>
+      {filtered.length ? (
+        <div className="cafe-grid">
+          {filtered.map((e) => (
+            <article className="event-card panel" key={e.id}>
+              <Media src={e.image} alt={e.title} />
+              <span className="eyebrow">{e.cafe_name}</span>
+              <span className={'badge event-phase event-phase-' + eventPhase(e, now)}>
+                {eventPhaseLabels[eventPhase(e, now)]}
+              </span>
+              <h3>{e.title}</h3>
+              <p>
+                <CalendarDays size={16} />
+                {dateLabel(e.date)} · {digits(e.time)}
+                {e.end_time ? ' تا ' + digits(e.end_time) : ''}
+              </p>
+              <Link className="button secondary" href={'/events/' + e.id}>
+                جزئیات رویداد
+                <ArrowLeft size={16} />
+              </Link>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <Empty
+          title={filter === 'all' ? 'قرارهای تازه در راه‌اند' : 'رویدادی در این بازه وجود ندارد'}
+          description={
+            filter === 'all'
+              ? 'هنوز رویدادی ثبت نشده است. کافه‌ها پس از انتشار رویداد، همین‌جا میزبان شما خواهند بود.'
+              : 'برای دیدن برنامه‌های کافه، تمام رویدادها را انتخاب کن.'
+          }
+          href={filter === 'all' ? '/cafes' : undefined}
+        />
+      )}
+    </section>
   );
 }
 export function EventsView({ id }: { id?: string }) {
   const { data, refresh, toast } = useApp(),
     router = useRouter();
   const [busy, setBusy] = useState(false);
+  const now = useEventNow();
   const event = data?.events.find((e) => e.id === id);
   if (!id)
     return (
@@ -1069,6 +1302,9 @@ export function EventsView({ id }: { id?: string }) {
         <Media src={event.image} alt={event.title} className="event-cover" />
         <div className="panel form">
           <h2>{event.title}</h2>
+          <span className={'badge event-phase event-phase-' + eventPhase(event, now)}>
+            {eventPhaseLabels[eventPhase(event, now)]}
+          </span>
           <p>{event.description}</p>
           <div className="list-row">
             <span>تاریخ</span>
@@ -1076,7 +1312,10 @@ export function EventsView({ id }: { id?: string }) {
           </div>
           <div className="list-row">
             <span>ساعت</span>
-            <strong>{digits(event.time)}</strong>
+            <strong>
+              {digits(event.time)}
+              {event.end_time ? ' تا ' + digits(event.end_time) : ''}
+            </strong>
           </div>
           <div className="list-row">
             <span>ظرفیت باقی‌مانده</span>
@@ -1084,7 +1323,12 @@ export function EventsView({ id }: { id?: string }) {
           </div>
           <button
             className="button primary"
-            disabled={busy || (!event.joined && event.registered >= event.capacity)}
+            disabled={
+              busy ||
+              (!event.joined &&
+                (event.registered >= event.capacity ||
+                  !['upcoming', 'ongoing'].includes(eventPhase(event, now))))
+            }
             onClick={async () => {
               if (!data?.user) {
                 router.push('/login');

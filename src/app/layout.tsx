@@ -10,6 +10,9 @@ import './ui-foundations.css';
 import './home-profile.css';
 import './commerce.css';
 import './locations-reservations.css';
+import './discovery-updates.css';
+import './owner-dashboard.css';
+import './reservation-updates.css';
 import { Provider } from '@/lib/client';
 export const metadata: Metadata = {
   title: { default: 'ویتکو | قرارِ لحظه‌های خوب', template: '%s | ویتکو' },

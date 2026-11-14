@@ -3,7 +3,17 @@ import { all, one, run, hydrate, transaction } from './database';
 import { ensure, object, text, integer, list, date, time } from './validation';
 import { notify } from './auth';
 import { today } from './format';
-import type { Cafe, Product, User, CartLine, Address, Coupon, Order, Reservation } from './types';
+import type {
+  Cafe,
+  CafeTable,
+  Product,
+  User,
+  CartLine,
+  Address,
+  Coupon,
+  Order,
+  Reservation,
+} from './types';
 
 export function cafeById(id: string) {
   const row = one(
@@ -72,8 +82,11 @@ export function quote(user: User, input: Record<string, unknown>) {
     409,
   );
   const mode = text(input.mode, 'روش دریافت', 1, 20);
-  ensure(mode === 'delivery' || mode === 'pickup', 'روش دریافت معتبر نیست.');
-  ensure(mode === 'delivery' ? cafe.delivery : cafe.pickup, 'این روش دریافت برای کافه فعال نیست.');
+  ensure(['delivery', 'pickup', 'dine_in'].includes(mode), 'روش دریافت معتبر نیست.');
+  ensure(
+    mode === 'dine_in' || (mode === 'delivery' ? cafe.delivery : cafe.pickup),
+    'این روش دریافت برای کافه فعال نیست.',
+  );
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   let coupon: Coupon | undefined;
   const code = text(input.coupon ?? '', 'کد تخفیف', 0, 40).toUpperCase();
@@ -107,137 +120,169 @@ export function quote(user: User, input: Record<string, unknown>) {
   };
 }
 export function createOrder(user: User, input: Record<string, unknown>) {
+  return transaction(() => createOrderRecord(user, input));
+}
+// Shared only inside a transaction, so a reservation and its meal order commit together.
+function createOrderRecord(user: User, input: Record<string, unknown>) {
   const requestKey = text(input.request_key, 'شناسه درخواست', 10, 100);
-  return transaction(() => {
-    const existing = one<{ id: string }>(
-      'SELECT id FROM orders WHERE user_id=? AND request_key=?',
-      user.id,
-      requestKey,
+  const existing = one<{ id: string }>(
+    'SELECT id FROM orders WHERE user_id=? AND request_key=?',
+    user.id,
+    requestKey,
+  );
+  if (existing) return existing.id;
+  const q = quote(user, input);
+  if (input.expected_total !== undefined)
+    ensure(
+      integer(input.expected_total, 'مبلغ مورد انتظار', 0, Number.MAX_SAFE_INTEGER) === q.total,
+      'قیمت سفارش تغییر کرده است. مبلغ تازه را بررسی و دوباره ثبت کنید.',
+      409,
     );
-    if (existing) return existing.id;
-    const q = quote(user, input);
-    let address: Address | null = null;
-    if (q.mode === 'delivery') {
-      const row = one(
-        'SELECT * FROM addresses WHERE id=? AND user_id=?',
-        text(input.address_id, 'آدرس', 1, 100),
-        user.id,
-      );
-      ensure(row, 'آدرس تحویل را انتخاب کنید.');
-      address = hydrate<Address>(row);
-      ensure(address.city.trim() === q.cafe.city.trim(), 'آدرس تحویل باید در شهر کافه باشد.');
-    }
-    const pickupAt = text(input.pickup_at ?? '', 'زمان دریافت', 0, 40);
-    if (pickupAt) {
-      const parsed = new Date(pickupAt);
-      ensure(
-        Number.isFinite(parsed.getTime()) &&
-          parsed.getTime() > Date.now() &&
-          parsed.getTime() < Date.now() + 7 * 86400000,
-        'زمان دریافت باید در هفت روز آینده باشد.',
-      );
-      const hm = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Asia/Tehran',
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(parsed);
-      ensure(hm >= q.cafe.opens && hm < q.cafe.closes, 'زمان دریافت خارج از ساعت کاری کافه است.');
-    }
-    const id = randomUUID(),
-      now = new Date().toISOString();
-    run(
-      'INSERT INTO orders (id,user_id,cafe_id,mode,status,items,subtotal,discount,delivery_fee,points_used,total,address,pickup_at,note,created_at,updated_at,request_key) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-      id,
+  const reservationId = text(input.reservation_id ?? '', 'رزرو', 0, 100);
+  if (q.mode === 'dine_in') {
+    const reservation = one<Reservation>(
+      'SELECT * FROM reservations WHERE id=? AND user_id=? AND cafe_id=?',
+      reservationId,
       user.id,
       q.cafe.id,
-      q.mode,
-      'pending',
-      JSON.stringify(q.items),
-      q.subtotal,
-      q.discount,
-      q.delivery_fee,
-      q.points_used,
-      q.total,
-      address ? JSON.stringify(address) : null,
-      pickupAt,
-      text(input.note ?? '', 'یادداشت', 0, 500),
-      now,
-      now,
-      requestKey,
     );
-    if (q.points_used) {
-      run('UPDATE users SET points=points-? WHERE id=?', q.points_used, user.id);
-      run(
-        'UPDATE loyalty_balances SET points=points-? WHERE user_id=? AND cafe_id=?',
-        q.points_used,
-        user.id,
-        q.cafe.id,
-      );
-    }
-    if (q.coupon) run('UPDATE coupons SET uses=uses+1 WHERE id=?', q.coupon.id);
-    notify(
+    ensure(
+      reservation && ['pending', 'confirmed'].includes(reservation.status),
+      'رزرو معتبری برای این سفارش انتخاب نشده است.',
+    );
+    ensure(
+      Date.parse(reservation.date + 'T' + reservation.time + ':00+03:30') + 3600000 > Date.now(),
+      'زمان این رزرو گذشته است.',
+    );
+    ensure(
+      !one('SELECT id FROM orders WHERE reservation_id=?', reservationId),
+      'برای این رزرو قبلاً سفارش ثبت شده است.',
+      409,
+    );
+  } else ensure(!reservationId, 'فقط سفارش داخل کافه می‌تواند به رزرو متصل شود.');
+  let address: Address | null = null;
+  if (q.mode === 'delivery') {
+    const row = one(
+      'SELECT * FROM addresses WHERE id=? AND user_id=?',
+      text(input.address_id, 'آدرس', 1, 100),
       user.id,
-      'سفارش شما ثبت شد',
-      `سفارش شما در ${q.cafe.name} در انتظار تأیید است.`,
-      '/orders/' + id,
     );
-    notify(
-      q.cafe.owner_id!,
-      'سفارش جدید',
-      `${user.name} یک سفارش جدید ثبت کرد.`,
-      '/dashboard?tab=orders',
+    ensure(row, 'آدرس تحویل را انتخاب کنید.');
+    address = hydrate<Address>(row);
+    ensure(address.city.trim() === q.cafe.city.trim(), 'آدرس تحویل باید در شهر کافه باشد.');
+  }
+  const pickupAt = text(input.pickup_at ?? '', 'زمان دریافت', 0, 40);
+  if (pickupAt) {
+    const parsed = new Date(pickupAt);
+    ensure(
+      Number.isFinite(parsed.getTime()) &&
+        parsed.getTime() > Date.now() &&
+        parsed.getTime() < Date.now() + 7 * 86400000,
+      'زمان دریافت باید در هفت روز آینده باشد.',
     );
-    return id;
-  });
+    const hm = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Tehran',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(parsed);
+    ensure(hm >= q.cafe.opens && hm < q.cafe.closes, 'زمان دریافت خارج از ساعت کاری کافه است.');
+  }
+  const id = randomUUID(),
+    now = new Date().toISOString();
+  run(
+    'INSERT INTO orders (id,user_id,cafe_id,mode,status,items,subtotal,discount,delivery_fee,points_used,total,address,pickup_at,note,created_at,updated_at,request_key,reservation_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    id,
+    user.id,
+    q.cafe.id,
+    q.mode,
+    'pending',
+    JSON.stringify(q.items),
+    q.subtotal,
+    q.discount,
+    q.delivery_fee,
+    q.points_used,
+    q.total,
+    address ? JSON.stringify(address) : null,
+    pickupAt,
+    text(input.note ?? '', 'یادداشت', 0, 500),
+    now,
+    now,
+    requestKey,
+    reservationId,
+  );
+  if (q.points_used) {
+    run('UPDATE users SET points=points-? WHERE id=?', q.points_used, user.id);
+    run(
+      'UPDATE loyalty_balances SET points=points-? WHERE user_id=? AND cafe_id=?',
+      q.points_used,
+      user.id,
+      q.cafe.id,
+    );
+  }
+  if (q.coupon) run('UPDATE coupons SET uses=uses+1 WHERE id=?', q.coupon.id);
+  notify(
+    user.id,
+    'سفارش شما ثبت شد',
+    `سفارش شما در ${q.cafe.name} در انتظار تأیید است.`,
+    '/orders/' + id,
+  );
+  notify(
+    q.cafe.owner_id!,
+    'سفارش جدید',
+    `${user.name} یک سفارش جدید ثبت کرد.`,
+    '/dashboard?tab=orders',
+  );
+  return id;
 }
 export function transitionOrder(user: User, id: string, status: string) {
-  return transaction(() => {
-    const order = one<Order>('SELECT * FROM orders WHERE id=?', id);
-    ensure(order, 'سفارش پیدا نشد.', 404);
-    const cafe = cafeById(order.cafe_id);
-    const owner = cafe.owner_id === user.id;
-    ensure(owner || order.user_id === user.id, 'دسترسی مجاز نیست.', 403);
-    if (!owner)
-      ensure(status === 'cancelled' && order.status === 'pending', 'این سفارش دیگر قابل لغو نیست.');
-    const transitions: Record<string, string[]> = {
-      pending: ['preparing', 'cancelled'],
-      preparing: [order.mode === 'pickup' ? 'ready' : 'delivering', 'cancelled'],
-      ready: ['completed'],
-      delivering: ['completed'],
-      completed: [],
-      cancelled: [],
-    };
-    ensure(transitions[order.status]?.includes(status), 'تغییر وضعیت سفارش مجاز نیست.');
-    run('UPDATE orders SET status=?,updated_at=? WHERE id=?', status, new Date().toISOString(), id);
-    if (status === 'cancelled' && order.points_used) {
-      run('UPDATE users SET points=points+? WHERE id=?', order.points_used, order.user_id);
-      run(
-        'UPDATE loyalty_balances SET points=points+? WHERE user_id=? AND cafe_id=?',
-        order.points_used,
-        order.user_id,
-        order.cafe_id,
-      );
-    }
-    if (status === 'completed') {
-      run(
-        'UPDATE users SET points=points+? WHERE id=?',
-        Math.floor(order.total / 10000),
-        order.user_id,
-      );
-      run(
-        'INSERT INTO loyalty_balances (user_id,cafe_id,points) VALUES (?,?,?) ON CONFLICT(user_id,cafe_id) DO UPDATE SET points=points+excluded.points',
-        order.user_id,
-        order.cafe_id,
-        Math.floor(order.total / 10000),
-      );
-    }
-    notify(
+  return transaction(() => transitionOrderRecord(user, id, status));
+}
+function transitionOrderRecord(user: User, id: string, status: string) {
+  const order = one<Order>('SELECT * FROM orders WHERE id=?', id);
+  ensure(order, 'سفارش پیدا نشد.', 404);
+  const cafe = cafeById(order.cafe_id);
+  const owner = cafe.owner_id === user.id;
+  ensure(owner || order.user_id === user.id, 'دسترسی مجاز نیست.', 403);
+  if (!owner)
+    ensure(status === 'cancelled' && order.status === 'pending', 'این سفارش دیگر قابل لغو نیست.');
+  const transitions: Record<string, string[]> = {
+    pending: ['preparing', 'cancelled'],
+    preparing: [order.mode === 'delivery' ? 'delivering' : 'ready', 'cancelled'],
+    ready: ['completed'],
+    delivering: ['completed'],
+    completed: [],
+    cancelled: [],
+  };
+  ensure(transitions[order.status]?.includes(status), 'تغییر وضعیت سفارش مجاز نیست.');
+  run('UPDATE orders SET status=?,updated_at=? WHERE id=?', status, new Date().toISOString(), id);
+  if (status === 'cancelled' && order.points_used) {
+    run('UPDATE users SET points=points+? WHERE id=?', order.points_used, order.user_id);
+    run(
+      'UPDATE loyalty_balances SET points=points+? WHERE user_id=? AND cafe_id=?',
+      order.points_used,
       order.user_id,
-      'وضعیت سفارش تغییر کرد',
-      'جزئیات جدید سفارش خود را ببینید.',
-      '/orders/' + id,
+      order.cafe_id,
     );
-  });
+  }
+  if (status === 'completed') {
+    run(
+      'UPDATE users SET points=points+? WHERE id=?',
+      Math.floor(order.total / 10000),
+      order.user_id,
+    );
+    run(
+      'INSERT INTO loyalty_balances (user_id,cafe_id,points) VALUES (?,?,?) ON CONFLICT(user_id,cafe_id) DO UPDATE SET points=points+excluded.points',
+      order.user_id,
+      order.cafe_id,
+      Math.floor(order.total / 10000),
+    );
+  }
+  notify(
+    order.user_id,
+    'وضعیت سفارش تغییر کرد',
+    'جزئیات جدید سفارش خود را ببینید.',
+    '/orders/' + id,
+  );
 }
 export function availableSlots(cafe: Cafe, selectedDate: string) {
   const [oh, om] = cafe.opens.split(':').map(Number),
@@ -245,7 +290,7 @@ export function availableSlots(cafe: Cafe, selectedDate: string) {
   const result: { time: string; remaining: number }[] = [];
   if (!cafe.active || !cafe.owner_id) return result;
   const booked = all<{ time: string; guests: number }>(
-    "SELECT time,SUM(guests) guests FROM reservations WHERE cafe_id=? AND date=? AND status IN ('pending','confirmed') GROUP BY time",
+    "SELECT time,guests FROM reservations WHERE cafe_id=? AND date=? AND status IN ('pending','confirmed')",
     cafe.id,
     selectedDate,
   );
@@ -255,10 +300,43 @@ export function availableSlots(cafe: Cafe, selectedDate: string) {
     if (new Date(`${selectedDate}T${t}:00+03:30`).getTime() <= Date.now()) continue;
     result.push({
       time: t,
-      remaining: Math.max(0, cafe.capacity - (booked.find((b) => b.time === t)?.guests || 0)),
+      remaining: Math.max(
+        0,
+        cafe.capacity -
+          booked.filter((b) => overlaps(b.time, t)).reduce((sum, b) => sum + b.guests, 0),
+      ),
     });
   }
   return result;
+}
+function overlaps(a: string, b: string) {
+  const minutes = (value: string) => {
+    const [h, m] = value.split(':').map(Number);
+    return h * 60 + m;
+  };
+  return Math.abs(minutes(a) - minutes(b)) < 60;
+}
+export function availableTables(
+  cafe: Cafe,
+  selectedDate: string,
+  selectedTime: string,
+  guests: number,
+): (CafeTable & { available: boolean })[] {
+  const booked = all<{ time: string; table_id: string }>(
+    "SELECT time,table_id FROM reservations WHERE cafe_id=? AND date=? AND status IN ('pending','confirmed')",
+    cafe.id,
+    selectedDate,
+  );
+  const slot = availableSlots(cafe, selectedDate).find((s) => s.time === selectedTime);
+  return cafe.tables.map((table) => ({
+    ...table,
+    available: Boolean(
+      slot &&
+      slot.remaining >= guests &&
+      table.seats >= guests &&
+      !booked.some((b) => b.table_id === table.id && overlaps(b.time, selectedTime)),
+    ),
+  }));
 }
 export function createReservation(user: User, input: Record<string, unknown>) {
   const requestKey = text(input.request_key, 'شناسه درخواست', 10, 100);
@@ -283,9 +361,15 @@ export function createReservation(user: User, input: Record<string, unknown>) {
       'ظرفیت این ساعت کافی نیست. ساعت دیگری انتخاب کنید.',
       409,
     );
+    const tableId = text(input.table_id ?? '', 'میز', 0, 100);
+    const table = availableTables(cafe, selectedDate, selectedTime, guests).find(
+      (t) => t.id === tableId,
+    );
+    if (cafe.tables.length) ensure(table?.available, 'یک میز آزاد با ظرفیت کافی انتخاب کنید.', 409);
+    else ensure(!tableId, 'میز انتخاب‌شده معتبر نیست.');
     const id = randomUUID();
     run(
-      'INSERT INTO reservations (id,cafe_id,user_id,date,time,guests,note,status,created_at,request_key) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO reservations (id,cafe_id,user_id,date,time,guests,note,status,created_at,request_key,table_id,table_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
       id,
       cafe.id,
       user.id,
@@ -296,7 +380,26 @@ export function createReservation(user: User, input: Record<string, unknown>) {
       'pending',
       new Date().toISOString(),
       requestKey,
+      tableId,
+      table?.name || '',
     );
+    const items = list(input.items ?? [], 40);
+    if (items.length) {
+      ensure(
+        items.every(
+          (item) => productById(text(object(item).product_id, 'محصول', 1, 100)).cafe_id === cafe.id,
+        ),
+        'محصولات سفارش باید متعلق به همین کافه باشند.',
+      );
+      createOrderRecord(user, {
+        items,
+        mode: 'dine_in',
+        reservation_id: id,
+        request_key: 'reserve:' + id,
+        note: input.note ?? '',
+        expected_total: input.expected_total,
+      });
+    }
     notify(
       user.id,
       'درخواست رزرو ثبت شد',
@@ -330,6 +433,10 @@ export function transitionReservation(user: User, id: string, status: string) {
         : ['completed', 'cancelled'].includes(status),
       'تغییر وضعیت رزرو مجاز نیست.',
     );
+    if (status === 'cancelled') {
+      const order = one<Order>('SELECT * FROM orders WHERE reservation_id=?', id);
+      if (order && order.status !== 'cancelled') transitionOrderRecord(user, order.id, 'cancelled');
+    }
     run('UPDATE reservations SET status=? WHERE id=?', status, id);
     notify(
       r.user_id,

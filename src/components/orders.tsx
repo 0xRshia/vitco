@@ -31,8 +31,9 @@ import {
 import { api, useApp, useResource } from '@/lib/client';
 import { PersianDateInput, PersianTimeInput } from './persian-date';
 import { LocationMap, hasPosition } from './location-map';
-import { money, digits, dateLabel, daysAhead, today, statusLabels } from '@/lib/format';
-import type { Address, Order, Reservation } from '@/lib/types';
+import { money, digits, dateLabel, daysAhead, today, statusLabels, amenities } from '@/lib/format';
+import type { Address, Order, Reservation, CafeTable, CartLine } from '@/lib/types';
+import { ReservationMenu } from './reservation-menu';
 import {
   PageTitle,
   SectionTitle,
@@ -50,11 +51,17 @@ import {
 } from './ui';
 
 type Quote = {
+  items?: CartLine[];
   subtotal: number;
   discount: number;
   delivery_fee: number;
   points_used: number;
   total: number;
+};
+const orderModeLabels = {
+  delivery: 'ارسال به آدرس',
+  pickup: 'تحویل از کافه',
+  dine_in: 'مصرف در کافه',
 };
 export function CartView() {
   const { data, cart, setCart, mode, setMode, refresh, toast } = useApp(),
@@ -520,10 +527,7 @@ export function OrdersView({ id }: { id?: string }) {
                   <h2>سفارش شما ثبت شد!</h2>
                   <p>درخواست برای کافه ارسال شد. پس از تأیید کافه، وضعیت آن اینجا به‌روز می‌شود.</p>
                   <strong className="success-order-total">{money(order.total)}</strong>
-                  <small>
-                    پرداخت هنگام دریافت ·{' '}
-                    {order.mode === 'delivery' ? 'ارسال به آدرس' : 'تحویل از کافه'}
-                  </small>
+                  <small>پرداخت هنگام دریافت · {orderModeLabels[order.mode]}</small>
                   <Link className="button primary" href={'/orders/' + order.id}>
                     پیگیری سفارش <ArrowLeft size={17} />
                   </Link>
@@ -587,7 +591,7 @@ export function OrdersView({ id }: { id?: string }) {
                   ))}
                 </section>
                 <section className="panel">
-                  <h2>{order.mode === 'delivery' ? 'نشانی تحویل' : 'دریافت از کافه'}</h2>
+                  <h2>{order.mode === 'delivery' ? 'نشانی تحویل' : orderModeLabels[order.mode]}</h2>
                   <p>
                     {order.address
                       ? `${order.address.city}، ${order.address.street}`
@@ -599,6 +603,11 @@ export function OrdersView({ id }: { id?: string }) {
                     </p>
                   )}
                   {order.pickup_at && <p>زمان دریافت: {dateLabel(order.pickup_at, true)}</p>}
+                  {order.reservation_id && (
+                    <Link href="/reservations" className="text-link">
+                      مشاهده رزرو میز این سفارش
+                    </Link>
+                  )}
                   {order.note && <p>یادداشت: {order.note}</p>}
                 </section>
               </div>
@@ -689,6 +698,7 @@ export function OrdersView({ id }: { id?: string }) {
                 <option value="all">همه سفارش‌ها</option>
                 <option value="delivery">ارسال به آدرس</option>
                 <option value="pickup">تحویل از کافه</option>
+                <option value="dine_in">مصرف در کافه</option>
               </select>
             </div>
             {orders.length ? (
@@ -696,14 +706,13 @@ export function OrdersView({ id }: { id?: string }) {
                 {orders.map((o) => (
                   <Link className="order-card panel" key={o.id} href={'/orders/' + o.id}>
                     <span className="action-icon peach">
-                      {o.mode === 'pickup' ? <Store size={25} /> : <Bike size={25} />}
+                      {o.mode === 'delivery' ? <Bike size={25} /> : <Store size={25} />}
                     </span>
                     <div>
                       <h3>{o.cafe_name}</h3>
                       <p>{o.items.map((i) => i.name).join('، ')}</p>
                       <small>
-                        {o.mode === 'delivery' ? 'ارسال به آدرس' : 'تحویل از کافه'} ·{' '}
-                        {dateLabel(o.created_at, true)}
+                        {orderModeLabels[o.mode]} · {dateLabel(o.created_at, true)}
                       </small>
                     </div>
                     <div className="order-card-end">
@@ -743,7 +752,7 @@ export function OrdersView({ id }: { id?: string }) {
   );
 }
 export function ReserveView() {
-  const { data, toast, refresh } = useApp(),
+  const { data, cart, setCart, refresh, revision } = useApp(),
     query = useSearchParams(),
     router = useRouter();
   const [cafeId, setCafeId] = useState(
@@ -763,18 +772,70 @@ export function ReserveView() {
     [guests, setGuests] = useState(() =>
       Math.min(20, Math.max(1, Math.floor(Number(query.get('guests')) || 2))),
     ),
-    [note, setNote] = useState(''),
+    [note, setNote] = useState((query.get('note') || '').slice(0, 500)),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [success, setSuccess] = useState(false),
-    [calendar, setCalendar] = useState(false);
+    [calendar, setCalendar] = useState(false),
+    [tableId, setTableId] = useState(query.get('table') || ''),
+    [section, setSection] = useState<'reservation' | 'menu'>('reservation'),
+    [orderId, setOrderId] = useState(''),
+    [retryPending, setRetryPending] = useState(false);
   const key = useRef({ signature: '', key: '' });
+  const pendingRequest = useRef<{
+    payload: Record<string, unknown>;
+    key: string;
+    draft: string;
+  } | null>(null);
   const submitting = useRef(false);
   const initializedCafe = useRef(Boolean(query.get('cafe')));
   const cafe = data?.cafes.find((c) => c.id === cafeId);
-  const slots = useResource<{ slots: { time: string; remaining: number }[] }>(
-    cafeId ? 'slots/' + cafeId + '?date=' + date : null,
+  const slots = useResource<{
+    slots: { time: string; remaining: number }[];
+    tables: (CafeTable & { available: boolean })[];
+  }>(
+    cafeId
+      ? 'slots/' + cafeId + '?' + new URLSearchParams({ date, time, guests: String(guests) })
+      : null,
   );
+  const selectedItems = cart.filter((item) => item.cafe_id === cafeId);
+  const selectedTable = slots.data?.tables.find((table) => table.id === tableId);
+  const hasTables = Boolean(cafe?.tables?.length);
+  const itemsPayload = JSON.stringify(selectedItems);
+  const quoteSignature = JSON.stringify({ itemsPayload, revision, cafeId, userId: data?.user?.id });
+  const [reservationQuote, setReservationQuote] = useState<(Quote & { signature: string }) | null>(
+    null,
+  );
+  const [priceError, setPriceError] = useState('');
+  const [pricing, setPricing] = useState(false);
+  useEffect(() => {
+    setReservationQuote(null);
+    setPriceError('');
+    if (!data?.user || !selectedItems.length) {
+      setPricing(false);
+      return;
+    }
+    let active = true;
+    setPricing(true);
+    api<Quote>('quote', 'POST', { items: JSON.parse(itemsPayload), mode: 'dine_in', points: 0 })
+      .then((value) => {
+        if (active) setReservationQuote({ ...value, signature: quoteSignature });
+      })
+      .catch((error) => {
+        if (active) setPriceError(error.message);
+      })
+      .finally(() => {
+        if (active) setPricing(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [quoteSignature]);
+  const draft = JSON.stringify({ cafeId, date, time, guests, tableId, note, itemsPayload });
+  useEffect(() => {
+    if (pendingRequest.current?.draft !== draft) setRetryPending(false);
+  }, [draft]);
+  const estimatedTotal = selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const defaultCafeId = data?.cafes.find((c) => c.owner_id && c.active)?.id;
   useEffect(() => {
     if (!initializedCafe.current && defaultCafeId) {
@@ -787,232 +848,484 @@ export function ReserveView() {
     cafe.owner_id &&
     !slots.loading &&
     !slots.error &&
-    slots.data?.slots.some((slot) => slot.time === time && slot.remaining >= guests),
+    slots.data?.slots.some((slot) => slot.time === time && slot.remaining >= guests) &&
+    (!hasTables || (selectedTable?.available && selectedTable.seats >= guests)) &&
+    !pricing &&
+    !priceError &&
+    (!data?.user || !selectedItems.length || reservationQuote?.signature === quoteSignature),
   );
   const days = daysAhead(7);
   function selectDate(value: string) {
     setDate(value);
     setTime('');
+    setTableId('');
     setError('');
   }
-  async function submit() {
-    if (submitting.current || !available) return;
+  async function submit(retry = false) {
+    if (
+      submitting.current ||
+      (retry
+        ? !retryPending || pendingRequest.current?.draft !== draft
+        : retryPending || !available)
+    )
+      return;
     submitting.current = true;
     setError('');
     setBusy(true);
     try {
-      const payload = { cafe_id: cafeId, date, time, guests, note };
+      const payload = retry
+        ? pendingRequest.current!.payload
+        : {
+            cafe_id: cafeId,
+            date,
+            time,
+            guests,
+            table_id: tableId,
+            note,
+            items: selectedItems,
+            ...(selectedItems.length && reservationQuote
+              ? { expected_total: reservationQuote.total }
+              : {}),
+          };
       const signature = JSON.stringify(payload);
-      if (key.current.signature !== signature)
+      if (!retry && key.current.signature !== signature)
         key.current = { signature, key: crypto.randomUUID() };
-      await api('reservations', 'POST', { ...payload, request_key: key.current.key });
+      const requestKey = retry ? pendingRequest.current!.key : key.current.key;
+      pendingRequest.current = { payload, key: requestKey, draft };
+      const result = await api<{ id: string; order_id?: string }>('reservations', 'POST', {
+        ...payload,
+        request_key: requestKey,
+      });
+      setOrderId(result.order_id || '');
+      if (selectedItems.length) setCart(cart.filter((item) => item.cafe_id !== cafeId));
       setSuccess(true);
+      setRetryPending(false);
       await refresh();
     } catch (e) {
       setError((e as Error).message);
+      const status = (e as Error & { status?: number }).status;
+      setRetryPending(!status || status >= 500);
       slots.reload();
+      await refresh();
     } finally {
       submitting.current = false;
       setBusy(false);
     }
   }
   return (
-    <div className="reserve-page">
+    <div className="reserve-page has-reservation-dock">
       <PageTitle
         title="یک میز برای لحظه‌های خوب"
         description="کافه، روز و ساعت را انتخاب کن و درخواستت را برای تأیید بفرست."
         back="/cafes"
       />
-      <div className="reservation-layout">
-        <section className="panel reservation-form">
-          <h2>
-            <Store size={20} />
-            کجا قرار بگذاریم؟
-          </h2>
-          <Field label="کافه">
-            <select
-              value={cafeId}
-              onChange={(e) => {
-                setCafeId(e.target.value);
-                setTime('');
-                setError('');
-              }}
-            >
-              <option value="">کافه را انتخاب کنید</option>
-              {data?.cafes.map((c) => (
-                <option key={c.id} value={c.id} disabled={!c.owner_id || !c.active}>
-                  {c.name}
-                  {!c.owner_id || !c.active ? ' · رزرو غیرفعال' : ''}
-                </option>
-              ))}
-            </select>
-          </Field>
-          {!data?.cafes.some((c) => c.owner_id && c.active) && (
-            <p className="notice">هنوز کافه‌ای با امکان رزرو آنلاین ثبت نشده است.</p>
-          )}
-          {cafe && (
-            <p className="icon-text muted">
-              <MapPin size={17} />
-              {cafe.city}، {cafe.address}
-            </p>
-          )}
-          <div className="section-title">
-            <h2>
-              <CalendarDays size={20} />
-              کِی همدیگر را ببینیم؟
-            </h2>
-            <button className="text-link" onClick={() => setCalendar(true)}>
-              تقویم کامل
-            </button>
+      {cafe && (
+        <section className="reservation-cafe-intro">
+          <div className="reservation-gallery" aria-label={'عکس‌های ' + cafe.name}>
+            {[...new Set([cafe.image, ...(cafe.images || [])].filter(Boolean))].length ? (
+              [...new Set([cafe.image, ...(cafe.images || [])].filter(Boolean))].map(
+                (src, index) => (
+                  <Media key={src} src={src} alt={cafe.name + ' · عکس ' + digits(index + 1)} />
+                ),
+              )
+            ) : (
+              <Media src="" alt={cafe.name} />
+            )}
           </div>
-          <div className="date-picker">
-            {days.map((d) => {
-              const parsed = new Date(d + 'T12:00:00+03:30');
-              return (
-                <button
-                  key={d}
-                  aria-label={dateLabel(d)}
-                  aria-pressed={date === d}
-                  className={date === d ? 'selected' : ''}
-                  onClick={() => selectDate(d)}
-                >
-                  <small>
-                    {new Intl.DateTimeFormat('fa-IR', {
-                      weekday: 'short',
-                      timeZone: 'Asia/Tehran',
-                    }).format(parsed)}
-                  </small>
-                  <strong>
-                    {new Intl.DateTimeFormat('fa-IR', { day: 'numeric' }).format(parsed)}
-                  </strong>
-                  <small>
-                    {new Intl.DateTimeFormat('fa-IR', { month: 'short' }).format(parsed)}
-                  </small>
-                </button>
-              );
-            })}
+          <div className="reservation-amenities" aria-label="امکانات کافه">
+            {cafe.amenities.map((key) => (
+              <span className="badge" key={key}>
+                {amenities[key] || key}
+              </span>
+            ))}
+            <span className="badge">{cafe.name}</span>
           </div>
-          <p className="reserve-chosen-date">
-            <CalendarDays size={17} />
-            {dateLabel(date)}
-          </p>
-          <h2>
-            <Clock3 size={20} />
-            ساعت قرار
-          </h2>
-          {slots.loading ? (
-            <Loading />
-          ) : slots.error ? (
-            <ErrorBox message={slots.error} />
-          ) : slots.data?.slots.length ? (
-            <div className="time-picker">
-              {slots.data.slots.map((s) => (
-                <button
-                  key={s.time}
-                  className={time === s.time ? 'selected' : ''}
-                  aria-pressed={time === s.time}
-                  disabled={s.remaining < guests}
-                  onClick={() => setTime(s.time)}
-                >
-                  {digits(s.time)}
-                  <small>{s.remaining >= guests ? 'قابل رزرو' : 'ظرفیت ناکافی'}</small>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="notice">
-              {!cafeId
-                ? 'ابتدا کافه را انتخاب کنید.'
-                : !cafe?.owner_id
-                  ? 'رزرو آنلاین این کافه در این سامانه فعال نیست.'
-                  : 'ساعت آزادی برای این روز وجود ندارد. روز دیگری انتخاب کنید.'}
-            </div>
-          )}
-          <h2>
-            <Users size={20} />
-            چند نفر هستید؟
-          </h2>
-          <div className="guest-picker">
-            <Quantity
-              value={guests}
-              max={20}
-              onChange={(n) => {
-                setGuests(n);
-                if ((slots.data?.slots.find((s) => s.time === time)?.remaining || 0) < n)
-                  setTime('');
-              }}
-            />
-            <span>{digits(guests)} نفر</span>
-          </div>
-          <Field label="درخواست ویژه (اختیاری)">
-            <textarea
-              maxLength={500}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="مثلاً میزی در فضای باز یا مناسبت ویژه…"
-            />
-          </Field>
         </section>
-        <aside className="booking-summary">
-          {cafe && (
-            <div className="reserve-location panel">
+      )}
+      <div className="segmented reservation-sections" role="group" aria-label="منو و رزرویشن">
+        <button
+          aria-pressed={section === 'reservation'}
+          disabled={busy || retryPending}
+          className={section === 'reservation' ? 'active' : ''}
+          onClick={() => setSection('reservation')}
+        >
+          <CalendarDays size={18} />
+          رزرویشن و انتخاب میز
+        </button>
+        <button
+          aria-pressed={section === 'menu'}
+          disabled={busy || retryPending}
+          className={section === 'menu' ? 'active' : ''}
+          onClick={() => setSection('menu')}
+        >
+          <ShoppingBag size={18} />
+          منو و سفارش
+        </button>
+      </div>
+      <fieldset className="reservation-controls" disabled={busy || retryPending}>
+        <div className="reservation-layout">
+          <div className="stack">
+            <section className="panel reservation-form" hidden={section !== 'reservation'}>
               <h2>
-                <MapPin size={19} />
-                موقعیت کافه
+                <Store size={20} />
+                کجا قرار بگذاریم؟
               </h2>
-              {hasPosition(cafe) ? (
-                <LocationMap
-                  points={[{ ...cafe, latitude: cafe.latitude, longitude: cafe.longitude }]}
-                  selected={cafe.id}
-                  label={'موقعیت ' + cafe.name}
-                />
+              <Field label="کافه">
+                <select
+                  value={cafeId}
+                  onChange={(e) => {
+                    setCafeId(e.target.value);
+                    setTime('');
+                    setTableId('');
+                    setError('');
+                  }}
+                >
+                  <option value="">کافه را انتخاب کنید</option>
+                  {data?.cafes.map((c) => (
+                    <option key={c.id} value={c.id} disabled={!c.owner_id || !c.active}>
+                      {c.name}
+                      {!c.owner_id || !c.active ? ' · رزرو غیرفعال' : ''}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {!data?.cafes.some((c) => c.owner_id && c.active) && (
+                <p className="notice">هنوز کافه‌ای با امکان رزرو آنلاین ثبت نشده است.</p>
+              )}
+              {cafe && (
+                <p className="icon-text muted">
+                  <MapPin size={17} />
+                  {cafe.city}، {cafe.address}
+                </p>
+              )}
+              <div className="section-title">
+                <h2>
+                  <CalendarDays size={20} />
+                  کِی همدیگر را ببینیم؟
+                </h2>
+                <button className="text-link" onClick={() => setCalendar(true)}>
+                  تقویم کامل
+                </button>
+              </div>
+              <div className="date-picker">
+                {days.map((d) => {
+                  const parsed = new Date(d + 'T12:00:00+03:30');
+                  return (
+                    <button
+                      key={d}
+                      aria-label={dateLabel(d)}
+                      aria-pressed={date === d}
+                      className={date === d ? 'selected' : ''}
+                      onClick={() => selectDate(d)}
+                    >
+                      <small>
+                        {new Intl.DateTimeFormat('fa-IR', {
+                          weekday: 'short',
+                          timeZone: 'Asia/Tehran',
+                        }).format(parsed)}
+                      </small>
+                      <strong>
+                        {new Intl.DateTimeFormat('fa-IR', { day: 'numeric' }).format(parsed)}
+                      </strong>
+                      <small>
+                        {new Intl.DateTimeFormat('fa-IR', { month: 'short' }).format(parsed)}
+                      </small>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="reserve-chosen-date">
+                <CalendarDays size={17} />
+                {dateLabel(date)}
+              </p>
+              <h2>
+                <Clock3 size={20} />
+                ساعت قرار
+              </h2>
+              {slots.loading ? (
+                <Loading />
+              ) : slots.error ? (
+                <ErrorBox message={slots.error} />
+              ) : slots.data?.slots.length ? (
+                <div className="time-picker">
+                  {slots.data.slots.map((s) => (
+                    <button
+                      key={s.time}
+                      className={time === s.time ? 'selected' : ''}
+                      aria-pressed={time === s.time}
+                      disabled={s.remaining < guests}
+                      onClick={() => {
+                        setTime(s.time);
+                        setTableId('');
+                      }}
+                    >
+                      {digits(s.time)}
+                      <small>{s.remaining >= guests ? 'قابل رزرو' : 'ظرفیت ناکافی'}</small>
+                    </button>
+                  ))}
+                </div>
               ) : (
-                <p className="notice">موقعیت دقیق این کافه هنوز ثبت نشده است.</p>
+                <div className="notice">
+                  {!cafeId
+                    ? 'ابتدا کافه را انتخاب کنید.'
+                    : !cafe?.owner_id
+                      ? 'رزرو آنلاین این کافه در این سامانه فعال نیست.'
+                      : 'ساعت آزادی برای این روز وجود ندارد. روز دیگری انتخاب کنید.'}
+                </div>
+              )}
+              <h2>
+                <Users size={20} />
+                چند نفر هستید؟
+              </h2>
+              <div className="guest-picker">
+                <Quantity
+                  value={guests}
+                  max={20}
+                  onChange={(n) => {
+                    setGuests(n);
+                    setTableId('');
+                    if ((slots.data?.slots.find((s) => s.time === time)?.remaining || 0) < n)
+                      setTime('');
+                  }}
+                />
+                <span>{digits(guests)} نفر</span>
+              </div>
+              <h2>
+                <Store size={20} />
+                میز مورد نظرت را انتخاب کن
+              </h2>
+              {!hasTables ? (
+                <p className="notice">
+                  کافه هنوز میزهای جداگانه را ثبت نکرده است؛ درخواست شما بر اساس ظرفیت کافه ثبت
+                  می‌شود.
+                </p>
+              ) : !time ? (
+                <p className="notice">
+                  ابتدا روز، ساعت و تعداد مهمان را انتخاب کن تا میزهای آزاد نمایش داده شوند.
+                </p>
+              ) : slots.loading ? (
+                <Loading />
+              ) : (
+                <div className="reservation-tables" role="group" aria-label="انتخاب میز">
+                  {slots.data?.tables.map((table) => (
+                    <button
+                      key={table.id}
+                      className={tableId === table.id ? 'selected' : ''}
+                      aria-pressed={tableId === table.id}
+                      disabled={!table.available || table.seats < guests}
+                      onClick={() => setTableId(table.id)}
+                    >
+                      <Store size={24} />
+                      <strong>{table.name}</strong>
+                      <small>
+                        {digits(table.seats)} نفر ·{' '}
+                        {table.seats < guests
+                          ? 'ظرفیت ناکافی'
+                          : table.available
+                            ? 'آزاد'
+                            : 'رزرو شده'}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <Field label="درخواست ویژه (اختیاری)">
+                <textarea
+                  maxLength={500}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="مثلاً میزی در فضای باز یا مناسبت ویژه…"
+                />
+              </Field>
+            </section>
+            {section === 'menu' &&
+              (cafeId ? (
+                <ReservationMenu key={cafeId} cafeId={cafeId} />
+              ) : (
+                <p className="notice">ابتدا از بخش رزرویشن یک کافه انتخاب کن.</p>
+              ))}
+          </div>
+          <aside className="booking-summary">
+            {cafe && (
+              <div className="reserve-location panel">
+                <h2>
+                  <MapPin size={19} />
+                  موقعیت کافه
+                </h2>
+                {hasPosition(cafe) ? (
+                  <LocationMap
+                    points={[{ ...cafe, latitude: cafe.latitude, longitude: cafe.longitude }]}
+                    selected={cafe.id}
+                    label={'موقعیت ' + cafe.name}
+                  />
+                ) : (
+                  <p className="notice">موقعیت دقیق این کافه هنوز ثبت نشده است.</p>
+                )}
+                <p className="muted">
+                  {cafe.city}، {cafe.address}
+                </p>
+              </div>
+            )}
+            <div className="panel" id="reservation-summary">
+              <span className="eyebrow">خلاصه قرار شما</span>
+              <h2>{cafe?.name || 'یک قرار تازه'}</h2>
+              <div className="list-row">
+                <span>روز</span>
+                <strong>{dateLabel(date)}</strong>
+              </div>
+              <div className="list-row">
+                <span>ساعت</span>
+                <strong>{time ? digits(time) : 'انتخاب نشده'}</strong>
+              </div>
+              <div className="list-row">
+                <span>تعداد مهمان</span>
+                <strong>{digits(guests)} نفر</strong>
+              </div>
+              {hasTables && (
+                <div className="list-row">
+                  <span>میز</span>
+                  <strong>{selectedTable?.name || 'انتخاب نشده'}</strong>
+                </div>
+              )}
+              {selectedItems.length > 0 && (
+                <div className="reservation-order-lines">
+                  <h3>سفارش همراه رزرو</h3>
+                  {selectedItems.map((item, index) => (
+                    <div className="reservation-order-line" key={item.key}>
+                      <div>
+                        <strong>{item.name}</strong>
+                        <small>
+                          {item.option_names.join('، ')}
+                          {item.note && ' · ' + item.note}
+                        </small>
+                        <span>
+                          {money(
+                            (reservationQuote?.items?.[index]?.price ?? item.price) * item.quantity,
+                          )}
+                        </span>
+                      </div>
+                      <Quantity
+                        value={item.quantity}
+                        onChange={(quantity) =>
+                          setCart(
+                            cart.map((line) =>
+                              line.key === item.key ? { ...line, quantity } : line,
+                            ),
+                          )
+                        }
+                      />
+                      <button
+                        className="icon-button"
+                        aria-label={'حذف ' + item.name}
+                        onClick={() => setCart(cart.filter((line) => line.key !== item.key))}
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </div>
+                  ))}
+                  <div className="summary-total">
+                    <span>مبلغ سفارش</span>
+                    <strong>{money(reservationQuote?.total ?? estimatedTotal)}</strong>
+                  </div>
+                  <p className="muted">
+                    {data?.user
+                      ? 'مبلغ نهایی از قیمت‌های فعلی کافه محاسبه می‌شود.'
+                      : 'مبلغ تخمینی است؛ قیمت پس از ورود بررسی می‌شود.'}{' '}
+                    پرداخت در کافه انجام می‌شود.
+                  </p>
+                </div>
               )}
               <p className="muted">
-                {cafe.city}، {cafe.address}
+                مدت هر رزرو یک ساعت است. درخواست شما پس از ثبت، برای تأیید به کافه ارسال می‌شود.
               </p>
+              {error && <ErrorBox message={error} />}
+              {retryPending && (
+                <p className="notice">
+                  نتیجه درخواست قبلی مشخص نیست. پیش از تغییر انتخاب‌ها، با دکمه پایین صفحه وضعیت
+                  همان درخواست را بررسی کنید.
+                </p>
+              )}
+              {priceError && <ErrorBox message={priceError} />}
+              <button
+                className="button secondary full"
+                onClick={() => setSection(section === 'menu' ? 'reservation' : 'menu')}
+              >
+                {section === 'menu' ? 'انتخاب زمان و میز' : 'افزودن غذا و نوشیدنی'}
+              </button>
             </div>
-          )}
-          <div className="panel">
-            <span className="eyebrow">خلاصه قرار شما</span>
-            <h2>{cafe?.name || 'یک قرار تازه'}</h2>
-            <div className="list-row">
-              <span>روز</span>
-              <strong>{dateLabel(date)}</strong>
-            </div>
-            <div className="list-row">
-              <span>ساعت</span>
-              <strong>{time ? digits(time) : 'انتخاب نشده'}</strong>
-            </div>
-            <div className="list-row">
-              <span>تعداد مهمان</span>
-              <strong>{digits(guests)} نفر</strong>
-            </div>
-            <p className="muted">
-              مدت هر رزرو یک ساعت است. درخواست شما پس از ثبت، برای تأیید به کافه ارسال می‌شود.
-            </p>
-            {error && <ErrorBox message={error} />}
+          </aside>
+        </div>
+      </fieldset>
+      {!success && (
+        <div className="reservation-selection-dock" aria-label="خلاصه رزرو و سفارش">
+          <div className="reservation-dock-lines">
+            <span>
+              <CalendarDays size={16} />
+              {cafe?.name || 'کافه را انتخاب کن'} · {dateLabel(date)}
+              {time && ' · ' + digits(time)}
+              {selectedTable && ' · ' + selectedTable.name}
+            </span>
+            {selectedItems.length > 0 && (
+              <div className="reservation-dock-items">
+                {selectedItems.map((item) => (
+                  <span key={item.key}>
+                    {digits(item.quantity)} × {item.name}
+                    {item.option_names.length > 0 && ' (' + item.option_names.join('، ') + ')'}
+                  </span>
+                ))}
+              </div>
+            )}
+            <strong>
+              {selectedItems.length
+                ? money(reservationQuote?.total ?? estimatedTotal) + ' · پرداخت در کافه'
+                : 'بدون سفارش غذا'}
+            </strong>
+          </div>
+          <div className="reservation-dock-actions">
+            {selectedItems.length > 0 && (
+              <a className="text-link" href="#reservation-summary">
+                ویرایش انتخاب‌ها
+              </a>
+            )}
             <button
-              className="button primary full"
-              disabled={busy || !available}
+              className="button primary"
+              disabled={busy || (!retryPending && !available)}
               onClick={() => {
+                if (retryPending) {
+                  void submit(true);
+                  return;
+                }
                 if (!data?.user) {
                   const next =
                     '/reserve?' +
-                    new URLSearchParams({ cafe: cafeId, date, time, guests: String(guests) });
+                    new URLSearchParams({
+                      cafe: cafeId,
+                      date,
+                      time,
+                      guests: String(guests),
+                      table: tableId,
+                      note,
+                    });
                   router.push('/login?next=' + encodeURIComponent(next));
                   return;
                 }
                 void submit();
               }}
             >
-              {busy ? 'در حال ثبت…' : data?.user ? 'ثبت درخواست رزرو' : 'ورود و ادامه رزرو'}
+              {busy
+                ? 'در حال ثبت…'
+                : retryPending
+                  ? 'بررسی دوباره درخواست قبلی'
+                  : data?.user
+                    ? selectedItems.length
+                      ? 'ثبت رزرو و سفارش'
+                      : 'ثبت درخواست رزرو'
+                    : 'ورود و ادامه رزرو'}
               <ArrowLeft size={18} />
             </button>
           </div>
-        </aside>
-      </div>
+        </div>
+      )}
       <Modal
         open={calendar}
         title="انتخاب روز قرار"
@@ -1035,7 +1348,7 @@ export function ReserveView() {
         open={success}
         title="درخواست رزرو ثبت شد"
         presentation="sheet"
-        onClose={() => setSuccess(false)}
+        onClose={() => router.push('/reservations')}
       >
         <div className="booking-success">
           <span className="empty-icon">
@@ -1051,6 +1364,11 @@ export function ReserveView() {
             مشاهده رزروهای من
             <ArrowLeft size={17} />
           </Link>
+          {orderId && (
+            <Link className="button secondary" href={'/orders/' + orderId}>
+              مشاهده سفارش و مبلغ پرداخت در کافه
+            </Link>
+          )}
         </div>
       </Modal>
     </div>
@@ -1135,7 +1453,18 @@ export function ReservationsView() {
                     <Users size={17} />
                     {digits(r.guests)} نفر
                   </p>
+                  {r.table_name && (
+                    <p>
+                      <Store size={17} />
+                      {r.table_name}
+                    </p>
+                  )}
                 </div>
+                {r.order_id && (
+                  <Link className="text-link" href={'/orders/' + r.order_id}>
+                    مشاهده سفارش این رزرو
+                  </Link>
+                )}
                 {r.note && <p className="muted">{r.note}</p>}
                 <div className="card-bottom">
                   <Link href={'/cafes/' + r.cafe_id} className="text-link">
@@ -1163,7 +1492,7 @@ export function ReservationsView() {
       <Confirm
         open={Boolean(cancel)}
         title="این قرار لغو شود؟"
-        description="با لغو رزرو، ظرفیت برای دیگر مهمان‌ها آزاد می‌شود."
+        description="با لغو رزرو، ظرفیت آزاد و سفارش غذای در انتظار تأیید آن هم لغو می‌شود. اگر آماده‌سازی غذا شروع شده باشد، برای لغو با کافه هماهنگ کنید."
         onClose={() => setCancel(null)}
         onConfirm={async () => {
           try {

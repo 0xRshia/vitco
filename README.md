@@ -40,6 +40,18 @@ customer account can be used to exercise the customer flow.
 - Owner management of cafés, images, menu/options, orders, reservations, events,
   coupons, and support replies. An optional trusted support account can handle
   platform-wide support requests.
+- Shared menu/location categories, café photo galleries, and café-specific paths
+  for reservations/orders and events, including upcoming/ongoing event filters.
+- Owner CRM and sales reports with inclusive Tehran date ranges, first Vitco
+  orders per café/customer, latest non-cancelled orders, completed-order sales,
+  previous-period comparisons, best-selling items, and item counts per customer.
+- Category-wide percentage/fixed base-price changes with a server preview and
+  stale-preview protection, alongside individual product price editing.
+- Owner-configured tables and optional menu preorders submitted atomically with
+  a reservation. Meal orders use the existing payment-at-café method.
+
+See [the expansion requirements and verification](docs/cafe-management-expansion.md)
+for report definitions and integration details.
 
 See [design coverage](docs/design-coverage.md) for the mapping from the source
 frames to implemented routes and states.
@@ -77,7 +89,19 @@ Payment is **at the café or on delivery**. No card is charged or collected.
 Online payment requires a separately selected payment provider and credentials.
 Reservations are requests until the café owner confirms them. Each reservation
 holds capacity for one hour. Owner hours currently support a single same-day
-opening interval. QR camera scanning uses the browser's `BarcodeDetector` when
+opening interval. Owners can configure named tables with seat counts; cafés
+without configured tables continue using overall capacity. Cancelling a booking
+also cancels its pending meal order. Customers must contact the café if meal
+preparation has already started. An ongoing event requires an explicit end time;
+existing events with no end time are not assigned an invented duration.
+
+Sales reports use completed orders placed in the selected range; item revenue
+uses historical item prices before discounts. The new-customer metric counts
+the first non-cancelled Vitco order at each café, not an external referral or
+visit. Detailed report intervals are limited to ten years. Bulk tax/inflation
+adjustments change base menu prices; they do not calculate a separate tax line.
+
+QR camera scanning uses the browser's `BarcodeDetector` when
 available; entering a valid local café/product link also works.
 
 ## Persistence and security
