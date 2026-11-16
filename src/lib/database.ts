@@ -39,6 +39,11 @@ export function database() {
   for (const [table, column, definition] of [
     ['cafes', 'images', "TEXT NOT NULL DEFAULT '[]'"],
     ['cafes', 'tables', "TEXT NOT NULL DEFAULT '[]'"],
+    [
+      'cafes',
+      'invoice_discount_percent',
+      'INTEGER NOT NULL DEFAULT 0 CHECK(invoice_discount_percent BETWEEN 0 AND 99)',
+    ],
     ['events', 'end_time', "TEXT NOT NULL DEFAULT ''"],
     ['reservations', 'table_id', "TEXT NOT NULL DEFAULT ''"],
     ['reservations', 'table_name', "TEXT NOT NULL DEFAULT ''"],
@@ -46,6 +51,7 @@ export function database() {
     ['orders', 'payment_method', "TEXT NOT NULL DEFAULT 'offline'"],
     ['orders', 'payment_status', "TEXT NOT NULL DEFAULT 'unpaid'"],
     ['orders', 'payment_ref', "TEXT NOT NULL DEFAULT ''"],
+    ['orders', 'kind', "TEXT NOT NULL DEFAULT 'menu'"],
   ]) {
     const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
     if (!columns.some((c) => c.name === column))
@@ -68,6 +74,14 @@ export function database() {
     CREATE UNIQUE INDEX IF NOT EXISTS payments_authority ON payments(authority) WHERE authority <> '';
     CREATE UNIQUE INDEX IF NOT EXISTS payments_active_order ON payments(order_id) WHERE status IN ('creating','pending','unknown');
     CREATE INDEX IF NOT EXISTS payments_order ON payments(order_id,created_at);
+    CREATE TABLE IF NOT EXISTS invoice_details (
+      order_id TEXT PRIMARY KEY REFERENCES orders(id),
+      automatic_percent INTEGER NOT NULL,
+      coupon_id TEXT REFERENCES coupons(id),
+      coupon_code TEXT NOT NULL,
+      applied_percent INTEGER NOT NULL,
+      request_signature TEXT NOT NULL
+    );
   `);
   const cafe = source.cafe;
   db.prepare(

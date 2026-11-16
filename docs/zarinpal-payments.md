@@ -40,7 +40,8 @@ truncated screenshot is insufficient and must not be completed by guessing.
 
 Leaving all three `ZARINPAL_*` variables empty keeps online payment disabled.
 Partial, padded, or invalid values fail the configuration readiness check and do
-not enable online payment. Existing café/on-delivery payment remains available.
+not enable online payment. Existing payment on receipt at the café remains available
+for menu orders and reservations. Address delivery is no longer offered.
 
 Sandbox must be selected explicitly. It is a testing environment without a real
 charge, not evidence that the live merchant, domain, callback, or settlement works.
@@ -72,6 +73,41 @@ than silently becoming an offline or paid order.
 [Official error list](https://www.zarinpal.com/docs/paymentGateway/errorList).
 
 ## Application endpoints
+
+### In-person invoices
+
+`/bill?cafe={id}` implements café selection → entering an invoice amount → reviewing
+discounts → selecting the configured online gateway. Amounts are explicitly in
+toman, with a displayed rial equivalent. There is no wallet, cashback, split
+payment, or additional bank gateway implied by the reference screenshots.
+
+Owners set `invoice_discount_percent` (0–99, default zero) in their café editor.
+Existing valid café coupons can be entered at review. The larger of the automatic
+and coupon percentages applies; they do not stack. Fractional toman discounts are
+rounded down. A fully discounted invoice cannot initiate a nonzero bank charge.
+
+- `POST /api/invoices/quote` calculates a public, read-only quote without persisting
+  an order or contacting the provider.
+- `POST /api/invoices` requires a signed-in buyer, a claimed active café and an
+  available gateway. It recalculates the quote and rejects a stale `expected_total`.
+- The idempotency key binds café, amount, coupon and total. Identical retries return
+  the same invoice; changed data with the same key is rejected.
+- Persisted invoices use `orders.kind='invoice'` and `invoice_details` audit data,
+  with no fictional menu line items. An applied coupon use is reserved at creation,
+  as for existing menu orders.
+- The existing payment endpoints and immutable ledger handle gateway initiation,
+  uncertain responses, authorization, callback verification and reconciliation.
+  Only verified payment completes the invoice and awards the existing café loyalty
+  points once. Invoices cannot enter preparation or ready-for-pickup states.
+- Completed invoices contribute to sales and CRM, but never to product quantities
+  or item/customer frequency. Unpaid invoice drafts are excluded from analytics.
+- The browser retains an immutable pending submission for recovery. A payment
+  return query alone never establishes a settled invoice.
+
+When the gateway is unavailable, the review clearly disables payment. Quoting a
+bill on the preview cannot create a pretend payment or charge a card.
+
+### Shared payment endpoints
 
 | Endpoint                               | Access and behavior                                                                                                                                                                                                  |
 | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

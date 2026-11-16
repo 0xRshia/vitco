@@ -3,14 +3,31 @@ import { useEffect, useRef, useState } from 'react';
 import { Plus, Search, ShoppingBag } from 'lucide-react';
 import { useApp } from '@/lib/client';
 import { money, digits } from '@/lib/format';
+import { normalizeSearch } from '@/lib/cafe-discovery';
+import Link from 'next/link';
+import { MenuCategories } from './menu-categories';
 import { menuCategories, productCategory } from '@/lib/catalog';
 import type { CartLine, Product } from '@/lib/types';
 import { Confirm, Empty, Field, Media, Modal, Quantity } from './ui';
 
-export function ReservationMenu({ cafeId }: { cafeId: string }) {
+export function ReservationMenu({
+  cafeId,
+  variant = 'reservation',
+  initialCategory = '',
+  category: controlledCategory,
+  onCategoryChange,
+}: {
+  cafeId: string;
+  variant?: 'reservation' | 'catalog';
+  initialCategory?: string;
+  category?: string;
+  onCategoryChange?: (value: string) => void;
+}) {
   const { data, cart, addCart, setCart, toast } = useApp();
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('');
+  const [localCategory, setLocalCategory] = useState(initialCategory);
+  const category = controlledCategory ?? localCategory;
+  const setCategory = onCategoryChange ?? setLocalCategory;
   const [product, setProduct] = useState<Product | null>(null);
   const [open, setOpen] = useState(false);
   const [size, setSize] = useState('');
@@ -26,7 +43,7 @@ export function ReservationMenu({ cafeId }: { cafeId: string }) {
   const filtered = products.filter(
     (p) =>
       (!category || productCategory(p.category) === category) &&
-      (!search || (p.name + ' ' + p.description).includes(search)),
+      (!search || normalizeSearch(p.name + ' ' + p.description).includes(normalizeSearch(search))),
   );
   const selectedSize = product?.sizes.find((s) => s.id === size);
   const price = product
@@ -67,39 +84,55 @@ export function ReservationMenu({ cafeId }: { cafeId: string }) {
     }
   }
   return (
-    <section className="panel reservation-menu" aria-label="منوی رزرو">
+    <section
+      className={'panel reservation-menu' + (variant === 'catalog' ? ' catalog-menu' : '')}
+      aria-label={variant === 'catalog' ? 'منوی کافه' : 'منوی رزرو'}
+    >
       <div className="section-title">
         <div>
-          <h2>برای میزت چه سفارشی آماده کنیم؟</h2>
-          <p>انتخاب غذا اختیاری است؛ سفارش همراه رزرو ثبت می‌شود و پرداخت در کافه است.</p>
+          <h2>{variant === 'catalog' ? 'منو' : 'برای میزت چه سفارشی آماده کنیم؟'}</h2>
+          <p>
+            {variant === 'catalog'
+              ? 'غذا یا نوشیدنی دلخواهت را انتخاب کن.'
+              : 'انتخاب غذا اختیاری است؛ سفارش همراه رزرو ثبت می‌شود و پرداخت در کافه است.'}
+          </p>
         </div>
         <ShoppingBag size={22} />
       </div>
       <div className="search-input full">
         <Search size={18} />
         <input
-          aria-label="جستجوی منوی رزرو"
+          aria-label={variant === 'catalog' ? 'جستجوی منوی کافه' : 'جستجوی منوی رزرو'}
           placeholder="جستجوی غذا یا نوشیدنی"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
-      <div
-        className="category-tabs reservation-categories"
-        role="group"
-        aria-label="دسته‌بندی منوی رزرو"
-      >
-        {['', ...menuCategories(products)].map((c) => (
-          <button
-            key={c}
-            aria-pressed={category === c}
-            className={category === c ? 'active' : ''}
-            onClick={() => setCategory(c)}
-          >
-            {c || 'همه'}
-          </button>
-        ))}
-      </div>
+      {variant === 'catalog' ? (
+        <MenuCategories
+          products={products}
+          value={category}
+          onChange={setCategory}
+          label="دسته‌بندی منوی کافه"
+        />
+      ) : (
+        <div
+          className="category-tabs reservation-categories"
+          role="group"
+          aria-label="دسته‌بندی منوی رزرو"
+        >
+          {['', ...menuCategories(products)].map((c) => (
+            <button
+              key={c}
+              aria-pressed={category === c}
+              className={category === c ? 'active' : ''}
+              onClick={() => setCategory(c)}
+            >
+              {c || 'همه'}
+            </button>
+          ))}
+        </div>
+      )}
       {filtered.length ? (
         <div className="reservation-menu-list">
           {filtered.map((p) => (
@@ -108,21 +141,36 @@ export function ReservationMenu({ cafeId }: { cafeId: string }) {
               <div>
                 <small>{productCategory(p.category)}</small>
                 <h3>{p.name}</h3>
+                {variant === 'catalog' && !p.available && <small>ناموجود</small>}
                 <p>{p.description}</p>
                 <strong>{money(p.price)}</strong>
               </div>
-              <button
-                className="button secondary"
-                disabled={!p.available || !data?.cafes.find((c) => c.id === cafeId)?.active}
-                aria-label={'انتخاب ' + p.name}
-                onClick={(event) => {
-                  opener.current = event.currentTarget;
-                  configure(p);
-                }}
-              >
-                <Plus size={18} />
-                {p.available ? 'انتخاب' : 'ناموجود'}
-              </button>
+              {variant === 'catalog' &&
+              !(
+                data?.cafes.find((c) => c.id === cafeId)?.owner_id &&
+                data?.cafes.find((c) => c.id === cafeId)?.active
+              ) ? (
+                <Link
+                  className="menu-product-add"
+                  href={'/products/' + p.id}
+                  aria-label={'مشاهده ' + p.name}
+                >
+                  <Plus size={18} />
+                </Link>
+              ) : (
+                <button
+                  className="button secondary"
+                  disabled={!p.available || !data?.cafes.find((c) => c.id === cafeId)?.active}
+                  aria-label={'انتخاب ' + p.name}
+                  onClick={(event) => {
+                    opener.current = event.currentTarget;
+                    configure(p);
+                  }}
+                >
+                  <Plus size={18} />
+                  {p.available ? 'انتخاب' : 'ناموجود'}
+                </button>
+              )}
             </article>
           ))}
         </div>
@@ -193,7 +241,7 @@ export function ReservationMenu({ cafeId }: { cafeId: string }) {
             </div>
             <button className="button primary full" onClick={add}>
               <Plus size={18} />
-              افزودن به سفارش رزرو
+              {variant === 'catalog' ? 'افزودن به سبد خرید' : 'افزودن به سفارش رزرو'}
             </button>
           </div>
         )}
@@ -201,7 +249,7 @@ export function ReservationMenu({ cafeId }: { cafeId: string }) {
       <Confirm
         open={Boolean(replace)}
         title="سبد کافه قبلی جایگزین شود؟"
-        description="برای ثبت سفارش این رزرو، محصولات کافه قبلی از سبد حذف می‌شوند."
+        description="برای ثبت سفارش این کافه، محصولات کافه قبلی از سبد حذف می‌شوند."
         onClose={() => setReplace(null)}
         onConfirm={() => {
           if (replace) setCart([replace]);

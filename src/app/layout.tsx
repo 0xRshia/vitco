@@ -4,7 +4,7 @@ import '@fontsource/vazirmatn/500.css';
 import '@fontsource/vazirmatn/600.css';
 import '@fontsource/vazirmatn/700.css';
 import '@fontsource/vazirmatn/800.css';
-import 'leaflet/dist/leaflet.css';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import './globals.css';
 import './ui-foundations.css';
 import './home-profile.css';
@@ -14,6 +14,8 @@ import './discovery-updates.css';
 import './owner-dashboard.css';
 import './reservation-updates.css';
 import './payment-updates.css';
+import './browse-refresh.css';
+import './invoice-payment.css';
 import { Provider } from '@/lib/client';
 export const metadata: Metadata = {
   title: { default: 'ویتکو | قرارِ لحظه‌های خوب', template: '%s | ویتکو' },

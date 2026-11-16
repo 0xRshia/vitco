@@ -19,6 +19,7 @@ test('public views are Persian, RTL, responsive, navigable and free of browser e
     '/settings',
     '/addresses',
     '/payment',
+    '/bill?cafe=vitrin-aala',
     '/rewards',
     '/favorites',
     '/notifications',
@@ -44,7 +45,7 @@ test('public views are Persian, RTL, responsive, navigable and free of browser e
       route + ' horizontal overflow',
     ).toBe(true);
   }
-  await page.goto('/cafes');
+  await page.goto('/cafes?view=list');
   await page.getByRole('textbox', { name: 'جستجوی کافه‌ها' }).fill('پیدا نمی‌شود');
   await expect(page.getByText('کافه‌ای با این مشخصات پیدا نشد')).toBeVisible();
   await page.goto('/settings');

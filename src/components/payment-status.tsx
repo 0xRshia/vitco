@@ -146,7 +146,9 @@ export function PaymentStatus({ order, onUpdated }: { order: Order; onUpdated: (
       )}
       {canPay && order.payment_status === 'unpaid' && (
         <p className="muted">
-          سفارش ثبت شده است؛ کافه پس از تأیید پرداخت می‌تواند آماده‌سازی آن را شروع کند.
+          {order.kind === 'invoice'
+            ? 'فاکتور ثبت شده است؛ پس از تأیید درگاه، رسید تسویه صادر می‌شود.'
+            : 'سفارش ثبت شده است؛ کافه پس از تأیید پرداخت می‌تواند آماده‌سازی آن را شروع کند.'}
         </p>
       )}
       {order.payment_status === 'refund_required' && (

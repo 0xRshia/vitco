@@ -83,11 +83,12 @@ export function quote(user: User, input: Record<string, unknown>) {
     409,
   );
   const mode = text(input.mode, 'روش دریافت', 1, 20);
-  ensure(['delivery', 'pickup', 'dine_in'].includes(mode), 'روش دریافت معتبر نیست.');
   ensure(
-    mode === 'dine_in' || (mode === 'delivery' ? cafe.delivery : cafe.pickup),
-    'این روش دریافت برای کافه فعال نیست.',
+    mode !== 'delivery',
+    'ارسال به آدرس دیگر ارائه نمی‌شود. دریافت از کافه یا رزرو میز را انتخاب کنید.',
   );
+  ensure(['pickup', 'dine_in'].includes(mode), 'روش دریافت معتبر نیست.');
+  ensure(mode === 'dine_in' || cafe.pickup, 'این روش دریافت برای کافه فعال نیست.');
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   let coupon: Coupon | undefined;
   const code = text(input.coupon ?? '', 'کد تخفیف', 0, 40).toUpperCase();
@@ -107,7 +108,7 @@ export function quote(user: User, input: Record<string, unknown>) {
     )?.points || 0;
   const requestedPoints = integer(input.points ?? 0, 'امتیاز همین کافه', 0, balance);
   const pointsUsed = Math.min(requestedPoints, Math.floor((subtotal - discount) / 1000));
-  const deliveryFee = mode === 'delivery' ? cafe.delivery_fee : 0;
+  const deliveryFee = 0;
   return {
     cafe,
     mode: mode as Order['mode'],
@@ -126,12 +127,15 @@ export function createOrder(user: User, input: Record<string, unknown>) {
 // Shared only inside a transaction, so a reservation and its meal order commit together.
 function createOrderRecord(user: User, input: Record<string, unknown>) {
   const requestKey = text(input.request_key, 'شناسه درخواست', 10, 100);
-  const existing = one<{ id: string }>(
-    'SELECT id FROM orders WHERE user_id=? AND request_key=?',
+  const existing = one<{ id: string; kind: string }>(
+    'SELECT id,kind FROM orders WHERE user_id=? AND request_key=?',
     user.id,
     requestKey,
   );
-  if (existing) return existing.id;
+  if (existing) {
+    ensure(existing.kind === 'menu', 'این شناسه برای فاکتور حضوری استفاده شده است.', 409);
+    return existing.id;
+  }
   const q = quote(user, input);
   const paymentMethod = text(input.payment_method ?? 'offline', 'روش پرداخت', 1, 20);
   ensure(['offline', 'zarinpal'].includes(paymentMethod), 'روش پرداخت معتبر نیست.');
@@ -254,6 +258,12 @@ function transitionOrderRecord(user: User, id: string, status: string) {
   const cafe = cafeById(order.cafe_id);
   const owner = cafe.owner_id === user.id;
   ensure(owner || order.user_id === user.id, 'دسترسی مجاز نیست.', 403);
+  if (order.kind === 'invoice')
+    ensure(
+      status === 'cancelled' && order.status === 'pending',
+      'فاکتور حضوری فقط پس از تأیید درگاه تسویه می‌شود و مرحله آماده‌سازی ندارد.',
+      409,
+    );
   if (order.payment_method === 'zarinpal') {
     ensure(
       order.payment_status !== 'pending',
@@ -301,24 +311,26 @@ function transitionOrderRecord(user: User, id: string, status: string) {
       order.cafe_id,
     );
   }
-  if (status === 'completed') {
-    run(
-      'UPDATE users SET points=points+? WHERE id=?',
-      Math.floor(order.total / 10000),
-      order.user_id,
-    );
-    run(
-      'INSERT INTO loyalty_balances (user_id,cafe_id,points) VALUES (?,?,?) ON CONFLICT(user_id,cafe_id) DO UPDATE SET points=points+excluded.points',
-      order.user_id,
-      order.cafe_id,
-      Math.floor(order.total / 10000),
-    );
-  }
+  if (status === 'completed') awardOrderPoints(order);
   notify(
     order.user_id,
     'وضعیت سفارش تغییر کرد',
     'جزئیات جدید سفارش خود را ببینید.',
     '/orders/' + id,
+  );
+}
+// Called once inside the transaction that moves an order to completed.
+export function awardOrderPoints(order: Pick<Order, 'total' | 'user_id' | 'cafe_id'>) {
+  run(
+    'UPDATE users SET points=points+? WHERE id=?',
+    Math.floor(order.total / 10000),
+    order.user_id,
+  );
+  run(
+    'INSERT INTO loyalty_balances (user_id,cafe_id,points) VALUES (?,?,?) ON CONFLICT(user_id,cafe_id) DO UPDATE SET points=points+excluded.points',
+    order.user_id,
+    order.cafe_id,
+    Math.floor(order.total / 10000),
   );
 }
 export function availableSlots(cafe: Cafe, selectedDate: string) {

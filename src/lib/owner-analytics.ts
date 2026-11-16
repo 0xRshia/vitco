@@ -25,7 +25,14 @@ export function ownerAnalytics(
       (input.cafe ? ' AND c.id=?' : '') +
       ' ORDER BY o.created_at DESC,o.rowid DESC',
     ...[user.id, ...(input.cafe ? [input.cafe] : [])],
-  ).map(hydrate<Order>);
+  )
+    .map(hydrate<Order>)
+    .filter(
+      (order) =>
+        order.kind !== 'invoice' ||
+        (order.status === 'completed' &&
+          ['paid', 'refund_required'].includes(order.payment_status)),
+    );
   const inRange = (order: Order) => {
     const time = Date.parse(order.created_at);
     return time >= start && time < end;

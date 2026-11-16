@@ -98,9 +98,11 @@ export function OwnerInsights({ cafes, view }: { cafes: Cafe[]; view: 'crm' | 's
                       <Badge status={customer.latest_order.status} />
                     </div>
                     <p>
-                      {customer.latest_order.items
-                        .map((item) => digits(item.quantity) + ' × ' + item.name)
-                        .join('، ')}
+                      {customer.latest_order.kind === 'invoice'
+                        ? 'پرداخت فاکتور حضوری'
+                        : customer.latest_order.items
+                            .map((item) => digits(item.quantity) + ' × ' + item.name)
+                            .join('، ')}
                     </p>
                     <div className="list-row">
                       <span>

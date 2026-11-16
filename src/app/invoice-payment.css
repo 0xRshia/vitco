@@ -1,0 +1,319 @@
+.invoice-page {
+  max-width: 620px;
+  margin-inline: auto;
+  padding-bottom: 100px;
+}
+.invoice-progress {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  gap: 12px;
+  justify-content: space-between;
+}
+.invoice-progress li {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.invoice-progress li.done {
+  color: var(--accent);
+}
+.invoice-location {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border: 1px solid var(--peach-strong);
+  border-radius: 18px;
+  background: var(--peach);
+  color: var(--accent);
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+.invoice-location small {
+  display: block;
+  font-size: 11px;
+  margin-top: 5px;
+}
+.invoice-amount-card,
+.invoice-card,
+.invoice-total-card {
+  background: var(--surface);
+  border-radius: 20px;
+  padding: 24px;
+}
+.invoice-amount-card > .field > label {
+  font-weight: 600;
+  font-size: 16px;
+}
+.invoice-amount-input {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-block: 20px 0;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 15px;
+}
+.invoice-amount-input input {
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+  border-radius: 0;
+  text-align: center;
+  direction: ltr;
+  font-size: clamp(28px, 6vw, 44px);
+  font-weight: 700;
+  background: transparent;
+}
+.invoice-amount-input > span {
+  color: var(--muted);
+  font-size: 15px;
+}
+.invoice-rial-equivalent {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 12px;
+}
+.invoice-quick-amounts {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+.invoice-quick-amounts > button {
+  border-radius: 24px;
+  background: var(--surface-alt);
+  padding: 8px 13px;
+  font-size: 12px;
+  min-height: 42px;
+}
+.invoice-quick-amounts > .text-link {
+  background: transparent;
+  color: var(--muted);
+}
+.invoice-help {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 24px auto 0;
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 44px;
+}
+.invoice-checkout-bar {
+  margin-top: 28px;
+}
+.invoice-total-card {
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow);
+}
+.invoice-total-card > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.invoice-total-card > strong {
+  font-size: clamp(24px, 5vw, 33px);
+  line-height: 1.8;
+}
+.invoice-total-discount {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.invoice-total-discount del {
+  color: var(--muted);
+}
+.invoice-total-discount > span {
+  background: var(--peach);
+  color: var(--accent);
+  padding: 2px 10px;
+  border-radius: 14px;
+}
+.invoice-total-card > .text-link {
+  width: 100%;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+  margin-top: 6px;
+  justify-content: center;
+}
+.invoice-review > section + section {
+  margin-top: 24px;
+}
+.invoice-review h2 {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+.invoice-benefits > .invoice-card {
+  padding: 4px 20px;
+}
+.invoice-benefit-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding-block: 20px;
+  text-align: start;
+}
+.invoice-benefit-row + .invoice-benefit-row {
+  border-top: 1px solid var(--line);
+}
+.invoice-benefit-row > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.invoice-benefit-row strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+.invoice-benefit-row strong > small {
+  background: var(--sage);
+  color: var(--green);
+  padding: 1px 8px;
+  border-radius: 14px;
+  font-size: 10px;
+}
+.invoice-benefit-row p {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.invoice-benefit-row b {
+  color: var(--accent);
+  font-size: 17px;
+}
+.invoice-feature-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--peach);
+  color: var(--accent);
+}
+.invoice-feature-icon.coupon {
+  color: var(--info);
+  background: var(--lavender);
+}
+.invoice-coupon-note {
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  padding-block: 10px;
+}
+.invoice-gateway {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.invoice-gateway > span {
+  flex: 1;
+}
+.invoice-gateway strong,
+.invoice-gateway small {
+  display: block;
+}
+.invoice-gateway strong {
+  font-size: 14px;
+}
+.invoice-gateway small {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 5px;
+}
+.invoice-gateway.unavailable {
+  color: var(--muted);
+}
+.invoice-gateway input {
+  width: 21px;
+  height: 21px;
+}
+.invoice-saving {
+  color: var(--accent);
+}
+.invoice-final-total {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 18px;
+}
+.invoice-details .list-row {
+  gap: 16px;
+  font-size: 13px;
+}
+.invoice-details .list-row > strong {
+  text-align: end;
+}
+.invoice-terms {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 24px;
+}
+.invoice-terms a {
+  text-decoration: underline;
+}
+.invoice-error {
+  margin-top: 20px;
+}
+@media (max-width: 700px) {
+  .invoice-page {
+    padding-bottom: 120px;
+  }
+  .invoice-page .page-title {
+    margin-bottom: 18px;
+  }
+  .invoice-page .page-title h1 {
+    font-size: 19px;
+  }
+  .invoice-progress {
+    gap: 6px;
+  }
+  .invoice-progress li {
+    font-size: 11px;
+    gap: 5px;
+  }
+  .invoice-amount-card,
+  .invoice-card,
+  .invoice-total-card {
+    padding: 20px 16px;
+  }
+  .invoice-location {
+    padding: 14px;
+    font-size: 12px;
+  }
+  .invoice-quick-amounts {
+    gap: 5px;
+  }
+  .invoice-quick-amounts > button {
+    padding-inline: 10px;
+    font-size: 11px;
+  }
+  .invoice-checkout-bar {
+    position: fixed;
+    z-index: 65;
+    bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+    inset-inline: 0;
+    padding: 12px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    margin: 0;
+  }
+  .invoice-checkout-bar > button {
+    min-height: 50px;
+    border-radius: 13px;
+  }
+}

@@ -37,6 +37,7 @@ import { adjustCategoryPrices } from '@/lib/pricing';
 import { productCategory } from '@/lib/catalog';
 import { zarinpalPublicConfig } from '@/lib/zarinpal';
 import { startPayment, checkPayment, paymentCallback } from '@/lib/payments';
+import { quoteInvoice, createInvoice } from '@/lib/invoices';
 import type { Cafe, CafeTable, Product, Order, Reservation, User, Ticket } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -184,6 +185,10 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       response.headers.set('Cache-Control', 'no-store');
       response.headers.set('Referrer-Policy', 'no-referrer');
       return response;
+    }
+    if (resource === 'invoices' && id === 'quote' && method === 'POST') {
+      limit('invoice-quote:' + (user?.id || request.headers.get('x-real-ip') || 'public'), 60, 60);
+      return json(quoteInvoice(input));
     }
     if (resource === 'bootstrap' && method === 'GET')
       return json({
@@ -430,6 +435,10 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
         total: q.total,
       });
     }
+    if (resource === 'invoices' && !id && method === 'POST') {
+      limit('invoice-create:' + account.id, 15, 60);
+      return json({ id: createInvoice(account, input) }, 201);
+    }
     if (resource === 'payments' && method === 'POST') {
       limit('payment:' + account.id, 15, 60);
       if (!id) return json(await startPayment(account, v.text(input.order_id, 'سفارش', 1, 100)));
@@ -662,12 +671,18 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           opens,
           closes,
           v.integer(input.capacity, 'ظرفیت', 1, 500),
-          v.flag(input.delivery) ? 1 : 0,
+          0,
           v.flag(input.pickup) ? 1 : 0,
-          v.integer(input.delivery_fee ?? 0, 'هزینه ارسال', 0, 10000000),
+          0,
           v.flag(input.active) ? 1 : 0,
           JSON.stringify(images),
           JSON.stringify(tables),
+          v.integer(
+            input.invoice_discount_percent ?? existing?.invoice_discount_percent ?? 0,
+            'درصد تخفیف حضوری',
+            0,
+            99,
+          ),
         ];
         const cafeId = method === 'PUT' ? String(input.id) : randomUUID();
         transaction(() => {
@@ -706,14 +721,14 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
               );
             }
             run(
-              'UPDATE cafes SET name=?,description=?,city=?,address=?,phone=?,image=?,amenities=?,latitude=?,longitude=?,opens=?,closes=?,capacity=?,delivery=?,pickup=?,delivery_fee=?,active=?,images=?,tables=? WHERE id=? AND owner_id=?',
+              'UPDATE cafes SET name=?,description=?,city=?,address=?,phone=?,image=?,amenities=?,latitude=?,longitude=?,opens=?,closes=?,capacity=?,delivery=?,pickup=?,delivery_fee=?,active=?,images=?,tables=?,invoice_discount_percent=? WHERE id=? AND owner_id=?',
               ...values,
               cafeId,
               account.id,
             );
           } else
             run(
-              'INSERT INTO cafes (name,description,city,address,phone,image,amenities,latitude,longitude,opens,closes,capacity,delivery,pickup,delivery_fee,active,images,tables,id,owner_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+              'INSERT INTO cafes (name,description,city,address,phone,image,amenities,latitude,longitude,opens,closes,capacity,delivery,pickup,delivery_fee,active,images,tables,invoice_discount_percent,id,owner_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
               ...values,
               cafeId,
               account.id,

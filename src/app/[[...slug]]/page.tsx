@@ -14,6 +14,7 @@ const routes = [
   'settings',
   'addresses',
   'payment',
+  'bill',
   'rewards',
   'favorites',
   'notifications',

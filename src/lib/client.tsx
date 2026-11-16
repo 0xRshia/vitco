@@ -32,8 +32,6 @@ type Context = {
   cart: CartLine[];
   setCart: (lines: CartLine[]) => void;
   addCart: (line: CartLine) => boolean;
-  mode: 'delivery' | 'pickup';
-  setMode: (mode: 'delivery' | 'pickup') => void;
   toast: (message: string) => void;
   theme: string;
   setTheme: (theme: string) => void;
@@ -45,7 +43,6 @@ export function Provider({ children }: { children: ReactNode }) {
     [loading, setLoading] = useState(true),
     [error, setError] = useState(''),
     [cart, setCartState] = useState<CartLine[]>([]),
-    [mode, setModeState] = useState<'delivery' | 'pickup'>('pickup'),
     [message, setMessage] = useState(''),
     [theme, setThemeState] = useState('light'),
     [revision, setRevision] = useState(0);
@@ -90,7 +87,7 @@ export function Provider({ children }: { children: ReactNode }) {
       const t = localStorage.getItem('vitrin-theme') === 'dark' ? 'dark' : 'light';
       setThemeState(t);
       document.documentElement.dataset.theme = t;
-      setModeState(localStorage.getItem('vitrin-mode') === 'delivery' ? 'delivery' : 'pickup');
+      localStorage.removeItem('vitrin-mode');
     } catch {
       /* Corrupt browser storage never affects server-side data. */
     }
@@ -131,12 +128,6 @@ export function Provider({ children }: { children: ReactNode }) {
     setMessage('به سبد خرید اضافه شد.');
     return true;
   };
-  const setMode = (value: 'delivery' | 'pickup') => {
-    setModeState(value);
-    try {
-      localStorage.setItem('vitrin-mode', value);
-    } catch {}
-  };
   const setTheme = (value: string) => {
     setThemeState(value);
     document.documentElement.dataset.theme = value;
@@ -154,8 +145,6 @@ export function Provider({ children }: { children: ReactNode }) {
         cart,
         setCart,
         addCart,
-        mode,
-        setMode,
         toast: setMessage,
         theme,
         setTheme,

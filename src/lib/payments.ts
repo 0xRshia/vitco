@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { one, run, transaction } from './database';
 import { hash, notify } from './auth';
-import { cafeById } from './commerce';
+import { awardOrderPoints, cafeById } from './commerce';
 import { AppError, ensure, text } from './validation';
 import type { Order, PaymentStatus, Reservation, User } from './types';
 import {
@@ -154,6 +154,23 @@ function finalize(paymentId: string, refId: string): Resolution {
         order.user_id,
         'پرداخت نیازمند پیگیری است',
         'وجه پرداختی ثبت شد، اما سفارش قابل پذیرش نیست. برای بررسی بازگشت وجه با کافه یا پشتیبانی تماس بگیرید.',
+        '/orders/' + order.id,
+      );
+    } else if (order.kind === 'invoice') {
+      run("UPDATE orders SET status='completed' WHERE id=?", order.id);
+      awardOrderPoints(order);
+      const cafe = cafeById(order.cafe_id);
+      if (cafe.owner_id)
+        notify(
+          cafe.owner_id,
+          'فاکتور حضوری تسویه شد',
+          'پرداخت فاکتور حضوری در زرین‌پال تأیید شد. رسید را در بخش فروش ببینید.',
+          '/dashboard?tab=orders',
+        );
+      notify(
+        order.user_id,
+        'فاکتور حضوری تسویه شد',
+        'پرداخت فاکتور شما در زرین‌پال تأیید و رسید تسویه ثبت شد.',
         '/orders/' + order.id,
       );
     } else

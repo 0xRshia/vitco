@@ -97,17 +97,20 @@ test('menu categories follow the selected location and café event paths use rea
   );
 
   await page.goto('/menu?category=' + encodeURIComponent('قهوه'));
-  const menuCategories = page.getByRole('group', { name: 'دسته‌بندی منو', exact: true });
+  const menuCategories = page.getByRole('group', {
+    name: 'فیلتر کافه بر اساس دسته‌بندی منو',
+    exact: true,
+  });
   for (const category of MENU_CATEGORIES)
     await expect(menuCategories.getByRole('button', { name: category, exact: true })).toBeVisible();
   await expect(menuCategories.getByRole('button', { name: 'قهوه', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
-  await expect(page.getByRole('heading', { name: coffeeName, exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: burgerName, exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: cafes[0].name, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: cafes[1].name, exact: true })).toHaveCount(0);
 
-  await page.goto('/cafes?category=' + encodeURIComponent('برگر'));
+  await page.goto('/cafes?view=list&category=' + encodeURIComponent('برگر'));
   await page.getByRole('combobox', { name: 'موقعیت کافه', exact: true }).selectOption('شیراز');
   await expect(page).toHaveURL(/city=/);
   const parameters = new URL(page.url()).searchParams;

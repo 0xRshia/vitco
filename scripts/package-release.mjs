@@ -61,6 +61,17 @@ if (status.error || status.status !== 0 || status.stdout.trim())
 const standalone = join(project, '.next/standalone');
 const publicAssets = join(project, 'public');
 const staticAssets = join(project, '.next/static');
+const { dependencies } = JSON.parse(await readFile(join(project, 'package.json'), 'utf8'));
+const mapVersion = dependencies['maplibre-gl'];
+if (!/^\d+\.\d+\.\d+$/.test(mapVersion))
+  throw new Error('Pin the MapLibre runtime version before packaging.');
+const workerName = 'maplibre-gl-worker.mjs';
+const expectedWorker = await readFile(join(project, 'node_modules/maplibre-gl/dist', workerName));
+const releaseWorker = await readFile(join(publicAssets, 'vendor/maplibre', mapVersion, workerName));
+if (!expectedWorker.equals(releaseWorker))
+  throw new Error(
+    'The public map worker does not match the locked runtime. Rebuild the application.',
+  );
 const inside = (root, path) => {
   const pathFromRoot = relative(root, path);
   return !isAbsolute(pathFromRoot) && pathFromRoot !== '..' && !pathFromRoot.startsWith('..' + sep);

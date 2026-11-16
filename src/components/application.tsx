@@ -51,6 +51,7 @@ import {
 } from './account';
 import { CartView, OrdersView, ReserveView, ReservationsView } from './orders';
 import { DashboardView } from './dashboard';
+import { InvoicePaymentView } from './invoice-payment';
 
 const navigation = [
   { href: '/', label: 'خانه', icon: Home },
@@ -96,6 +97,9 @@ export function Application() {
       break;
     case 'cart':
       view = <CartView />;
+      break;
+    case 'bill':
+      view = <InvoicePaymentView key={query.get('cafe') || ''} />;
       break;
     case 'orders':
       view = <OrdersView id={id} />;
@@ -165,7 +169,11 @@ export function Application() {
       </div>
     );
   return (
-    <div className="app-shell">
+    <div
+      className={
+        'app-shell' + (page === 'cafes' && !id && query.get('view') !== 'list' ? ' map-mode' : '')
+      }
+    >
       <a href="#main-content" className="skip-link">
         رفتن به محتوای اصلی
       </a>
@@ -345,7 +353,7 @@ export function Application() {
         ].map((n) => {
           const active =
             n.href === '/cafes'
-              ? ['cafes', 'menu', 'products', 'favorites'].includes(page)
+              ? ['cafes', 'menu', 'products', 'favorites', 'bill'].includes(page)
               : n.href === '/profile'
                 ? ['profile', 'settings', 'addresses', 'payment', 'rewards'].includes(page)
                 : path === n.href || (n.href !== '/' && path.startsWith(n.href + '/'));

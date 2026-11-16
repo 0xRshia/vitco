@@ -31,7 +31,7 @@ import { api, useApp, useResource } from '@/lib/client';
 import { PersianDateInput, PersianTimeInput } from './persian-date';
 import { LocationMap, hasPosition } from './location-map';
 import { money, digits, dateLabel, daysAhead, today, statusLabels, amenities } from '@/lib/format';
-import type { Address, Order, Reservation, CafeTable, CartLine } from '@/lib/types';
+import type { Order, Reservation, CafeTable, CartLine } from '@/lib/types';
 import { ReservationMenu } from './reservation-menu';
 import {
   PaymentMethodPicker,
@@ -71,12 +71,11 @@ const orderModeLabels = {
   dine_in: 'مصرف در کافه',
 };
 export function CartView() {
-  const { data, cart, setCart, mode, setMode, refresh, toast } = useApp(),
+  const { data, cart, setCart, refresh, toast } = useApp(),
     router = useRouter(),
     query = useSearchParams();
-  const addresses = useResource<{ addresses: Address[] }>(data?.user ? 'addresses' : null);
-  const [address, setAddress] = useState(''),
-    [couponInput, setCouponInput] = useState(''),
+  const mode = 'pickup';
+  const [couponInput, setCouponInput] = useState(''),
     [coupon, setCoupon] = useState(''),
     [usePoints, setUsePoints] = useState(false),
     [note, setNote] = useState(''),
@@ -122,19 +121,12 @@ export function CartView() {
       active = false;
     };
   }, [quotePayload, data?.user?.id]);
-  useEffect(() => {
-    if (!address && addresses.data?.addresses.length)
-      setAddress(
-        (addresses.data.addresses.find((a) => a.is_default) || addresses.data.addresses[0]).id,
-      );
-  }, [addresses.data, address]);
   async function checkout() {
     setBusy(true);
     setError('');
     try {
       const payload = {
         ...JSON.parse(quotePayload),
-        address_id: address,
         note,
         pickup_at: pickup ? pickup + 'T' + pickupTime + ':00+03:30' : '',
         payment_method: selectedPaymentMethod,
@@ -182,24 +174,10 @@ export function CartView() {
       />
       <div className="checkout-layout">
         <div className="stack">
-          <div className="segmented">
-            <button
-              className={mode === 'delivery' ? 'active' : ''}
-              aria-pressed={mode === 'delivery'}
-              onClick={() => setMode('delivery')}
-            >
-              <Bike size={18} />
-              ارسال به آدرس
-            </button>
-            <button
-              className={mode === 'pickup' ? 'active' : ''}
-              aria-pressed={mode === 'pickup'}
-              onClick={() => setMode('pickup')}
-            >
-              <Store size={18} />
-              تحویل از کافه
-            </button>
-          </div>
+          <p className="pickup-service-label">
+            <Store size={18} />
+            تحویل از کافه
+          </p>
           <section>
             <SectionTitle title="انتخاب‌های خوش‌طعم تو" href="/menu" label="افزودن محصول" />
             <div className="stack">
@@ -234,53 +212,21 @@ export function CartView() {
             </div>
           </section>
           <section className="panel form">
-            <h2>{mode === 'delivery' ? 'تحویل به کدام آدرس؟' : 'دریافت از کافه'}</h2>
-            {mode === 'delivery' ? (
-              <>
-                {addresses.loading ? (
-                  <Loading />
-                ) : addresses.error ? (
-                  <ErrorBox message={addresses.error} />
-                ) : addresses.data?.addresses.length ? (
-                  <select
-                    aria-label="آدرس تحویل"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                  >
-                    {addresses.data.addresses.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.title} · {a.city}، {a.street}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <p className="muted">برای دریافت سفارش، یک آدرس ثبت کنید.</p>
-                )}
-                <Link className="text-link" href="/addresses">
-                  <Plus size={16} />
-                  مدیریت آدرس‌ها
-                </Link>
-              </>
-            ) : (
-              <>
-                <p className="icon-text">
-                  <MapPin size={18} />
-                  {cafe?.city}، {cafe?.address}
-                </p>
-                <button className="checkout-choice" onClick={() => setPickupOpen(true)}>
-                  <Clock3 size={20} />
-                  <span>
-                    <strong>زمان دریافت</strong>
-                    <small>
-                      {pickup
-                        ? dateLabel(pickup) + '، ساعت ' + digits(pickupTime)
-                        : 'اولین زمان ممکن'}
-                    </small>
-                  </span>
-                  <ChevronLeft size={18} />
-                </button>
-              </>
-            )}
+            <h2>دریافت از کافه</h2>
+            <p className="icon-text">
+              <MapPin size={18} />
+              {cafe?.city}، {cafe?.address}
+            </p>
+            <button className="checkout-choice" onClick={() => setPickupOpen(true)}>
+              <Clock3 size={20} />
+              <span>
+                <strong>زمان دریافت</strong>
+                <small>
+                  {pickup ? dateLabel(pickup) + '، ساعت ' + digits(pickupTime) : 'اولین زمان ممکن'}
+                </small>
+              </span>
+              <ChevronLeft size={18} />
+            </button>
             <Field label="یادداشت برای کافه (اختیاری)">
               <textarea
                 maxLength={500}
@@ -304,10 +250,6 @@ export function CartView() {
                     ? 'در حال محاسبه…'
                     : '—'}
             </strong>
-          </div>
-          <div className="list-row">
-            <span>هزینه ارسال</span>
-            <strong>{quote ? money(quote.delivery_fee) : data?.user ? '—' : 'پس از ورود'}</strong>
           </div>
           {Boolean(quote?.discount) && (
             <div className="list-row green">
@@ -371,9 +313,7 @@ export function CartView() {
                     : '—'}
             </strong>
           </div>
-          {!data?.user && (
-            <p className="guest-quote-note">مبلغ نهایی و هزینه ارسال پس از ورود محاسبه می‌شود.</p>
-          )}
+          {!data?.user && <p className="guest-quote-note">مبلغ نهایی پس از ورود محاسبه می‌شود.</p>}
           <PaymentMethodPicker
             available={onlineAvailable}
             sandbox={Boolean(data?.onlinePayment?.sandbox)}
@@ -384,10 +324,7 @@ export function CartView() {
           {error && <ErrorBox message={error} />}
           <button
             className="button primary full"
-            disabled={
-              busy ||
-              (Boolean(data?.user) && (!quote || quoting || (mode === 'delivery' && !address)))
-            }
+            disabled={busy || (Boolean(data?.user) && (!quote || quoting))}
             onClick={() =>
               data?.user
                 ? void checkout()
@@ -524,7 +461,8 @@ export function OrdersView({ id }: { id?: string }) {
       (tab === 'active'
         ? !['completed', 'cancelled'].includes(o.status)
         : ['completed', 'cancelled'].includes(o.status)) &&
-      (mode === 'all' || o.mode === mode),
+      (mode === 'all' ||
+        (mode === 'invoice' ? o.kind === 'invoice' : o.kind !== 'invoice' && o.mode === mode)),
   );
   const order = resource.data?.order;
   const steps =
@@ -534,9 +472,19 @@ export function OrdersView({ id }: { id?: string }) {
   return (
     <div className="vitco-orders">
       <PageTitle
-        title={id ? 'جزئیات سفارش' : 'سفارش‌های من'}
+        title={
+          id
+            ? order?.kind === 'invoice'
+              ? 'رسید فاکتور حضوری'
+              : 'جزئیات سفارش'
+            : 'سفارش‌ها و پرداخت‌های من'
+        }
         description={
-          id ? 'از ثبت تا تحویل، همراه سفارش شما.' : 'طعم‌های قبلی و سفارش‌هایی که در راه‌اند.'
+          id
+            ? order?.kind === 'invoice'
+              ? 'مبلغ، تخفیف و وضعیت تسویه فاکتور.'
+              : 'از ثبت تا تحویل، همراه سفارش شما.'
+            : 'پیگیری سفارش‌ها و فاکتورهای حضوری.'
         }
         back={id ? '/orders' : undefined}
       />
@@ -583,7 +531,7 @@ export function OrdersView({ id }: { id?: string }) {
                   <p className="order-reference">
                     شناسه سفارش <bdi>{order.id.slice(0, 8)}</bdi>
                   </p>
-                  {order.status !== 'cancelled' && (
+                  {order.kind !== 'invoice' && order.status !== 'cancelled' && (
                     <ol className="order-timeline" aria-label="مراحل آماده‌سازی سفارش">
                       {steps.map((s, i) => (
                         <li
@@ -613,7 +561,13 @@ export function OrdersView({ id }: { id?: string }) {
                   </button>
                 </section>
                 <section className="panel">
-                  <h2>اقلام سفارش</h2>
+                  <h2>{order.kind === 'invoice' ? 'فاکتور حضوری کافه' : 'اقلام سفارش'}</h2>
+                  {order.kind === 'invoice' && (
+                    <p className="muted">
+                      مبلغ این فاکتور بر اساس صورت‌حساب کافه وارد شده است؛ اقلام از منوی ویتکو
+                      انتخاب نشده‌اند.
+                    </p>
+                  )}
                   {order.items.map((i) => (
                     <div key={i.key} className="receipt-item">
                       <div>
@@ -629,7 +583,13 @@ export function OrdersView({ id }: { id?: string }) {
                   ))}
                 </section>
                 <section className="panel">
-                  <h2>{order.mode === 'delivery' ? 'نشانی تحویل' : orderModeLabels[order.mode]}</h2>
+                  <h2>
+                    {order.kind === 'invoice'
+                      ? 'پرداخت در محل کافه'
+                      : order.mode === 'delivery'
+                        ? 'نشانی تحویل'
+                        : orderModeLabels[order.mode]}
+                  </h2>
                   <p>
                     {order.address
                       ? `${order.address.city}، ${order.address.street}`
@@ -652,13 +612,15 @@ export function OrdersView({ id }: { id?: string }) {
               <aside className="order-summary panel">
                 <h2>رسید سفارش</h2>
                 <div className="list-row">
-                  <span>محصولات</span>
+                  <span>{order.kind === 'invoice' ? 'مبلغ فاکتور' : 'محصولات'}</span>
                   <strong>{money(order.subtotal)}</strong>
                 </div>
-                <div className="list-row">
-                  <span>ارسال</span>
-                  <strong>{money(order.delivery_fee)}</strong>
-                </div>
+                {order.mode === 'delivery' && (
+                  <div className="list-row">
+                    <span>ارسال</span>
+                    <strong>{money(order.delivery_fee)}</strong>
+                  </div>
+                )}
                 <div className="list-row">
                   <span>تخفیف و امتیاز</span>
                   <strong>{money(order.discount + order.points_used * 1000)}</strong>
@@ -682,12 +644,13 @@ export function OrdersView({ id }: { id?: string }) {
                       لغو سفارش
                     </button>
                   )}
-                  {['completed', 'cancelled'].includes(order.status) && (
-                    <button className="button primary" onClick={() => setReorder(order)}>
-                      <RotateCcw size={17} />
-                      سفارش دوباره
-                    </button>
-                  )}
+                  {order.kind !== 'invoice' &&
+                    ['completed', 'cancelled'].includes(order.status) && (
+                      <button className="button primary" onClick={() => setReorder(order)}>
+                        <RotateCcw size={17} />
+                        سفارش دوباره
+                      </button>
+                    )}
                 </div>
               </aside>
             </div>
@@ -742,9 +705,12 @@ export function OrdersView({ id }: { id?: string }) {
               </div>
               <select value={mode} aria-label="نوع سفارش" onChange={(e) => setMode(e.target.value)}>
                 <option value="all">همه سفارش‌ها</option>
-                <option value="delivery">ارسال به آدرس</option>
+                {(resource.data?.orders || []).some((order) => order.mode === 'delivery') && (
+                  <option value="delivery">سفارش‌های ارسالی گذشته</option>
+                )}
                 <option value="pickup">تحویل از کافه</option>
                 <option value="dine_in">مصرف در کافه</option>
+                <option value="invoice">فاکتور حضوری</option>
               </select>
             </div>
             {orders.length ? (
@@ -752,13 +718,24 @@ export function OrdersView({ id }: { id?: string }) {
                 {orders.map((o) => (
                   <Link className="order-card panel" key={o.id} href={'/orders/' + o.id}>
                     <span className="action-icon peach">
-                      {o.mode === 'delivery' ? <Bike size={25} /> : <Store size={25} />}
+                      {o.kind === 'invoice' ? (
+                        <ReceiptText size={25} />
+                      ) : o.mode === 'delivery' ? (
+                        <Bike size={25} />
+                      ) : (
+                        <Store size={25} />
+                      )}
                     </span>
                     <div>
                       <h3>{o.cafe_name}</h3>
-                      <p>{o.items.map((i) => i.name).join('، ')}</p>
+                      <p>
+                        {o.kind === 'invoice'
+                          ? 'پرداخت فاکتور حضوری'
+                          : o.items.map((i) => i.name).join('، ')}
+                      </p>
                       <small>
-                        {orderModeLabels[o.mode]} · {dateLabel(o.created_at, true)}
+                        {o.kind === 'invoice' ? 'تسویه در کافه' : orderModeLabels[o.mode]} ·{' '}
+                        {dateLabel(o.created_at, true)}
                       </small>
                       {o.payment_method === 'zarinpal' && (
                         <small>{paymentStatusLabels[o.payment_status]}</small>

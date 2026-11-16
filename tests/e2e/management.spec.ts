@@ -100,18 +100,18 @@ test('separate customer and owner accounts enforce prices, capacity, privacy and
     items: [
       { product_id: productId, quantity: 2, size_id: 'large', addon_ids: ['milk'], price: 1 },
     ],
-    mode: 'delivery',
+    mode: 'pickup',
     address_id: addressId,
     coupon: 'COFFEE20',
     points: 0,
-    request_key: `delivery-${unique}`,
+    request_key: `pickup-${unique}`,
   };
   const quote = await customer.post('/api/quote', { data: orderData });
   expect(await quote.json()).toMatchObject({
     subtotal: 260000,
     discount: 52000,
-    delivery_fee: 20000,
-    total: 228000,
+    delivery_fee: 0,
+    total: 208000,
   });
   const placed = await customer.post('/api/orders', { data: orderData });
   expect(placed.status()).toBe(201);
@@ -122,11 +122,11 @@ test('separate customer and owner accounts enforce prices, capacity, privacy and
   expect(
     (await customer.patch('/api/orders/' + orderId, { data: { status: 'completed' } })).status(),
   ).toBe(400);
-  for (const status of ['preparing', 'delivering', 'completed']) {
+  for (const status of ['preparing', 'ready', 'completed']) {
     expect((await owner.patch('/api/orders/' + orderId, { data: { status } })).status()).toBe(200);
   }
   const bootstrap = await (await customer.get('/api/bootstrap')).json();
-  expect(bootstrap.rewards.find((r: { cafe_id: string }) => r.cafe_id === cafeId).points).toBe(22);
+  expect(bootstrap.rewards.find((r: { cafe_id: string }) => r.cafe_id === cafeId).points).toBe(20);
   expect(
     (
       await customer.post('/api/tickets', {

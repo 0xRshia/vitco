@@ -355,7 +355,11 @@ export function DashboardView() {
                           </h3>
                           <Badge status={o.status} />
                         </div>
-                        <p>{o.items.map((i) => `${digits(i.quantity)} × ${i.name}`).join('، ')}</p>
+                        <p>
+                          {o.kind === 'invoice'
+                            ? 'فاکتور حضوری؛ بدون سفارش از منو'
+                            : o.items.map((i) => `${digits(i.quantity)} × ${i.name}`).join('، ')}
+                        </p>
                         {o.payment_method === 'zarinpal' && (
                           <p className={'payment-status-label payment-status-' + o.payment_status}>
                             {paymentStatusLabels[o.payment_status]}
@@ -375,11 +379,13 @@ export function DashboardView() {
                         )}
                         <div className="list-row">
                           <span>
-                            {o.mode === 'dine_in'
-                              ? 'سفارش میز'
-                              : o.mode === 'pickup'
-                                ? 'تحویل از کافه'
-                                : 'ارسال به آدرس'}{' '}
+                            {o.kind === 'invoice'
+                              ? 'پرداخت فاکتور حضوری'
+                              : o.mode === 'dine_in'
+                                ? 'سفارش میز'
+                                : o.mode === 'pickup'
+                                  ? 'تحویل از کافه'
+                                  : 'ارسال به آدرس'}{' '}
                             · {dateLabel(o.created_at, true)}
                           </span>
                           <strong>{money(o.total)}</strong>
@@ -398,15 +404,17 @@ export function DashboardView() {
                           )}
                           {o.status === 'pending' && (
                             <>
-                              <button
-                                className="button primary compact"
-                                disabled={
-                                  o.payment_method === 'zarinpal' && o.payment_status !== 'paid'
-                                }
-                                onClick={() => status('orders', o.id, 'preparing')}
-                              >
-                                تأیید و آماده‌سازی
-                              </button>
+                              {o.kind !== 'invoice' && (
+                                <button
+                                  className="button primary compact"
+                                  disabled={
+                                    o.payment_method === 'zarinpal' && o.payment_status !== 'paid'
+                                  }
+                                  onClick={() => status('orders', o.id, 'preparing')}
+                                >
+                                  تأیید و آماده‌سازی
+                                </button>
+                              )}
                               <button
                                 className="button danger-outline compact"
                                 disabled={paymentIsPending(o)}
@@ -747,7 +755,10 @@ export function DashboardView() {
                       </div>
                     )}
                     {order.pickup_at && <p>زمان دریافت: {dateLabel(order.pickup_at, true)}</p>}
-                    {order.mode === 'dine_in' && (
+                    {order.kind === 'invoice' && (
+                      <p>فاکتور حضوری؛ مبلغ بر اساس صورت‌حساب کافه وارد شده است.</p>
+                    )}
+                    {order.kind !== 'invoice' && order.mode === 'dine_in' && (
                       <p>سفارش برای پذیرایی در کافه و متصل به رزرو میز است.</p>
                     )}
                     <p>{order.note}</p>
@@ -821,7 +832,6 @@ function CafeEditor({ cafe, onDone }: { cafe: Cafe | null; onDone: () => Promise
           latitude,
           longitude,
           amenities: form.getAll('amenities'),
-          delivery: form.get('delivery') === 'on',
           pickup: form.get('pickup') === 'on',
           active: form.get('active') === 'on',
         });
@@ -1018,12 +1028,18 @@ function CafeEditor({ cafe, onDone }: { cafe: Cafe | null; onDone: () => Promise
           <input type="checkbox" name="pickup" defaultChecked={cafe?.pickup ?? true} />
           تحویل سفارش از کافه
         </label>
-        <label className="check-row">
-          <input type="checkbox" name="delivery" defaultChecked={cafe?.delivery} />
-          ارسال در محدوده شهر کافه
-        </label>
-        <Field label="هزینه ارسال (تومان)">
-          <input name="delivery_fee" type="number" min={0} defaultValue={cafe?.delivery_fee || 0} />
+        <Field
+          label="درصد تخفیف فاکتور حضوری"
+          hint="از صفر تا ۹۹ درصد؛ صفر یعنی بدون تخفیف خودکار. اگر مشتری کد تخفیف داشته باشد، تخفیف بزرگ‌تر اعمال می‌شود و درصدها جمع نمی‌شوند."
+        >
+          <input
+            name="invoice_discount_percent"
+            type="number"
+            min={0}
+            max={99}
+            step={1}
+            defaultValue={cafe?.invoice_discount_percent || 0}
+          />
         </Field>
         <label className="check-row">
           <input type="checkbox" name="active" defaultChecked={cafe?.active ?? true} />

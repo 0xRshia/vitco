@@ -168,21 +168,26 @@ test('order transitions enforce ownership and reward completed orders exactly on
   );
   assert.throws(() => transitionOrder(owner, id, 'completed'));
 });
-test('delivery requires the buyers own address in the cafe city', () => {
-  assert.throws(() => createOrder(buyer, { ...base(), mode: 'delivery', address_id: 'missing' }));
+test('new delivery orders are rejected even when an address exists; saved addresses are preserved', () => {
+  assert.throws(
+    () => createOrder(buyer, { ...base(), mode: 'delivery', address_id: 'missing' }),
+    /دیگر ارائه نمی‌شود/,
+  );
   run(
     'INSERT INTO addresses (id,user_id,title,city,street,receiver,phone) VALUES (?,?,?,?,?,?,?)',
     'other-address',
-    stranger.id,
+    buyer.id,
     'خانه',
     'تهران',
     'خیابان تست',
     'گیرنده',
     '09123456789',
   );
-  assert.throws(() =>
-    createOrder(buyer, { ...base(), mode: 'delivery', address_id: 'other-address' }),
+  assert.throws(
+    () => createOrder(buyer, { ...base(), mode: 'delivery', address_id: 'other-address' }),
+    /دیگر ارائه نمی‌شود/,
   );
+  assert.ok(one('SELECT id FROM addresses WHERE id=? AND user_id=?', 'other-address', buyer.id));
 });
 test('booking capacity, duplicate submissions, cancellation and past slots are enforced', () => {
   const input = {

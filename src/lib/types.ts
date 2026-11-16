@@ -27,6 +27,7 @@ export type Cafe = {
   delivery: boolean;
   pickup: boolean;
   delivery_fee: number;
+  invoice_discount_percent: number;
   active: boolean;
   source: string;
   rating: number | null;
@@ -87,6 +88,7 @@ export type Order = {
   cafe_id: string;
   cafe_name: string;
   customer_name?: string;
+  kind: 'menu' | 'invoice';
   mode: 'delivery' | 'pickup' | 'dine_in';
   reservation_id: string;
   status: string;
@@ -104,6 +106,16 @@ export type Order = {
   note: string;
   created_at: string;
   updated_at: string;
+};
+export type InvoiceQuote = {
+  cafe_id: string;
+  subtotal: number;
+  automatic_percent: number;
+  coupon_percent: number;
+  applied_percent: number;
+  coupon: string;
+  discount: number;
+  total: number;
 };
 export type Reservation = {
   id: string;

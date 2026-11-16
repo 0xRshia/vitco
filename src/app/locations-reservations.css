@@ -13,14 +13,6 @@
   font-family: inherit;
   background: var(--surface-alt);
 }
-.location-map .leaflet-control-attribution {
-  direction: ltr;
-  font-size: 10px;
-}
-.location-map .leaflet-tooltip {
-  font-family: inherit;
-  direction: rtl;
-}
 .location-map a {
   color: #21567d;
 }
@@ -49,36 +41,6 @@
   white-space: nowrap;
   box-shadow: 0 2px 12px #0002;
 }
-.vitco-map-pin {
-  background: none;
-  border: none;
-}
-.vitco-map-pin > span {
-  display: block;
-  width: 30px;
-  height: 30px;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  background: #333336;
-  border: 3px solid white;
-  box-shadow: 0 3px 8px #0005;
-}
-.vitco-map-pin > span::after {
-  content: '';
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  inset: 8px;
-  border-radius: 50%;
-  background: white;
-}
-.vitco-map-pin.is-selected > span {
-  background: #935426;
-}
-.vitco-map-pin:focus-visible {
-  outline: 3px solid #935426;
-  outline-offset: 5px;
-}
 .location-picker {
   display: grid;
   gap: 12px;
@@ -100,56 +62,6 @@
 }
 .location-selection > small {
   color: var(--muted);
-}
-.cafe-map-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  gap: 20px;
-  align-items: start;
-}
-.cafe-map-layout .location-map {
-  height: 560px;
-}
-.cafe-map-list {
-  display: grid;
-  gap: 12px;
-  max-height: 562px;
-  overflow: auto;
-}
-.cafe-map-list .section-title {
-  margin: 0;
-}
-.cafe-map-list h2 {
-  font-size: 17px;
-}
-.map-cafe-card {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: 16px;
-  overflow: hidden;
-}
-.map-cafe-card.selected {
-  border-color: var(--accent);
-}
-.map-cafe-card > button {
-  display: grid;
-  text-align: start;
-  gap: 8px;
-  padding: 18px;
-  width: 100%;
-}
-.map-cafe-card > button span {
-  font-size: 12px;
-  color: var(--muted);
-}
-.map-cafe-actions {
-  display: flex;
-  gap: 8px;
-  padding: 0 16px 16px;
-}
-.map-cafe-actions > a {
-  flex: 1;
-  font-size: 12px;
 }
 .reserve-page .reservation-layout {
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
@@ -274,18 +186,8 @@
   margin: 12px 0 20px;
 }
 @media (max-width: 760px) {
-  .cafe-map-layout,
   .reserve-page .reservation-layout {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .cafe-map-layout {
-    gap: 16px;
-  }
-  .cafe-map-layout .location-map {
-    height: 360px;
-  }
-  .cafe-map-list {
-    max-height: none;
   }
   .reserve-page .reservation-form {
     padding: 18px 14px;

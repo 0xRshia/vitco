@@ -25,14 +25,18 @@ customer account can be used to exercise the customer flow.
 
 ## Included views and behavior
 
-- Responsive home, search, café directory/filter/interactive map, café detail, real
-  reviews, favorites, menus, product sizes/addons/notes, and QR/link navigation.
+- Responsive home with invoice-payment guidance, full-screen café map, compact
+  searchable/filterable/sortable café lists, café details, real reviews, favorites,
+  compact menus, product sizes/addons/notes, and QR/link navigation. The shared
+  MapLibre/OpenFreeMap renderer supports Persian labels, clustering, light/dark
+  themes, geolocation and a draggable result drawer.
 - Email registration/login, optional SMS login/verification, optional email
   password recovery, profile/avatar editing, password changes, and logout.
-- Persistent cart, delivery/pickup selection, address CRUD/map selection/geolocation, scheduled
-  pickup, coupons, café-specific loyalty points, and server-calculated checkout.
-- Order confirmation, current/history filters, delivery/pickup tracking, cancellation,
-  reorder, printable receipt, and support.
+- Persistent cart, scheduled pickup, coupons, café-specific loyalty points, and
+  server-calculated checkout. Address delivery has been removed from new orders;
+  existing addresses and historical delivery receipts remain intact.
+- Order confirmation, current/history filters, pickup tracking, cancellation,
+  reorder, printable receipts, and support.
 - Persian calendar, real available reservation slots, party size, booking requests,
   confirmation/cancellation/history, and owner capacity management.
 - Events, registration/cancellation with transactional capacity checks,
@@ -52,6 +56,13 @@ customer account can be used to exercise the customer flow.
 - Optional Zarinpal payments, enabled only for an explicitly configured merchant,
   environment, café scope, and callback origin. The current local setup does not
   enable live payment.
+- In-person invoice payment: select a café, enter its bill amount in toman, review
+  real automatic/coupon discounts, and select the configured online gateway.
+  Owners set the automatic percentage. The larger discount applies without
+  stacking; paid invoices settle only after provider verification.
+
+See [the map, catalogue and invoice refresh](docs/browse-invoice-refresh.md) for
+the current browse flow, preserved behavior and validation.
 
 See [the expansion requirements and verification](docs/cafe-management-expansion.md)
 for report definitions and integration details.
@@ -88,10 +99,10 @@ into the repository. Its checkerboard screenshots are not used as app assets.
 
 SMS and recovery screens explicitly explain when their service is not configured.
 No verification codes are exposed through the API or logs. Codes expire and are
-rate-limited. External delivery was not exercised because no provider credentials
-were supplied.
+rate-limited. No external SMS, recovery email or bank transaction was performed
+during local validation.
 
-Payment **at the café or on delivery** remains available. Optional Zarinpal online
+Payment **at the café** remains available for menu orders and reservations. Optional Zarinpal online
 payment requires complete valid configuration and a public HTTPS callback origin
 for live use. All enabled cafés use one configured merchant account; separate café
 payouts and automatic split settlement are not implemented. Cancelling a paid
@@ -113,11 +124,13 @@ also cancels its pending meal order. Customers must contact the café if meal
 preparation has already started. An ongoing event requires an explicit end time;
 existing events with no end time are not assigned an invented duration.
 
-Sales reports use completed orders placed in the selected range; item revenue
+Sales reports use completed orders and settled invoices placed in the selected range; item revenue
 uses historical item prices before discounts. The new-customer metric counts
 the first non-cancelled Vitco order at each café, not an external referral or
 visit. Detailed report intervals are limited to ten years. Bulk tax/inflation
 adjustments change base menu prices; they do not calculate a separate tax line.
+Unpaid invoice drafts are excluded from analytics. Settled invoices never create
+fictional product quantities or item/customer frequencies.
 
 QR camera scanning uses the browser's `BarcodeDetector` when
 available; entering a valid local café/product link also works.
@@ -183,7 +196,8 @@ points/refunds, ownership, state transitions, duplicate submissions, reservation
 capacity, café-scoped loyalty, and password verification. Browser tests run the
 production server on port 3100 with a **separate temporary database**, checking
 public routes, desktop/mobile layout, auth, café/menu setup, checkout, reservations,
-addresses, favorites, product options, coupons, delivery, event capacity, support
+addresses, favorites, product options, coupons, rejection of new address delivery,
+invoice quotes and discounts, map selection/drawer/filters, event capacity, support
 replies, reviews, and security boundaries between customer and owner accounts.
 Test accounts never enter the app's normal database.
 
@@ -196,6 +210,7 @@ npm run start
 ```
 
 Place behind an HTTPS reverse proxy, set `APP_ORIGIN`, persist `data/`, configure
-provider credentials as needed, and register real café accounts. The deployment at
-https://dev.rshi.info is described in [deployment operations](docs/deployment.md).
-No remote push or other GitHub mutation has been performed.
+provider credentials as needed, and register real café accounts. The current preview
+at https://vitco.hmghadam.com and automatic main-branch deployments are described
+in [preview operations](docs/vitco-preview-deployment.md). The earlier dev.rshi.info
+deployment is documented separately in [historical deployment operations](docs/deployment.md).
