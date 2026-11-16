@@ -34,7 +34,7 @@ function attribution() {
   return {
     onAdd() {
       element = document.createElement('div');
-      element.className = 'maplibregl-ctrl maplibregl-ctrl-attrib';
+      element.className = 'maplibregl-ctrl map-source-credit';
       element.dir = 'ltr';
       element.setAttribute('aria-label', 'منابع نقشه');
       for (const [index, credit] of credits.entries()) {
@@ -228,7 +228,10 @@ export function MapCanvas({
       markers.forEach((marker) => marker.remove());
       markers = [];
       const groups = fullscreen
-        ? clusterCafes(points, (point) => map.project([point.longitude, point.latitude]))
+        ? clusterCafes(
+            points.filter((point) => map.getBounds().contains([point.longitude, point.latitude])),
+            (point) => map.project([point.longitude, point.latitude]),
+          )
         : points.map((point) => ({ ...point, items: [point] }));
       for (const group of groups) {
         const point = group.items.find((point) => point.id === selected) || group.items[0];
@@ -255,18 +258,25 @@ export function MapCanvas({
         const button = document.createElement('button');
         button.type = 'button';
         button.dataset.cafeId = point.id;
-        button.className = 'cafe-map-marker' + (point.id === selected ? ' selected' : '');
-        button.setAttribute('aria-label', group.items.map((item) => item.name).join('؛ '));
+        const clustered = group.items.length > 1 && point.id !== selected;
+        button.className =
+          'cafe-map-marker' + (point.id === selected ? ' selected' : clustered ? ' clustered' : '');
+        button.setAttribute(
+          'aria-label',
+          clustered ? digits(group.items.length) + ' کافه؛ بزرگ‌نمایی' : point.name,
+        );
         button.setAttribute('aria-pressed', String(point.id === selected));
-        if (point.image) {
+        if (point.image && !clustered) {
           const image = document.createElement('img');
           image.src = point.image;
           image.alt = '';
           button.append(image);
         }
-        const text = document.createElement('span');
-        text.textContent = point.name;
-        button.append(text);
+        if (!clustered) {
+          const text = document.createElement('span');
+          text.textContent = point.name;
+          button.append(text);
+        }
         if (group.items.length > 1) {
           const count = document.createElement('b');
           count.textContent = digits(group.items.length);
@@ -274,11 +284,13 @@ export function MapCanvas({
         }
         button.addEventListener('click', (event) => {
           event.stopPropagation();
-          if (group.items.length > 1 && map.getZoom() < 18)
+          if (clustered && map.getZoom() < 18) {
             map.jumpTo({
               center: [group.longitude, group.latitude],
               zoom: Math.min(18, map.getZoom() + 3),
             });
+            return;
+          }
           callbacks.current.onSelect?.(point.id);
         });
         markers.push(
@@ -331,7 +343,7 @@ export function MapCanvas({
         height = host.current!.clientHeight;
       const pad = fullscreen
         ? {
-            top: height <= 420 ? 128 : height <= 500 ? 180 : 235,
+            top: height <= 500 ? 64 : 132,
             bottom: width <= 900 ? Math.min(365, height * 0.43) + 24 : 50,
             left: 30,
             right: width > 900 ? 460 : 30,

@@ -78,7 +78,7 @@ export function quote(user: User, input: Record<string, unknown>) {
   });
   const cafe = cafeById(cafeId);
   ensure(
-    cafe.owner_id && cafe.active,
+    cafe.owner_id && cafe.active && !cafe.is_demo,
     'سفارش آنلاین این کافه فعال نیست. منو فقط برای مشاهده در دسترس است.',
     409,
   );
@@ -433,6 +433,11 @@ export function createReservation(user: User, input: Record<string, unknown>) {
       table?.name || '',
     );
     const items = list(input.items ?? [], 40);
+    ensure(
+      !cafe.is_demo ||
+        (!items.length && (!input.payment_method || input.payment_method === 'offline')),
+      'رزرو آزمایشی بدون سفارش و پرداخت انجام می‌شود.',
+    );
     if (items.length) {
       ensure(
         items.every(
@@ -453,7 +458,9 @@ export function createReservation(user: User, input: Record<string, unknown>) {
     notify(
       user.id,
       'درخواست رزرو ثبت شد',
-      'درخواست شما برای کافه ارسال شد و در انتظار تأیید است.',
+      cafe.is_demo
+        ? 'درخواست آزمایشی ذخیره شد؛ رزرو واقعی انجام نشده است.'
+        : 'درخواست شما برای کافه ارسال شد و در انتظار تأیید است.',
       '/reservations',
     );
     notify(

@@ -1,0 +1,197 @@
+[
+  {
+    "place_id": "ChIJFbvvAwAHjj8R8cv8q46O7O8",
+    "source_url": "https://invara.top/places/ChIJFbvvAwAHjj8R8cv8q46O7O8",
+    "name": "1001 night coffee",
+    "address": "Tehran, District 2",
+    "latitude": 35.7863269,
+    "longitude": 51.3811045,
+    "categories": ["cafe", "food", "point_of_interest", "store", "establishment"],
+    "tags": [],
+    "cover_image_url": null,
+    "menu_url": null,
+    "photos": []
+  },
+  {
+    "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+    "source_url": "https://invara.top/places/ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+    "name": "1453 cafe",
+    "address": "تجریش، استان تهران",
+    "latitude": 35.8020112,
+    "longitude": 51.42203079999999,
+    "categories": ["cafe", "establishment", "food", "point_of_interest"],
+    "tags": [
+      {
+        "kind": "tag",
+        "code": "outdoor_space_available",
+        "label_fa": "دارای فضای بیرون",
+        "filterable": false,
+        "source": "place"
+      },
+      {
+        "kind": "tag",
+        "code": "spacious",
+        "label_fa": "فضای دلباز",
+        "filterable": false,
+        "source": "place"
+      }
+    ],
+    "cover_image_url": "https://media.invara.top/media/place_photos/photos/8d41abef08139645_thumb.webp",
+    "menu_url": null,
+    "photos": [
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "original",
+        "position": 0,
+        "url": "https://media.invara.top/media/place_photos/photos/8d41abef08139645.webp",
+        "raw": "https://media.invara.top/media/place_photos/photos/8d41abef08139645.webp"
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "original",
+        "position": 1,
+        "url": "https://media.invara.top/media/place_photos/photos/b98e1a099637ecac.webp",
+        "raw": "https://media.invara.top/media/place_photos/photos/b98e1a099637ecac.webp"
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "original",
+        "position": 2,
+        "url": "https://media.invara.top/media/place_photos/photos/8e15acc1894a23b4.webp",
+        "raw": "https://media.invara.top/media/place_photos/photos/8e15acc1894a23b4.webp"
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "original",
+        "position": 3,
+        "url": "https://media.invara.top/media/place_photos/photos/b18b4b5e4e892966.webp",
+        "raw": "https://media.invara.top/media/place_photos/photos/b18b4b5e4e892966.webp"
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "original",
+        "position": 4,
+        "url": "https://media.invara.top/media/place_photos/photos/76bc1f05d2a91c0f.webp",
+        "raw": "https://media.invara.top/media/place_photos/photos/76bc1f05d2a91c0f.webp"
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "original",
+        "position": 5,
+        "url": "https://media.invara.top/media/place_photos/photos/5c2b981ffcff0435.webp",
+        "raw": "https://media.invara.top/media/place_photos/photos/5c2b981ffcff0435.webp"
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "original",
+        "position": 6,
+        "url": "https://media.invara.top/media/place_photos/photos/c42d94628ea43499.webp",
+        "raw": "https://media.invara.top/media/place_photos/photos/c42d94628ea43499.webp"
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "original",
+        "position": 7,
+        "url": "https://media.invara.top/media/place_photos/photos/fc4a6f9c200d2b03.webp",
+        "raw": "https://media.invara.top/media/place_photos/photos/fc4a6f9c200d2b03.webp"
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "cover",
+        "position": -1,
+        "url": "https://media.invara.top/media/place_photos/photos/8d41abef08139645_thumb.webp",
+        "raw": null
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "rendered",
+        "position": -1,
+        "url": "https://media.invara.top/media/place_photos/photos/8d41abef08139645.webp?retry=1",
+        "raw": null
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "rendered",
+        "position": -1,
+        "url": "https://media.invara.top/media/place_photos/photos/b98e1a099637ecac.webp?retry=1",
+        "raw": null
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "rendered",
+        "position": -1,
+        "url": "https://media.invara.top/media/place_photos/photos/8e15acc1894a23b4.webp?retry=1",
+        "raw": null
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "rendered",
+        "position": -1,
+        "url": "https://media.invara.top/media/place_photos/photos/b18b4b5e4e892966.webp?retry=1",
+        "raw": null
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "rendered",
+        "position": -1,
+        "url": "https://media.invara.top/media/place_photos/photos/76bc1f05d2a91c0f.webp?retry=1",
+        "raw": null
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "rendered",
+        "position": -1,
+        "url": "https://media.invara.top/media/place_photos/photos/5c2b981ffcff0435.webp?retry=1",
+        "raw": null
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "rendered",
+        "position": -1,
+        "url": "https://media.invara.top/media/place_photos/photos/c42d94628ea43499.webp?retry=1",
+        "raw": null
+      },
+      {
+        "place_id": "ChIJ4X7VTgAHjj8Ri43v0lQBAoo",
+        "review_id": null,
+        "kind": "venue",
+        "role": "rendered",
+        "position": -1,
+        "url": "https://media.invara.top/media/place_photos/photos/fc4a6f9c200d2b03.webp?retry=1",
+        "raw": null
+      }
+    ]
+  }
+]

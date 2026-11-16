@@ -1,4 +1,5 @@
 'use client';
+import { RESERVATION_DEMO_ID } from '@/lib/reservation-demo';
 import { useState } from 'react';
 import { CreditCard, RotateCcw, ShieldCheck } from 'lucide-react';
 import { api, useApp } from '@/lib/client';
@@ -12,7 +13,10 @@ export function onlinePaymentForCafe(
   cafeId: string | undefined,
 ) {
   return Boolean(
-    config?.available && cafeId && (config.all_cafes || config.cafe_ids.includes(cafeId)),
+    config?.available &&
+    cafeId &&
+    cafeId !== RESERVATION_DEMO_ID &&
+    (config.all_cafes || config.cafe_ids.includes(cafeId)),
   );
 }
 

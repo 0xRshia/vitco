@@ -2,6 +2,7 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import source from './source-catalog.json';
+import { configureReservationDemo } from './reservation-demo';
 
 const globalDatabase = globalThis as unknown as { vitrinDatabase?: DatabaseSync };
 export function database() {
@@ -39,6 +40,9 @@ export function database() {
   for (const [table, column, definition] of [
     ['cafes', 'images', "TEXT NOT NULL DEFAULT '[]'"],
     ['cafes', 'tables', "TEXT NOT NULL DEFAULT '[]'"],
+    ['cafes', 'directory_source', "TEXT NOT NULL DEFAULT ''"],
+    ['cafes', 'external_menu_url', "TEXT NOT NULL DEFAULT ''"],
+    ['cafes', 'is_demo', 'INTEGER NOT NULL DEFAULT 0'],
     [
       'cafes',
       'invoice_discount_percent',
@@ -58,6 +62,7 @@ export function database() {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
   db.exec(`
+    CREATE TABLE IF NOT EXISTS cafe_directory_sync (source TEXT PRIMARY KEY, synced_at TEXT NOT NULL, cafe_count INTEGER NOT NULL);
     CREATE UNIQUE INDEX IF NOT EXISTS orders_reservation ON orders(reservation_id) WHERE reservation_id <> '';
     CREATE INDEX IF NOT EXISTS orders_cafe_created ON orders(cafe_id,created_at);
     CREATE TABLE IF NOT EXISTS price_adjustments (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id), cafe_id TEXT NOT NULL REFERENCES cafes(id), category TEXT NOT NULL, reason TEXT NOT NULL, mode TEXT NOT NULL, amount REAL NOT NULL, changes TEXT NOT NULL, created_at TEXT NOT NULL);
@@ -115,6 +120,7 @@ export function database() {
       );
     }
   globalDatabase.vitrinDatabase = db;
+  configureReservationDemo(db);
   return db;
 }
 export function all<T>(sql: string, ...params: SQLInputValue[]): T[] {
@@ -153,6 +159,7 @@ const booleanColumns = new Set([
   'is_default',
   'read',
   'joined',
+  'is_demo',
 ]);
 export function hydrate<T>(row: unknown): T {
   const record = row as Record<string, unknown>;

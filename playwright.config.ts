@@ -31,6 +31,10 @@ export default defineConfig({
       ZARINPAL_MERCHANT_ID: '',
       ZARINPAL_ENV: '',
       ZARINPAL_CAFE_IDS: '',
+      CAFE_DIRECTORY_FILE: join(process.cwd(), 'tests/fixtures/hmghadam-cafes.json'),
+      CAFE_DIRECTORY_USERNAME: '',
+      CAFE_DIRECTORY_PASSWORD: '',
+      RESERVATION_DEMO_ENABLED: '1',
     },
   },
 });

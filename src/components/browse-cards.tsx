@@ -76,7 +76,7 @@ export function CafeCard({
         </span>
         <span className="cafe-row-address">
           <MapPin size={13} />
-          {cafe.city} · {cafe.address}
+          {[cafe.city, cafe.address].filter(Boolean).join(' · ') || 'آدرس در منبع ثبت نشده'}
         </span>
         <span className="cafe-row-price">
           {price !== null ? 'منو از ' + money(price) : 'منو هنوز ثبت نشده'}
@@ -96,6 +96,8 @@ export function CafeCard({
         </Link>
       )}
       <div className="cafe-row-tags">
+        {cafe.is_demo && <span>آزمایشی · رزرو واقعی نیست</span>}
+        {cafe.directory_source === 'hmghadam' && <span>اطلاعات همقدم · رزرو غیرفعال</span>}
         {cafe.owner_id && cafe.active && cafe.invoice_discount_percent > 0 && (
           <span className="invoice-discount-tag">
             {digits(cafe.invoice_discount_percent)}٪ تخفیف حضوری
@@ -104,7 +106,7 @@ export function CafeCard({
         {cafe.amenities.slice(0, 3).map((key) => (
           <span key={key}>{amenities[key] || key}</span>
         ))}
-        {!cafe.owner_id && <span>مشاهده منو</span>}
+        {!cafe.owner_id && products.length > 0 && <span>مشاهده منو</span>}
       </div>
       {selected && (
         <div className="map-cafe-details">

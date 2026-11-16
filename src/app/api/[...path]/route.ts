@@ -38,6 +38,7 @@ import { productCategory } from '@/lib/catalog';
 import { zarinpalPublicConfig } from '@/lib/zarinpal';
 import { startPayment, checkPayment, paymentCallback } from '@/lib/payments';
 import { quoteInvoice, createInvoice } from '@/lib/invoices';
+import { syncCafeDirectory, directoryStatus } from '@/lib/cafe-directory';
 import type { Cafe, CafeTable, Product, Order, Reservation, User, Ticket } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -190,8 +191,10 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       limit('invoice-quote:' + (user?.id || request.headers.get('x-real-ip') || 'public'), 60, 60);
       return json(quoteInvoice(input));
     }
+    if (['bootstrap', 'cafes'].includes(resource) && method === 'GET') await syncCafeDirectory();
     if (resource === 'bootstrap' && method === 'GET')
       return json({
+        directory: directoryStatus(),
         onlinePayment: zarinpalPublicConfig(),
         user,
         rewards: user

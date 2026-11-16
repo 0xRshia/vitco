@@ -4,7 +4,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import {
   ArrowLeft,
-  ArrowDownWideNarrow,
   ChevronDown,
   Home,
   List,
@@ -17,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/lib/client';
 import { digits, amenities } from '@/lib/format';
-import { productCategory } from '@/lib/catalog';
+import { menuCategories, productCategory } from '@/lib/catalog';
 import {
   cafeSortLabels,
   discoverCafes,
@@ -29,7 +28,6 @@ import {
 import type { Cafe } from '@/lib/types';
 import { CafeCard } from './browse-cards';
 import { MapCanvas, type MapBounds as Bounds } from './map-canvas';
-import { MenuCategories } from './menu-categories';
 import { Empty, Field, LoginGate, Modal, PageTitle } from './ui';
 
 type Camera = { points: GeoPoint[]; zoom?: number; revision: number };
@@ -59,8 +57,8 @@ export function CafeExplorer({
   });
   const [filters, setFilters] = useState<CafeFilters>(readFilters),
     [draft, setDraft] = useState(filters);
-  const [filterOpen, setFilterOpen] = useState(false),
-    [sortOpen, setSortOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(40);
   const [origin, setOrigin] = useState<GeoPoint | null>(null),
     [bounds, setBounds] = useState<Bounds | null>(null);
   const [locating, setLocating] = useState(false),
@@ -86,6 +84,7 @@ export function CafeExplorer({
     [source, data?.products, filters, origin],
   );
   const mapped = useMemo(() => cafes.filter((c): c is MappedCafe => hasCoordinates(c)), [cafes]);
+  const unmappedCount = cafes.filter((c) => !c.is_demo && !hasCoordinates(c)).length;
   const active = cafes.find((c) => c.id === selected);
   const within = mapped.filter(
     (c) =>
@@ -100,14 +99,24 @@ export function CafeExplorer({
     : mapped.length
       ? within
       : cafes;
-  const cities = [...new Set(source.map((c) => c.city))].sort((a, b) => a.localeCompare(b, 'fa'));
+  const cities = [...new Set(source.map((c) => c.city).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, 'fa'),
+  );
+  const demo = data?.cafes.find((c) => c.is_demo && c.active);
+  const directoryNotice =
+    data?.directory?.status === 'stale'
+      ? 'آخرین اطلاعات ذخیره‌شده نمایش داده می‌شود؛ اطلاعات تازه هنوز دریافت نشده است.'
+      : data?.directory?.status === 'unavailable'
+        ? 'اطلاعات کافه‌های همقدم هنوز دریافت نشده است. کمی بعد دوباره تلاش کنید.'
+        : '';
   const activeCount =
     Number(Boolean(filters.city)) +
     Number(Boolean(filters.category)) +
     filters.amenities.length +
     Number(filters.online) +
-    Number(filters.discount);
-  const headerClearance = height <= 420 ? 128 : height <= 500 ? 180 : 235;
+    Number(filters.discount) +
+    Number(filters.sort !== 'recommended');
+  const headerClearance = height <= 500 ? 64 : 132;
   const maximumDrawer = Math.max(80, height - headerClearance - 16);
   const snaps = {
     collapsed: Math.min(92, maximumDrawer),
@@ -123,6 +132,9 @@ export function CafeExplorer({
     observer.observe(page.current);
     return () => observer.disconnect();
   }, [mapView]);
+  useEffect(() => {
+    setVisibleCount(40);
+  }, [filters, bounds]);
   useEffect(() => {
     if (selected && !active) setSelected('');
   }, [selected, active]);
@@ -251,61 +263,32 @@ export function CafeExplorer({
             <X size={18} />
           </button>
         )}
-      </form>
-      <div className="explorer-filter-bar">
         <button
-          className={activeCount ? 'selected' : ''}
+          type="button"
+          className={'explorer-filter-trigger' + (activeCount ? ' selected' : '')}
+          aria-label={'فیلترها' + (activeCount ? ' · ' + digits(activeCount) + ' فعال' : '')}
           onClick={() => {
             setDraft(filters);
             setFilterOpen(true);
           }}
         >
-          <SlidersHorizontal size={17} />
-          فیلترها{activeCount > 0 && <span>{digits(activeCount)}</span>}
+          <SlidersHorizontal size={20} />
+          {activeCount > 0 && <span>{digits(activeCount)}</span>}
         </button>
-        <button onClick={() => setSortOpen(true)}>
-          <ArrowDownWideNarrow size={17} />
-          {cafeSortLabels[filters.sort]}
-        </button>
-        <label className="explorer-city">
-          <MapPin size={16} />
-          <select
-            aria-label="موقعیت کافه"
-            value={filters.city}
-            onChange={(event) => update({ city: event.target.value })}
-          >
-            <option value="">همه شهرها</option>
-            {cities.map((city) => (
-              <option key={city}>{city}</option>
-            ))}
-          </select>
-        </label>
-        {!favorites &&
-          (mapView ? (
-            <button onClick={() => update({}, 'list')}>
-              <List size={17} />
-              فهرست
-            </button>
-          ) : (
-            <Link
-              href={
-                '/cafes?' +
-                new URLSearchParams(
-                  [...query].filter(([key]) => key !== 'view' && key !== 'cafe'),
-                ).toString()
-              }
-            >
-              <Map size={17} />
-              نقشه
-            </Link>
-          ))}
-      </div>
-      <MenuCategories
-        products={data?.products || []}
-        value={filters.category}
-        label="فیلتر کافه بر اساس دسته‌بندی منو"
-        onChange={(category) => update({ category })}
-      />
+      </form>
+      {!mapView && !favorites && (
+        <Link
+          className="text-link explorer-view-link"
+          href={
+            '/cafes?' +
+            new URLSearchParams(
+              [...query].filter(([key]) => key !== 'view' && key !== 'cafe'),
+            ).toString()
+          }
+        >
+          <Map size={17} /> نمایش روی نقشه
+        </Link>
+      )}
     </>
   );
   const sheets = (
@@ -325,6 +308,34 @@ export function CafeExplorer({
               <option value="">همه شهرها</option>
               {cities.map((city) => (
                 <option key={city}>{city}</option>
+              ))}
+            </select>
+          </Field>
+          {source.some((c) => !c.city) && (
+            <small className="muted">
+              شهر بعضی کافه‌ها در منبع مشخص نشده است؛ برای دیدن همه، «همه شهرها» را انتخاب کن.
+            </small>
+          )}
+          <Field label="مرتب‌سازی براساس">
+            <select
+              value={draft.sort}
+              onChange={(event) => setDraft({ ...draft, sort: event.target.value as CafeSort })}
+            >
+              {Object.entries(cafeSortLabels).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="دسته‌بندی منو">
+            <select
+              value={draft.category}
+              onChange={(event) => setDraft({ ...draft, category: event.target.value })}
+            >
+              <option value="">همه طعم‌ها</option>
+              {menuCategories(data?.products || []).map((category) => (
+                <option key={category}>{category}</option>
               ))}
             </select>
           </Field>
@@ -364,12 +375,36 @@ export function CafeExplorer({
               onChange={(event) => setDraft({ ...draft, discount: event.target.checked })}
             />
           </label>
+          {mapView && (
+            <button
+              className="button secondary"
+              onClick={() => {
+                update(draft);
+                setCamera((current) => ({
+                  points: discoverCafes(source, data?.products || [], draft, origin).filter(
+                    (c): c is MappedCafe => hasCoordinates(c),
+                  ),
+                  revision: (current?.revision || 0) + 1,
+                }));
+                setSnap('preview');
+                setFilterOpen(false);
+              }}
+            >
+              نمایش همه کافه‌ها روی نقشه
+            </button>
+          )}
+          {demo && (
+            <Link className="text-link" href={'/reserve?cafe=' + demo.id}>
+              آزمایش رزرو میز در کافه آزمایشی
+            </Link>
+          )}
           <div className="explorer-sheet-actions">
             <button
               className="button primary"
               onClick={() => {
                 update(draft);
                 setFilterOpen(false);
+                if (draft.sort === 'distance' && !origin) locate();
               }}
             >
               اعمال فیلترها
@@ -384,6 +419,7 @@ export function CafeExplorer({
                   amenities: [],
                   online: false,
                   discount: false,
+                  sort: 'recommended',
                 })
               }
             >
@@ -391,30 +427,6 @@ export function CafeExplorer({
             </button>
           </div>
         </div>
-      </Modal>
-      <Modal
-        open={sortOpen}
-        title="مرتب‌سازی براساس"
-        presentation="sheet"
-        onClose={() => setSortOpen(false)}
-      >
-        <fieldset className="explorer-sort-options">
-          {Object.entries(cafeSortLabels).map(([key, label]) => (
-            <label className="explorer-filter-option" key={key}>
-              {label}
-              <input
-                type="radio"
-                name="cafe-sort"
-                checked={filters.sort === key}
-                onChange={() => {
-                  update({ sort: key as CafeSort });
-                  setSortOpen(false);
-                  if (key === 'distance' && !origin) locate();
-                }}
-              />
-            </label>
-          ))}
-        </fieldset>
       </Modal>
     </>
   );
@@ -440,15 +452,28 @@ export function CafeExplorer({
             {locationError}
           </p>
         )}
+        {directoryNotice && (
+          <p className="notice" role="status">
+            {directoryNotice}
+          </p>
+        )}
         <div className="results-meta">
           <strong>{digits(cafes.length)} کافه</strong>
           <span>{cafeSortLabels[filters.sort]}</span>
         </div>
         <div className="cafe-directory-list">
-          {cafes.map((cafe) => (
+          {cafes.slice(0, visibleCount).map((cafe) => (
             <CafeCard key={cafe.id} cafe={cafe} origin={origin} />
           ))}
         </div>
+        {cafes.length > visibleCount && (
+          <button
+            className="button secondary full"
+            onClick={() => setVisibleCount((count) => count + 40)}
+          >
+            نمایش کافه‌های بیشتر
+          </button>
+        )}
         {!cafes.length && (
           <Empty
             title="کافه‌ای با این مشخصات پیدا نشد"
@@ -484,9 +509,13 @@ export function CafeExplorer({
             <Home size={21} />
           </Link>
           <h1>کافه‌های اطراف</h1>
-          <Link className="icon-button" href="/menu" aria-label="فهرست کافه‌ها">
+          <button
+            className="icon-button"
+            onClick={() => update({}, 'list')}
+            aria-label="فهرست کافه‌ها"
+          >
             <List size={21} />
-          </Link>
+          </button>
         </div>
         {controls}
       </header>
@@ -499,14 +528,6 @@ export function CafeExplorer({
           onClick={locate}
         >
           <LocateFixed size={23} />
-        </button>
-        <button
-          onClick={() => {
-            setCamera((current) => ({ points: mapped, revision: (current?.revision || 0) + 1 }));
-            setSnap('preview');
-          }}
-        >
-          نمایش همه کافه‌ها
         </button>
       </div>
       {locationError && (
@@ -575,15 +596,25 @@ export function CafeExplorer({
           ref={list}
           hidden={snap === 'collapsed'}
         >
-          {!active && cafes.length > mapped.length && (
+          {directoryNotice && (
+            <p className="explorer-unmapped" role="status">
+              {directoryNotice}
+            </p>
+          )}
+          {demo && !active && (
+            <Link className="text-link explorer-demo-link" href={'/reserve?cafe=' + demo.id}>
+              آزمایش رزرو میز
+            </Link>
+          )}
+          {!active && unmappedCount > 0 && (
             <p className="explorer-unmapped">
-              {digits(cafes.length - mapped.length)} کافه هنوز موقعیت ثبت‌شده ندارند.{' '}
+              {digits(unmappedCount)} کافه هنوز موقعیت ثبت‌شده ندارند.{' '}
               <button className="text-link" onClick={() => update({}, 'list')}>
                 دیدن فهرست
               </button>
             </p>
           )}
-          {results.map((cafe) => (
+          {results.slice(0, visibleCount).map((cafe) => (
             <CafeCard
               key={cafe.id}
               cafe={cafe}
@@ -592,6 +623,14 @@ export function CafeExplorer({
               onSelect={() => select(cafe.id)}
             />
           ))}
+          {results.length > visibleCount && (
+            <button
+              className="button secondary full"
+              onClick={() => setVisibleCount((count) => count + 40)}
+            >
+              نمایش کافه‌های بیشتر
+            </button>
+          )}
           {!results.length && (
             <div className="explorer-empty">
               <MapPin size={25} />

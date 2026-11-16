@@ -34,6 +34,7 @@ import {
   X,
 } from 'lucide-react';
 import { api, useApp, useResource } from '@/lib/client';
+import { reservationDemoNotice } from '@/lib/reservation-demo';
 import { CafeExplorer } from './cafe-explorer';
 import { CafeCard, ProductCard, FavoriteButton } from './browse-cards';
 import { ReservationMenu } from './reservation-menu';
@@ -344,6 +345,11 @@ export function CafeView({ id }: { id: string }) {
         back="/cafes"
         action={<FavoriteButton id={id} />}
       />
+      {cafe.is_demo && (
+        <p className="notice" role="note">
+          {reservationDemoNotice}
+        </p>
+      )}
       <div className="cafe-detail-top">
         <div className="cafe-gallery">
           <Media className="cafe-cover" src={photos[0] || ''} alt={cafe.name} kind="store" />
@@ -370,7 +376,7 @@ export function CafeView({ id }: { id: string }) {
           </div>
         </div>
         <div className="panel cafe-information">
-          <span className="eyebrow">یک قرار تازه در {cafe.city}</span>
+          {cafe.city && <span className="eyebrow">یک قرار تازه در {cafe.city}</span>}
           <h2>{cafe.name}</h2>
           <p>
             <MapPin size={18} />
@@ -384,23 +390,35 @@ export function CafeView({ id }: { id: string }) {
           )}
           {cafe.owner_id ? (
             <div className="button-row">
-              <Link href={'/reserve?cafe=' + id} className="button primary">
-                <CalendarDays size={18} />
-                رزرو میز
-              </Link>
-              <a className="button secondary" href={'tel:' + cafe.phone}>
-                <Phone size={18} />
-                تماس
-              </a>
+              {cafe.active && (
+                <Link href={'/reserve?cafe=' + id} className="button primary">
+                  <CalendarDays size={18} />
+                  رزرو میز
+                </Link>
+              )}
+              {!cafe.active && <p className="notice">رزرو این کافه در حال حاضر غیرفعال است.</p>}
+              {cafe.phone && (
+                <a className="button secondary" href={'tel:' + cafe.phone}>
+                  <Phone size={18} />
+                  تماس
+                </a>
+              )}
             </div>
           ) : (
             <div className="source-note">
               اطلاعات این کافه از{' '}
               <a href={cafe.source} target="_blank" rel="noreferrer">
-                ویترین کافه
+                {cafe.directory_source === 'hmghadam'
+                  ? 'این‌ورا، از طریق داده‌های همقدم'
+                  : 'ویترین کافه'}
               </a>{' '}
               دریافت شده است. رزرو و سفارش آنلاین این کافه در این سامانه فعال نیست.
             </div>
+          )}
+          {cafe.external_menu_url && (
+            <a className="text-link" href={cafe.external_menu_url} target="_blank" rel="noreferrer">
+              مشاهده منو در منبع اصلی
+            </a>
           )}
           {cafe.latitude !== null && cafe.longitude !== null && (
             <a
@@ -415,16 +433,18 @@ export function CafeView({ id }: { id: string }) {
           )}
         </div>
       </div>
-      <Link className="cafe-invoice-entry" href={'/bill?cafe=' + id}>
-        <span className="invoice-entry-icon">
-          <ReceiptText size={25} />
-        </span>
-        <span>
-          <strong>پرداخت صورت‌حساب حضوری</strong>
-          <small>مبلغ فاکتور را وارد کن، تخفیف‌ها را ببین و پرداخت کن</small>
-        </span>
-        <ArrowLeft size={20} />
-      </Link>
+      {!cafe.is_demo && (
+        <Link className="cafe-invoice-entry" href={'/bill?cafe=' + id}>
+          <span className="invoice-entry-icon">
+            <ReceiptText size={25} />
+          </span>
+          <span>
+            <strong>پرداخت صورت‌حساب حضوری</strong>
+            <small>مبلغ فاکتور را وارد کن، تخفیف‌ها را ببین و پرداخت کن</small>
+          </span>
+          <ArrowLeft size={20} />
+        </Link>
+      )}
       <nav className="cafe-main-actions" aria-label="خدمات اصلی کافه">
         {cafe.owner_id && cafe.active ? (
           <Link href={'/reserve?cafe=' + id} className="panel cafe-main-action">

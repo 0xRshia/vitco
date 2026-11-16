@@ -1,3 +1,4 @@
+import { RESERVATION_DEMO_ID } from './reservation-demo';
 import { AppError, ensure, integer, text } from './validation';
 
 export type ZarinpalConfig = {
@@ -86,6 +87,7 @@ export function zarinpalPublicConfig(): ZarinpalPublicConfig {
   };
 }
 export function isCafeOnlinePayable(cafeId: string) {
+  if (cafeId === RESERVATION_DEMO_ID) return false;
   const config = getZarinpalConfig();
   return Boolean(config && (config.cafeIds === '*' || config.cafeIds.includes(cafeId)));
 }

@@ -80,54 +80,34 @@
   width: 32px;
   height: 40px;
 }
-.explorer-filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow-x: auto;
-  padding-block: 14px 8px;
-  scrollbar-width: none;
-}
-.explorer-filter-bar > button,
-.explorer-filter-bar > a,
-.explorer-city {
-  display: inline-flex;
+.explorer-search .explorer-filter-trigger {
+  position: relative;
+  width: 44px;
   flex-shrink: 0;
-  align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: var(--surface);
-  font-size: 12px;
-  white-space: nowrap;
-}
-.explorer-filter-bar > button.selected {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.explorer-filter-bar > button > span {
-  background: var(--peach);
-  padding-inline: 6px;
-  border-radius: 10px;
-}
-.explorer-city select {
-  border: 0;
-  padding: 0 2px;
+  border-inline-start: 1px solid var(--line);
   border-radius: 0;
-  width: auto;
-  max-width: 125px;
-  font-size: 12px;
-  background: transparent;
-  box-shadow: none;
-  height: 26px;
-  min-height: 0;
+  margin-inline-start: 2px;
 }
-.directory-controls .shared-menu-categories,
-.explorer-floating-header .shared-menu-categories {
-  margin-block: 6px;
-  gap: 8px;
+.explorer-filter-trigger.selected {
+  color: var(--accent);
+}
+.explorer-filter-trigger > span {
+  position: absolute;
+  top: -2px;
+  inset-inline-end: -3px;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+}
+.explorer-view-link {
+  margin-block: 12px 6px;
+}
+.explorer-demo-link {
+  margin-bottom: 12px;
+  font-size: 12px;
 }
 .shared-menu-categories > button {
   font-size: 12px;
@@ -447,15 +427,10 @@ body:has(.map-mode) {
   font-family: inherit;
 }
 .cafe-explorer-canvas .maplibregl-ctrl-top-left {
-  top: 260px;
+  top: 146px;
   left: 6px;
   border: 0;
   box-shadow: 0 2px 12px #0002;
-}
-.cafe-explorer-canvas .maplibregl-ctrl-attrib {
-  font-size: 10px;
-  max-width: 220px;
-  margin-bottom: 3px;
 }
 .cafe-map-marker-host {
   border: 0;
@@ -480,6 +455,19 @@ body:has(.map-mode) {
 .cafe-map-marker.selected {
   background: var(--accent);
   border-color: var(--peach-strong);
+}
+.cafe-map-marker.clustered {
+  width: 40px;
+  min-height: 40px;
+  padding: 4px;
+  border: 2px solid var(--peach-strong);
+  background: var(--surface);
+  color: var(--accent);
+}
+.cafe-map-marker.clustered b {
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
 }
 .cafe-map-marker img {
   width: 28px;
@@ -538,52 +526,18 @@ body:has(.map-mode) {
   background: var(--surface);
   box-shadow: 0 2px 12px #0001;
 }
-.explorer-floating-header .shared-menu-categories {
-  scrollbar-width: none;
-}
-.explorer-floating-header .shared-menu-categories button {
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-.explorer-floating-header .shared-menu-categories button.active {
-  background: var(--primary);
-}
 .explorer-map-actions {
   position: absolute;
   z-index: 500;
-  left: 16px;
+  right: 16px;
   display: flex;
   align-items: center;
   gap: 10px;
 }
-.explorer-map-actions > button:nth-child(2) {
-  min-height: 40px;
-  padding: 8px 14px;
-  background: var(--surface);
-  border-radius: 24px;
-  box-shadow: 0 2px 12px #0002;
-  font-size: 12px;
-}
-.explorer-map-notice {
-  position: absolute;
-  top: 250px;
-  left: 65px;
-  right: 20px;
-  margin-inline: auto;
-  max-width: 540px;
-  z-index: 450;
-  padding: 8px 14px;
-  border-radius: 12px;
-  background: var(--surface);
-  font-size: 12px;
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
 .explorer-location-error {
   position: absolute;
   z-index: 501;
-  top: 250px;
+  top: 146px;
   inset-inline: 70px 16px;
   margin-inline: auto;
   max-width: 480px;
@@ -727,25 +681,31 @@ body:has(.map-mode) {
   pointer-events: auto;
 }
 .cafe-explorer .vector-map-message {
-  top: 250px;
+  top: 146px;
   inset-inline: 66px 16px;
   max-width: 500px;
   margin-inline: auto;
 }
-.vector-map-shell .maplibregl-ctrl-attrib {
+.vector-map-shell .map-source-credit {
   direction: ltr;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 9px;
-  line-height: 1.7;
-  padding: 3px 6px;
-  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font:
+    10px/1.5 Arial,
+    sans-serif;
+  white-space: nowrap;
+  margin: 0 6px 3px;
+  padding: 0;
+  text-shadow:
+    0 0 3px var(--surface),
+    0 0 5px var(--surface),
+    0 0 6px var(--surface);
 }
-.vector-map-shell .maplibregl-ctrl-attrib a {
+.vector-map-shell .map-source-credit a {
   color: inherit;
 }
 .cafe-explorer .maplibregl-ctrl-bottom-left {
-  bottom: calc(var(--explorer-sheet-height, 365px) + 64px);
+  bottom: calc(var(--explorer-sheet-height, 365px) + 4px);
   left: 6px;
 }
 .cafe-explorer[data-drawer='expanded'] .explorer-map-actions {
@@ -780,8 +740,8 @@ body:has(.map-mode) {
     width: min(600px, calc(100% - 500px));
   }
   .explorer-map-actions {
-    left: 24px;
-    bottom: 30px !important;
+    right: 24px;
+    bottom: calc(var(--explorer-sheet-height, 365px) + 38px) !important;
   }
   .explorer-location-error {
     inset-inline: auto 24px;
@@ -816,26 +776,11 @@ body:has(.map-mode) {
     padding-block: 6px;
   }
   .cafe-explorer-canvas .maplibregl-ctrl-top-left {
-    top: 180px;
+    top: 68px;
   }
   .cafe-explorer .vector-map-message,
   .explorer-location-error {
-    top: 180px;
-  }
-}
-@media (max-height: 420px) {
-  .explorer-floating-header .shared-menu-categories {
-    display: none;
-  }
-  .explorer-floating-header .explorer-filter-bar {
-    padding-top: 8px;
-  }
-  .cafe-explorer-canvas .maplibregl-ctrl-top-left {
-    top: 132px;
-  }
-  .cafe-explorer .vector-map-message,
-  .explorer-location-error {
-    top: 132px;
+    top: 68px;
   }
 }
 @media (max-width: 700px) {
@@ -923,9 +868,6 @@ body:has(.map-mode) {
   .explorer-floating-header {
     inset-inline: 12px;
     top: max(10px, env(safe-area-inset-top));
-  }
-  .explorer-floating-header .explorer-filter-bar {
-    padding-top: 10px;
   }
   .explorer-drawer {
     padding-inline: 16px;

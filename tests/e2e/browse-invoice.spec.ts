@@ -112,7 +112,7 @@ test('full-screen map selects real café details, supports drawer and filters, a
   await expect(
     map.getByRole('button', { name: `کافه فضای باز ${unique}`, exact: true }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'فهرست', exact: true }).click();
+  await page.getByRole('button', { name: 'فهرست کافه‌ها', exact: true }).click();
   await expect(page).toHaveURL(/view=list/);
   await expect(
     page

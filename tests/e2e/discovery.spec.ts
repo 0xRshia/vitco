@@ -97,30 +97,29 @@ test('menu categories follow the selected location and café event paths use rea
   );
 
   await page.goto('/menu?category=' + encodeURIComponent('قهوه'));
-  const menuCategories = page.getByRole('group', {
-    name: 'فیلتر کافه بر اساس دسته‌بندی منو',
-    exact: true,
-  });
+  await page.getByRole('button', { name: /^فیلترها/ }).click();
+  const filterSheet = page.getByRole('dialog', { name: 'فیلتر کافه‌ها' });
+  const menuCategories = filterSheet.getByRole('combobox', { name: 'دسته‌بندی منو' });
   for (const category of MENU_CATEGORIES)
-    await expect(menuCategories.getByRole('button', { name: category, exact: true })).toBeVisible();
-  await expect(menuCategories.getByRole('button', { name: 'قهوه', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+    await expect(menuCategories.locator('option').filter({ hasText: category })).toHaveCount(1);
+  await expect(menuCategories).toHaveValue('قهوه');
+  await filterSheet.getByRole('button', { name: 'بستن', exact: true }).click();
   await expect(page.getByRole('heading', { name: cafes[0].name, exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: cafes[1].name, exact: true })).toHaveCount(0);
 
   await page.goto('/cafes?view=list&category=' + encodeURIComponent('برگر'));
-  await page.getByRole('combobox', { name: 'موقعیت کافه', exact: true }).selectOption('شیراز');
+  await page.getByRole('button', { name: /^فیلترها/ }).click();
+  await filterSheet.getByRole('combobox', { name: 'شهر', exact: true }).selectOption('شیراز');
+  await filterSheet.getByRole('button', { name: 'اعمال فیلترها', exact: true }).click();
   await expect(page).toHaveURL(/city=/);
   const parameters = new URL(page.url()).searchParams;
   expect(parameters.get('city')).toBe('شیراز');
   expect(parameters.get('category')).toBe('برگر');
   await expect(page.getByRole('heading', { name: cafes[1].name, exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: cafes[0].name, exact: true })).toHaveCount(0);
-  const cafeCategories = page.getByRole('group', { name: 'فیلتر کافه بر اساس دسته‌بندی منو' });
-  for (const category of MENU_CATEGORIES)
-    await expect(cafeCategories.getByRole('button', { name: category, exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /^فیلترها/ }).click();
+  await expect(menuCategories).toHaveValue('برگر');
+  await filterSheet.getByRole('button', { name: 'بستن', exact: true }).click();
 
   await page.goto('/cafes/' + cafes[0].id);
   await expect(page.getByRole('link', { name: 'رزرو و سفارش' })).toHaveAttribute(

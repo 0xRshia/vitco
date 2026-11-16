@@ -28,6 +28,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { api, useApp, useResource } from '@/lib/client';
+import { reservationDemoNotice } from '@/lib/reservation-demo';
 import { PersianDateInput, PersianTimeInput } from './persian-date';
 import { LocationMap, hasPosition } from './location-map';
 import { money, digits, dateLabel, daysAhead, today, statusLabels, amenities } from '@/lib/format';
@@ -958,9 +959,18 @@ export function ReserveView() {
   }
   return (
     <div className="reserve-page has-reservation-dock">
+      {cafe?.is_demo && (
+        <p className="notice" role="note">
+          {reservationDemoNotice}
+        </p>
+      )}
       <PageTitle
         title="یک میز برای لحظه‌های خوب"
-        description="کافه، روز و ساعت را انتخاب کن و درخواستت را برای تأیید بفرست."
+        description={
+          cafe?.is_demo
+            ? 'روز، ساعت و میز را برای آزمایش انتخاب کن؛ درخواست به کافه‌ای ارسال نمی‌شود.'
+            : 'کافه، روز و ساعت را انتخاب کن و درخواستت را برای تأیید بفرست.'
+        }
         back="/cafes"
       />
       {cafe && (
@@ -1026,12 +1036,14 @@ export function ReserveView() {
                   }}
                 >
                   <option value="">کافه را انتخاب کنید</option>
-                  {data?.cafes.map((c) => (
-                    <option key={c.id} value={c.id} disabled={!c.owner_id || !c.active}>
-                      {c.name}
-                      {!c.owner_id || !c.active ? ' · رزرو غیرفعال' : ''}
-                    </option>
-                  ))}
+                  {data?.cafes
+                    .filter((c) => (c.owner_id && c.active) || c.id === cafeId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id} disabled={!c.owner_id || !c.active}>
+                        {c.name}
+                        {!c.owner_id || !c.active ? ' · رزرو غیرفعال' : ''}
+                      </option>
+                    ))}
                 </select>
               </Field>
               {!data?.cafes.some((c) => c.owner_id && c.active) && (
@@ -1204,7 +1216,11 @@ export function ReserveView() {
                     label={'موقعیت ' + cafe.name}
                   />
                 ) : (
-                  <p className="notice">موقعیت دقیق این کافه هنوز ثبت نشده است.</p>
+                  <p className="notice">
+                    {cafe.is_demo
+                      ? 'این کافه آزمایشی مکان واقعی ندارد.'
+                      : 'موقعیت دقیق این کافه هنوز ثبت نشده است.'}
+                  </p>
                 )}
                 <p className="muted">
                   {cafe.city}، {cafe.address}
@@ -1289,7 +1305,9 @@ export function ReserveView() {
                 </div>
               )}
               <p className="muted">
-                مدت هر رزرو یک ساعت است. درخواست شما پس از ثبت، برای تأیید به کافه ارسال می‌شود.
+                {cafe?.is_demo
+                  ? 'درخواست آزمایشی برای یک ساعت ذخیره می‌شود؛ رزرو واقعی نیست و به کافه‌ای ارسال نمی‌شود.'
+                  : 'مدت هر رزرو یک ساعت است. درخواست شما پس از ثبت، برای تأیید به کافه ارسال می‌شود.'}
               </p>
               {error && <ErrorBox message={error} />}
               {retryPending && (
@@ -1416,7 +1434,11 @@ export function ReserveView() {
             <strong>{cafe?.name}</strong> · {dateLabel(date)} · {digits(time)} · {digits(guests)}{' '}
             نفر
           </p>
-          <p>کافه باید درخواست شما را تأیید کند. وضعیت را در بخش رزروهای من ببینید.</p>
+          <p>
+            {cafe?.is_demo
+              ? 'درخواست آزمایشی ذخیره شد؛ رزرو واقعی انجام نشده و تأییدی از کافه دریافت نمی‌شود.'
+              : 'کافه باید درخواست شما را تأیید کند. وضعیت را در بخش رزروهای من ببینید.'}
+          </p>
           <Link className="button primary" href="/reservations">
             مشاهده رزروهای من
             <ArrowLeft size={17} />
@@ -1499,6 +1521,9 @@ export function ReservationsView() {
                 <Link href={'/cafes/' + r.cafe_id}>
                   <h2>{r.cafe_name}</h2>
                 </Link>
+                {app?.cafes.find((c) => c.id === r.cafe_id)?.is_demo && (
+                  <p className="notice">آزمایشی · رزرو واقعی نیست</p>
+                )}
                 <div className="reservation-details">
                   <p>
                     <CalendarDays size={17} />

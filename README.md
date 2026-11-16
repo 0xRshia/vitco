@@ -64,6 +64,10 @@ customer account can be used to exercise the customer flow.
 See [the map, catalogue and invoice refresh](docs/browse-invoice-refresh.md) for
 the current browse flow, preserved behavior and validation.
 
+See [the real café directory and simpler map](docs/map-directory-refresh.md) for
+the authenticated data.hmghadam.com integration and the explicitly enabled
+reservation test café.
+
 See [the expansion requirements and verification](docs/cafe-management-expansion.md)
 for report definitions and integration details.
 
@@ -77,6 +81,14 @@ https://vitrincafe.ir/cafes/kafh-aaala. It includes کافه اعلا and its th
 menu items with their published prices in **toman**. Imported listings are clearly
 attributed and browse-only: this app has no integration with that site's order
 processing. Imported availability does not authorize accepting orders for it.
+
+The optional server-side data.hmghadam.com integration imports real café locations
+and details from its current crawler export. Configure private
+`CAFE_DIRECTORY_USERNAME`/`CAFE_DIRECTORY_PASSWORD`, or `CAFE_DIRECTORY_FILE` for
+read-only access to the live export on the same server. Imported source cafés
+remain browse-only. The explicitly requested reservation example is enabled only
+with `RESERVATION_DEMO_ENABLED=1` and is visibly labelled as a test venue with no
+real location or payment. It is disabled by default.
 
 Brand illustrations are bundled locally from Vitrin Cafe's public site. Missing
 café/product images are explicitly labelled as missing. No unrelated stock photos,

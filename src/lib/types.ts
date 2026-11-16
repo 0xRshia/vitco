@@ -30,6 +30,9 @@ export type Cafe = {
   invoice_discount_percent: number;
   active: boolean;
   source: string;
+  directory_source?: string;
+  external_menu_url?: string;
+  is_demo?: boolean;
   rating: number | null;
   review_count: number;
 };
@@ -216,6 +219,12 @@ export type Ticket = {
   replies: { id: string; body: string; created_at: string; name: string }[];
 };
 export type Bootstrap = {
+  directory?: {
+    configured: boolean;
+    status: 'disabled' | 'ready' | 'stale' | 'unavailable';
+    synced_at: string | null;
+    cafe_count: number;
+  };
   onlinePayment: OnlinePaymentConfig;
   user: User | null;
   cafes: Cafe[];

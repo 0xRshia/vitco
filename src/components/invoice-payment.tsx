@@ -51,7 +51,10 @@ export function InvoicePaymentView() {
     submitting = useRef(false);
   const storageKey = 'vitco-invoice:' + cafeId;
   const available = Boolean(
-    cafe?.owner_id && cafe.active && onlinePaymentForCafe(data?.onlinePayment, cafeId),
+    cafe?.owner_id &&
+    cafe.active &&
+    !cafe.is_demo &&
+    onlinePaymentForCafe(data?.onlinePayment, cafeId),
   );
   const number = Number(amount);
   const validAmount =
