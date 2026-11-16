@@ -92,6 +92,16 @@ along with the production build, type check and formatting check. The complete
 sizes, plus mobile dark mode: no horizontal overflow or browser errors; compact
 clusters zoom into individual source cafés. Source credit is 15 pixels high.
 
-Production rollout needs the private directory configuration and optional demo
-flag in `/etc/vitco/app.env`, followed by the existing verified deployment flow.
-These local changes do not modify the deployed application or its configuration.
+The feature release `b1cdf59` was deployed on 2026-11-16 by the successful
+[validation and deployment workflow](https://github.com/0xRshia/vitco/actions/runs/43922572646).
+The production private directory configuration and explicit demo flag are enabled
+in `/etc/vitco/app.env`; credentials remain outside Git and release artifacts.
+The environment file and SQLite database were backed up before activation.
+
+Live checks verified all 5,077 mapped source cafés, the preserved original café
+and its three products, 15 available demo slots and two configured test tables.
+Desktop/mobile browser checks passed for loaded map tiles and source pins,
+transparent credits, the location action on the right, the consolidated Filters
+sheet, and demo date/time/table selection. No customer reservation or order was
+submitted during production verification. Zarinpal remains disabled. The health
+endpoint reports the active release commit after subsequent documentation updates.
