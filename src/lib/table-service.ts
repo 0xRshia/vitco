@@ -4,6 +4,8 @@ import { hash } from './auth';
 import { cafeById, ownerCafe } from './commerce';
 import { requireCafeAccess } from './cafe-access';
 import { cafeFeatures } from './cafe-features';
+import { disabledTables, tableStatusList } from './table-states';
+import { recordQrScan } from './qr-activity';
 import { ensure } from './validation';
 import type { User } from './types';
 
@@ -17,7 +19,13 @@ export type TableContext = {
   table_name: string;
   vip: boolean;
 };
-type Visit = { token_hash: string; code: string; guest_id: string | null; expires: number };
+type Visit = {
+  token_hash: string;
+  code: string;
+  guest_id: string | null;
+  expires: number;
+  bound: number;
+};
 
 function activeTable(code: string): TableContext | null {
   if (!/^[a-f0-9]{36}$/.test(code)) return null;
@@ -25,7 +33,12 @@ function activeTable(code: string): TableContext | null {
   if (!row) return null;
   const cafe = cafeById(row.cafe_id);
   const table = cafe.tables.find((t) => t.id === row.table_id);
-  return cafe.active && cafe.owner_id && !cafe.is_demo && table && table.enabled !== false
+  return cafe.active &&
+    cafe.owner_id &&
+    !cafe.is_demo &&
+    table &&
+    table.enabled !== false &&
+    !disabledTables(cafe.id).has(table.id)
     ? {
         cafe_id: cafe.id,
         cafe_name: cafe.name,
@@ -47,25 +60,38 @@ function savedVisit(token: string | undefined) {
 
 export function tableContext(token: string | undefined) {
   const visit = savedVisit(token);
-  return visit ? activeTable(visit.code) : null;
+  return visit?.bound ? activeTable(visit.code) : null;
 }
 
-export function bindTable(code: string, previous: string | undefined) {
+export function detachTable(token: string | undefined) {
+  const visit = savedVisit(token);
+  if (visit?.bound) run('UPDATE table_visits SET bound=0 WHERE token_hash=?', visit.token_hash);
+}
+
+export function bindTable(
+  code: string,
+  previous: string | undefined,
+  scanned?: 'table' | 'cashier',
+) {
   return transaction(() => {
     const table = activeTable(code);
     ensure(table, 'کد این میز معتبر نیست یا میز در دسترس نیست.', 404);
     const existing = savedVisit(previous);
-    if (existing?.code === code) return { token: previous!, table };
+    if (existing?.bound && existing.code === code) {
+      if (scanned) recordQrScan(table.cafe_id, scanned, table.table_id, table.table_name);
+      return { token: previous!, table };
+    }
     const token = previous && existing ? previous : randomBytes(32).toString('hex');
     run('DELETE FROM table_visits WHERE expires<=?', Date.now());
     run(
       `INSERT INTO table_visits(token_hash,code,expires) VALUES (?,?,?)
-      ON CONFLICT(token_hash) DO UPDATE SET code=excluded.code,expires=excluded.expires`,
+      ON CONFLICT(token_hash) DO UPDATE SET code=excluded.code,expires=excluded.expires,bound=1`,
       hash(token),
       code,
       Date.now() + visitSeconds * 1000,
     );
     run('UPDATE table_codes SET scans=scans+1 WHERE code=?', code);
+    recordQrScan(table.cafe_id, scanned ?? 'table', table.table_id, table.table_name);
     return { token, table };
   });
 }
@@ -76,7 +102,7 @@ export function tableGuest(token: string | undefined, create = false): User | nu
   if (create && !visit.guest_id)
     return transaction(() => {
       const before = savedVisit(token);
-      ensure(before && activeTable(before.code), 'ابتدا کد معتبر میز را اسکن کنید.', 403);
+      ensure(before?.bound && activeTable(before.code), 'ابتدا کد معتبر میز را اسکن کنید.', 403);
       if (before.guest_id) return tableGuest(token);
       const id = randomUUID();
       run(
@@ -105,18 +131,41 @@ export function tableCodesFor(user: User, cafeId: string) {
     'SELECT table_id,SUM(scans) scans FROM table_codes WHERE cafe_id=? GROUP BY table_id',
     cafeId,
   );
-  return cafe.tables.map((table) => ({
+  return tableStatusList(cafe).map((table) => ({
     ...table,
     code: codes.find((code) => code.table_id === table.id)?.code ?? '',
     scans: counts.find((count) => count.table_id === table.id)?.scans ?? 0,
   }));
 }
 
+export function currentTableCode(cafeId: string, tableId: string) {
+  return one<{ code: string }>(
+    "SELECT code FROM table_codes WHERE cafe_id=? AND table_id=? AND revoked_at=''",
+    cafeId,
+    tableId,
+  )?.code;
+}
+
+// Call only after the owner and target table have been validated within the write transaction.
+export function issueTableCode(cafeId: string, tableId: string) {
+  const code = randomBytes(18).toString('hex');
+  run(
+    'INSERT INTO table_codes(code,cafe_id,table_id,created_at) VALUES (?,?,?,?)',
+    code,
+    cafeId,
+    tableId,
+    new Date().toISOString(),
+  );
+  return code;
+}
+
 export function changeTableCode(user: User, cafeId: string, tableId: string, rotate: boolean) {
   const cafe = ownerCafe(user, cafeId);
+  const table = cafe.tables.find((candidate) => candidate.id === tableId);
   ensure(
     !cafe.is_demo &&
-      cafe.tables.some((table) => table.id === tableId && (!rotate || table.enabled !== false)),
+      table &&
+      (!rotate || (table.enabled !== false && !disabledTables(cafeId).has(tableId))),
     'میز فعال پیدا نشد.',
     404,
   );
@@ -134,21 +183,14 @@ export function changeTableCode(user: User, cafeId: string, tableId: string, rot
       cafeId,
       tableId,
     );
-    if (rotate)
-      run(
-        'INSERT INTO table_codes(code,cafe_id,table_id,created_at) VALUES (?,?,?,?)',
-        randomBytes(18).toString('hex'),
-        cafeId,
-        tableId,
-        now,
-      );
+    if (rotate) issueTableCode(cafeId, tableId);
   });
 }
 
 export function requestCashier(token: string | undefined) {
   return transaction(() => {
     const visit = savedVisit(token);
-    const table = visit && activeTable(visit.code);
+    const table = visit?.bound && activeTable(visit.code);
     ensure(visit && table, 'برای درخواست صندوق‌دار کد میز را اسکن کنید.', 403);
     const active = one<{ id: string }>(
       "SELECT id FROM cashier_calls WHERE cafe_id=? AND table_id=? AND status IN ('pending','accepted')",
@@ -181,7 +223,7 @@ export type CashierCall = {
 };
 export function latestCashierCall(token: string | undefined) {
   const visit = savedVisit(token);
-  return visit && activeTable(visit.code)
+  return visit?.bound && activeTable(visit.code)
     ? (one<CashierCall>(
         'SELECT id,table_name,status,created_at FROM cashier_calls WHERE code=? ORDER BY created_at DESC LIMIT 1',
         visit.code,

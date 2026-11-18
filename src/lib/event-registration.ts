@@ -51,6 +51,31 @@ export function listEvents(user: User | null, scope: 'public' | 'owner' | 'histo
     ...(scope === 'public' ? [] : [user?.id || '']),
   ).map(hydrate<CafeEvent>);
 }
+export function publicEvent(user: User | null, id: string) {
+  const now = Date.now();
+  const row = one(
+    listing + " WHERE e.id=? AND e.status IN ('published','completed')",
+    now,
+    now,
+    user?.id || '',
+    id,
+  );
+  v.ensure(row, 'رویداد پیدا نشد.', 404);
+  return hydrate<CafeEvent>(row);
+}
+
+export function deleteDraftEvent(user: User, id: string) {
+  transaction(() => {
+    const event = eventById(id);
+    ownerCafe(user, event.cafe_id);
+    v.ensure(
+      event.status === 'draft' && !one('SELECT 1 FROM event_registrations WHERE event_id=?', id),
+      'فقط پیش‌نویس بدون ثبت‌نام قابل حذف است.',
+      409,
+    );
+    run('DELETE FROM events WHERE id=?', id);
+  });
+}
 export function registerEvent(user: User, id: string) {
   return transaction(() => {
     const event = eventById(id);

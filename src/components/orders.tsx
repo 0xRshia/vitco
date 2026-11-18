@@ -77,6 +77,9 @@ export function CartView() {
   const { data, cart, setCart, refresh, toast } = useApp(),
     router = useRouter(),
     query = useSearchParams();
+  const scopedCafe = query.get('cafe');
+  const menuHref = scopedCafe ? '/cafes/' + encodeURIComponent(scopedCafe) : '/menu';
+  const wrongCafe = Boolean(scopedCafe && cart.length && cart[0].cafe_id !== scopedCafe);
   const tableResource = useResource<{ table: TableContext | null }>(cart.length ? 'table' : null);
   const table =
     tableResource.data?.table?.cafe_id === cart[0]?.cafe_id ? tableResource.data?.table : null;
@@ -116,13 +119,17 @@ export function CartView() {
     ) ?? [];
   const onlineAvailable = onlinePaymentForCafe(data?.onlinePayment, cafe?.id);
   const selectedPaymentMethod = onlineAvailable ? paymentMethod : 'offline';
+  const returnToCart = new URLSearchParams();
+  if (scopedCafe) returnToCart.set('cafe', scopedCafe);
+  if (selectedPaymentMethod === 'zarinpal') returnToCart.set('payment', 'zarinpal');
+  const cartHref = '/cart' + (returnToCart.size ? '?' + returnToCart : '');
   const removing = cart.find((item) => item.key === removeKey);
   const estimated = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const cafePoints = data?.rewards.find((r) => r.cafe_id === cafe?.id)?.points || 0;
   const points = usePoints ? Math.min(cafePoints, Math.floor(estimated / 1000)) : 0;
   const quotePayload = JSON.stringify({ items: cart, mode, coupon, points });
   useEffect(() => {
-    if (!canCheckout || !cart.length) return;
+    if (!canCheckout || !cart.length || wrongCafe) return;
     let active = true;
     setQuoting(true);
     setQuote(null);
@@ -144,7 +151,7 @@ export function CartView() {
     return () => {
       active = false;
     };
-  }, [quotePayload, canCheckout, data?.user?.id]);
+  }, [quotePayload, canCheckout, data?.user?.id, wrongCafe]);
   async function checkout() {
     setBusy(true);
     setError('');
@@ -172,16 +179,23 @@ export function CartView() {
       setBusy(false);
     }
   }
-  if (!cart.length)
+  if (wrongCafe || !cart.length)
     return (
       <div className="vitco-cart">
-        <PageTitle title="سبد خرید" back="/menu" />
+        <PageTitle title="سبد خرید" back={menuHref} />
         <Empty
-          title="سبدت منتظر یک طعم تازه است"
-          description="از منوی کافه‌ها انتخاب کن و اولین محصول را به سبد اضافه کن."
-          href="/menu"
-          label="دیدن منوی کافه‌ها"
+          title={
+            wrongCafe ? 'هنوز سفارشی از این کافه انتخاب نکرده‌ای' : 'سبدت منتظر یک طعم تازه است'
+          }
+          description="از منو انتخاب کن و اولین محصول را به سبد اضافه کن."
+          href={menuHref}
+          label={scopedCafe ? 'دیدن منوی این کافه' : 'دیدن منوی کافه‌ها'}
         />
+        {wrongCafe && (
+          <Link href="/cart" className="text-link">
+            مشاهده سبد خرید فعلی
+          </Link>
+        )}
       </div>
     );
   return (
@@ -189,7 +203,7 @@ export function CartView() {
       <PageTitle
         title="سبد خرید شما"
         description={cafe?.name}
-        back="/menu"
+        back={menuHref}
         action={
           <button className="button secondary" onClick={() => setClear(true)}>
             <Trash2 size={17} />
@@ -377,12 +391,7 @@ export function CartView() {
             onClick={() =>
               canCheckout
                 ? void checkout()
-                : router.push(
-                    '/login?next=' +
-                      encodeURIComponent(
-                        selectedPaymentMethod === 'zarinpal' ? '/cart?payment=zarinpal' : '/cart',
-                      ),
-                  )
+                : router.push('/login?next=' + encodeURIComponent(cartHref))
             }
           >
             {busy
@@ -727,10 +736,10 @@ export function OrdersView({ id }: { id?: string }) {
                       پشتیبانی سفارش
                     </Link>
                   )}
-                  <button className="button secondary" onClick={() => window.print()}>
+                  <Link className="button secondary" href={'/orders/' + order.id + '/invoice'}>
                     <Printer size={18} />
-                    چاپ رسید
-                  </button>
+                    رسید قابل چاپ
+                  </Link>
                   {order.kind !== 'event' &&
                     order.status === 'pending' &&
                     !paymentIsPending(order) && (
@@ -880,6 +889,75 @@ export function OrdersView({ id }: { id?: string }) {
     </div>
   );
 }
+export function OrderReceipt({ id }: { id: string }) {
+  const receipt = useResource<{ order: Order }>('orders/' + encodeURIComponent(id));
+  if (receipt.loading) return <Loading />;
+  if (!receipt.data)
+    return <ErrorBox message={receipt.error || 'رسید پیدا نشد.'} retry={receipt.reload} />;
+  const { order } = receipt.data;
+  const title =
+    order.kind === 'invoice'
+      ? 'رسید فاکتور حضوری'
+      : order.kind === 'event'
+        ? 'رسید بلیت رویداد'
+        : 'رسید سفارش';
+  const summary = [
+    ['مبلغ', money(order.subtotal)],
+    ['تخفیف و امتیاز', money(order.discount + order.points_used * 1000)],
+    ...(order.delivery_fee ? [['هزینه ارسال', money(order.delivery_fee)]] : []),
+    ['جمع نهایی', money(order.total)],
+  ];
+  return (
+    <>
+      <PageTitle
+        title={title}
+        back={'/orders/' + id}
+        action={
+          <button type="button" className="button primary" onClick={() => window.print()}>
+            <Printer size={18} /> چاپ رسید
+          </button>
+        }
+      />
+      <article className="panel stack service-receipt">
+        <h2>{order.cafe_name}</h2>
+        {order.kind === 'event' && <p>{order.note}</p>}
+        <p>
+          {dateLabel(order.created_at, true)} · <bdi>{order.id}</bdi>
+        </p>
+        {order.table_name && <p>{order.table_name}</p>}
+        <Badge status={order.status} />
+        {order.items.map((item) => (
+          <div className="list-row" key={item.key}>
+            <span>
+              {item.name} × {digits(item.quantity)}
+              {item.option_names.length ? ' · ' + item.option_names.join('، ') : ''}
+            </span>
+            <strong>{money(item.price * item.quantity)}</strong>
+          </div>
+        ))}
+        <dl>
+          {summary.map(([label, value]) => (
+            <div className="list-row" key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p>
+          {order.payment_method === 'zarinpal'
+            ? paymentStatusLabels[order.payment_status]
+            : 'پرداخت در کافه'}
+        </p>
+        {order.payment_ref && (
+          <p>
+            شماره پیگیری <bdi>{order.payment_ref}</bdi>
+          </p>
+        )}
+      </article>
+    </>
+  );
+}
+
 export function ReserveView() {
   const { data, cart, setCart, refresh, revision } = useApp(),
     query = useSearchParams(),

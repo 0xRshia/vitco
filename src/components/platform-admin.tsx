@@ -6,6 +6,7 @@ import { dateLabel, digits, money } from '@/lib/format';
 import type { CafeFeatures, FeatureKey } from '@/lib/cafe-features';
 import type {
   Article,
+  ArticleBlock,
   ContactMessage,
   ManagedCafe,
   PlatformReview,
@@ -15,6 +16,7 @@ import type {
 import type { Order, Reservation, Ticket } from '@/lib/types';
 import { ImageUpload } from './account';
 import { paymentStatusLabels, paymentIsPending } from './payment-status';
+import { PersianDateInput } from './persian-date';
 import { Badge, Confirm, Empty, ErrorBox, Field, Form, Loading, LoginGate, PageTitle } from './ui';
 
 const sections = [
@@ -615,7 +617,13 @@ function ContentEditor({
             <span>
               {item.title}
               <br />
-              <small>{item.published ? 'منتشرشده' : 'پیش‌نویس'}</small>
+              <small>
+                {!item.published
+                  ? 'پیش‌نویس'
+                  : item.publish_at > new Date().toISOString()
+                    ? 'زمان‌بندی شده برای ' + dateLabel(item.publish_at, true)
+                    : 'منتشرشده'}
+              </small>
             </span>
             <div className="service-inline">
               <button className="button secondary" onClick={() => setEditing(item.slug)}>
@@ -672,11 +680,38 @@ function ArticleForm({
   save: (value: unknown) => Promise<void>;
 }) {
   const [image, setImage] = useState(article?.image || '');
+  const [scheduled, setScheduled] = useState(Boolean(article?.publish_at));
+  const [blocks, setBlocks] = useState(() =>
+    (article?.body_blocks.length
+      ? article.body_blocks
+      : ([{ kind: 'paragraph', text: article?.body || '' }] as ArticleBlock[])
+    ).map((block, index) => ({ id: String(index), block })),
+  );
+  const [newBlockKind, setNewBlockKind] = useState<ArticleBlock['kind']>('paragraph');
+  const publication = article?.publish_at ? new Date(article.publish_at) : null;
+  function replaceBlock(id: string, next: ArticleBlock) {
+    setBlocks((current) => current.map((item) => (item.id === id ? { id, block: next } : item)));
+  }
+  function moveBlock(index: number, direction: -1 | 1) {
+    setBlocks((current) => {
+      const next = [...current];
+      [next[index], next[index + direction]] = [next[index + direction], next[index]];
+      return next;
+    });
+  }
   return (
     <Form
-      onSubmit={async (form) =>
-        save({ ...Object.fromEntries(form), image, published: form.has('published') })
-      }
+      onSubmit={async (form) => {
+        const publishDate = scheduled ? form.get('publish_date') : '';
+        if (scheduled && !publishDate) throw new Error('تاریخ انتشار را انتخاب کنید.');
+        await save({
+          ...Object.fromEntries(form),
+          image,
+          body_blocks: blocks.map((item) => item.block),
+          publish_date: publishDate,
+          published: form.has('published'),
+        });
+      }}
     >
       <Field label="عنوان">
         <input name="title" defaultValue={article?.title} />
@@ -696,17 +731,151 @@ function ArticleForm({
       <Field label="خلاصه">
         <textarea name="summary" rows={2} defaultValue={article?.summary} />
       </Field>
-      <Field label="متن نوشته">
-        <textarea name="body" rows={12} defaultValue={article?.body} />
-      </Field>
+      <fieldset className="option-group">
+        <legend>محتوای مقاله</legend>
+        {blocks.map(({ id, block }, index) => (
+          <div className="panel stack" key={id}>
+            {block.kind === 'image' ? (
+              <>
+                <ImageUpload
+                  value={block.src}
+                  onChange={(src) =>
+                    setBlocks((current) =>
+                      current.map((item) =>
+                        item.id === id && item.block.kind === 'image'
+                          ? { id, block: { ...item.block, src } }
+                          : item,
+                      ),
+                    )
+                  }
+                  label="تصویر داخل متن"
+                />
+                <Field label="متن جایگزین تصویر">
+                  <input
+                    value={block.alt}
+                    maxLength={160}
+                    onChange={(event) => replaceBlock(id, { ...block, alt: event.target.value })}
+                  />
+                </Field>
+              </>
+            ) : (
+              <Field
+                label={articleBlockLabels[block.kind]}
+                hint={block.kind === 'list' ? 'هر مورد را در یک سطر جداگانه بنویسید.' : undefined}
+              >
+                <textarea
+                  rows={block.kind === 'heading' ? 2 : 6}
+                  value={block.text}
+                  onChange={(event) => replaceBlock(id, { ...block, text: event.target.value })}
+                />
+              </Field>
+            )}
+            <div className="service-inline">
+              {index > 0 && (
+                <button className="text-link" type="button" onClick={() => moveBlock(index, -1)}>
+                  انتقال به بالا
+                </button>
+              )}
+              {index + 1 < blocks.length && (
+                <button className="text-link" type="button" onClick={() => moveBlock(index, 1)}>
+                  انتقال به پایین
+                </button>
+              )}
+              <button
+                className="text-link"
+                type="button"
+                onClick={() => setBlocks((current) => current.filter((item) => item.id !== id))}
+              >
+                حذف بخش
+              </button>
+            </div>
+          </div>
+        ))}
+        <Field label="نوع بخش تازه">
+          <select
+            value={newBlockKind}
+            onChange={(event) => setNewBlockKind(event.target.value as ArticleBlock['kind'])}
+          >
+            {Object.entries(articleBlockLabels).map(([kind, label]) => (
+              <option key={kind} value={kind}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <button
+          className="button secondary"
+          type="button"
+          disabled={blocks.length >= 60}
+          onClick={() => {
+            const block: ArticleBlock =
+              newBlockKind === 'image'
+                ? { kind: 'image', src: '', alt: '' }
+                : { kind: newBlockKind, text: '' };
+            const id = crypto.randomUUID();
+            setBlocks((current) => [...current, { id, block }]);
+          }}
+        >
+          افزودن بخش
+        </button>
+      </fieldset>
       <ImageUpload value={image} onChange={setImage} label="تصویر نوشته" />
       <label className="service-inline">
         <input type="checkbox" name="published" defaultChecked={Boolean(article?.published)} />{' '}
         منتشر شود
       </label>
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={scheduled}
+          onChange={(event) => setScheduled(event.target.checked)}
+        />{' '}
+        زمان‌بندی انتشار
+      </label>
+      {scheduled && (
+        <div className="form-grid">
+          <Field label="تاریخ انتشار">
+            <PersianDateInput
+              name="publish_date"
+              defaultValue={
+                publication
+                  ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(
+                      publication,
+                    )
+                  : undefined
+              }
+            />
+          </Field>
+          <Field label="ساعت انتشار به وقت تهران">
+            <input
+              name="publish_time"
+              dir="ltr"
+              placeholder="09:00"
+              defaultValue={
+                publication
+                  ? new Intl.DateTimeFormat('en-GB', {
+                      timeZone: 'Asia/Tehran',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hourCycle: 'h23',
+                    }).format(publication)
+                  : '09:00'
+              }
+            />
+          </Field>
+        </div>
+      )}
     </Form>
   );
 }
+
+const articleBlockLabels: Record<ArticleBlock['kind'], string> = {
+  paragraph: 'متن نوشته',
+  heading: 'تیتر بخش',
+  quote: 'نقل قول',
+  list: 'فهرست',
+  image: 'تصویر داخل متن',
+};
 
 function TestimonialsEditor({
   items,

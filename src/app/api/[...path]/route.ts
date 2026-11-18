@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { all, one, run, hydrate, transaction } from '@/lib/database';
 import {
   currentUser,
+  logoutOtherSessions,
   requireUser,
   createSession,
   passwordHash,
@@ -49,6 +50,8 @@ import {
   visitSeconds,
 } from '@/lib/table-service';
 import { operationsApi } from '@/lib/operations-api';
+import { resolveQr } from '@/lib/qr-mappings';
+import { ensureTableCanDisable } from '@/lib/table-states';
 import { menuCategoriesFor, publicBranches, workingHours } from '@/lib/cafe-operations';
 import { platformAdmin, cafeHours } from '@/lib/cafe-access';
 import {
@@ -62,9 +65,11 @@ import {
 import { myLoyalty, redeemReward } from '@/lib/loyalty';
 import {
   attendEvent,
+  deleteDraftEvent,
   eventGuests,
   leaveEvent,
   listEvents,
+  publicEvent,
   registerEvent,
   saveEvent,
   setEventState,
@@ -86,6 +91,16 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const json = (value: unknown, status = 200) =>
   NextResponse.json(value, { status, headers: { 'Cache-Control': 'no-store' } });
+function storeTableVisit(response: NextResponse, token: string, origin: string) {
+  response.cookies.set(visitCookie, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: visitSeconds,
+    secure: origin.startsWith('https:'),
+  });
+  return response;
+}
 const cafeSql =
   'SELECT c.*,(SELECT AVG(rating) FROM reviews WHERE cafe_id=c.id AND visible=1) rating,(SELECT COUNT(*) FROM reviews WHERE cafe_id=c.id AND visible=1) review_count FROM cafes c';
 const visibleProducts =
@@ -232,6 +247,13 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       return json({ ok: true });
     }
     const tableToken = request.cookies.get(visitCookie)?.value;
+    if (resource === 'scanner' && id === 'resolve' && method === 'POST' && !action) {
+      const origin = process.env.APP_ORIGIN || request.nextUrl.origin;
+      limit('table-scan:' + (request.headers.get('x-real-ip') || 'local'), 180, 60);
+      const result = resolveQr(input.url, origin, tableToken);
+      const response = json({ href: result.href });
+      return result.token ? storeTableVisit(response, result.token, origin) : response;
+    }
     if (resource === 'table') {
       if (method === 'GET' && !id) {
         const table = tableContext(tableToken);
@@ -244,15 +266,11 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       if (method === 'POST' && id) {
         limit('table-scan:' + (request.headers.get('x-real-ip') || 'local'), 180, 60);
         const { table, token } = bindTable(id, tableToken);
-        const response = json({ table });
-        response.cookies.set(visitCookie, token, {
-          httpOnly: true,
-          sameSite: 'lax',
-          path: '/',
-          maxAge: visitSeconds,
-          secure: (process.env.APP_ORIGIN || request.nextUrl.origin).startsWith('https:'),
-        });
-        return response;
+        return storeTableVisit(
+          json({ table }),
+          token,
+          process.env.APP_ORIGIN || request.nextUrl.origin,
+        );
       }
     }
     if (resource === 'meetings' && method === 'GET') {
@@ -273,6 +291,8 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
         ),
       });
     }
+    if (resource === 'events' && method === 'GET' && id && !action)
+      return json({ event: publicEvent(user, id) });
     if (resource === 'table-checkout' && method === 'POST') {
       const table = tableContext(tableToken);
       v.ensure(table, 'ابتدا کد معتبر میز را اسکن کنید.', 403);
@@ -535,6 +555,8 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
     const account = user || (guestAllowed ? tableGuest(tableToken) : null);
     v.ensure(account, 'برای ادامه وارد حساب خود شوید.', 401);
     if (method !== 'GET') limit('write:' + account.id, 100, 60);
+    if (resource === 'auth' && id === 'logout-others' && method === 'POST' && !action)
+      return json({ revoked: logoutOtherSessions(account, request) });
     if (resource === 'admin')
       return json(adminApi(account, path, method, input, request.nextUrl.searchParams));
     if (resource === 'operations') {
@@ -818,6 +840,10 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       if (id === 'prices' && method === 'POST') return json(adjustCategoryPrices(account, input));
       if (id === 'events' && action && method === 'GET')
         return json({ guests: eventGuests(account, action) });
+      if (id === 'events' && action && method === 'DELETE') {
+        deleteDraftEvent(account, action);
+        return json({ ok: true });
+      }
       if (id === 'events' && action && method === 'PATCH') {
         if (input.guest !== undefined) attendEvent(account, action, input.guest);
         else setEventState(account, action, input.status);
@@ -952,11 +978,11 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
               account.id,
             );
             for (const previous of existing!.tables) {
-              if (
-                values[15] &&
-                tables.some((table) => table.id === previous.id && table.enabled !== false)
-              )
-                continue;
+              const enabled = tables.some(
+                (table) => table.id === previous.id && table.enabled !== false,
+              );
+              if (values[15] && enabled) continue;
+              if (!enabled && previous.enabled !== false) ensureTableCanDisable(cafeId, previous);
               const now = new Date().toISOString();
               run(
                 "UPDATE table_codes SET revoked_at=? WHERE cafe_id=? AND table_id=? AND revoked_at=''",

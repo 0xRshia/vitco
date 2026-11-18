@@ -13,6 +13,7 @@ export type CafeTable = {
   vip?: boolean;
   enabled?: boolean;
 };
+export type TableState = 'available' | 'occupied' | 'reserved' | 'disabled';
 export type Cafe = {
   id: string;
   owner_id: string | null;

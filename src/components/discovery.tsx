@@ -33,7 +33,7 @@ import {
   Utensils,
   X,
 } from 'lucide-react';
-import { api, useApp, useResource } from '@/lib/client';
+import { api, useApp, useLiveResource, useResource } from '@/lib/client';
 import { reservationDemoNotice } from '@/lib/reservation-demo';
 import { TableServicePanel } from './table-service';
 import { CafeMeetings } from './meetings';
@@ -1068,7 +1068,9 @@ export function EventsView({ id }: { id?: string }) {
     router = useRouter();
   const [busy, setBusy] = useState(false);
   const now = useEventNow();
-  const event = data?.events.find((e) => e.id === id);
+  const detail = useLiveResource<{ event: CafeEvent }>(id ? 'events/' + id : null, 15000);
+  const event =
+    detail.data?.event ?? (detail.loading ? data?.events.find((e) => e.id === id) : undefined);
   if (!id)
     return (
       <>
@@ -1086,6 +1088,7 @@ export function EventsView({ id }: { id?: string }) {
         <EventList events={data?.events || []} />
       </>
     );
+  if (detail.loading && !event) return <Loading />;
   if (!event)
     return (
       <Empty
@@ -1097,6 +1100,9 @@ export function EventsView({ id }: { id?: string }) {
     );
   const paying = event.registration_status === 'pending_payment' && event.registration_order_id;
   const gateway = onlinePaymentForCafe(data?.onlinePayment, event.cafe_id);
+  const phase = eventPhase(event, now);
+  const accepting = event.status !== 'completed' && (phase === 'upcoming' || phase === 'ongoing');
+  const leaving = event.registration_status === 'registered' || Boolean(paying);
   return (
     <>
       <PageTitle title={event.title} back="/events" description={event.cafe_name} />
@@ -1104,8 +1110,8 @@ export function EventsView({ id }: { id?: string }) {
         <Media src={event.image} alt={event.title} className="event-cover" />
         <div className="panel form">
           <h2>{event.title}</h2>
-          <span className={'badge event-phase event-phase-' + eventPhase(event, now)}>
-            {eventPhaseLabels[eventPhase(event, now)]}
+          <span className={'badge event-phase event-phase-' + phase}>
+            {eventPhaseLabels[phase]}
           </span>
           <p>{event.description}</p>
           <div className="list-row">
@@ -1135,46 +1141,45 @@ export function EventsView({ id }: { id?: string }) {
           {Boolean(event.price) && !gateway && !event.joined && !paying && (
             <p className="notice">پرداخت آنلاین این رویداد در دسترس نیست.</p>
           )}
-          <button
-            className={paying ? 'button secondary' : 'button primary'}
-            disabled={
-              busy ||
-              (!event.joined &&
-                !paying &&
-                (event.registered >= event.capacity ||
-                  Boolean(event.price && !gateway) ||
-                  event.status === 'completed' ||
-                  !['upcoming', 'ongoing'].includes(eventPhase(event, now))))
-            }
-            onClick={async () => {
-              if (!data?.user) {
-                router.push('/login?next=' + encodeURIComponent('/events/' + id));
-                return;
+          {event.registration_status === 'attended' || (!accepting && event.joined) ? (
+            <Link className="button secondary" href="/registrations">
+              مشاهده ثبت‌نام
+            </Link>
+          ) : (
+            <button
+              className={paying ? 'button secondary' : 'button primary'}
+              disabled={
+                busy ||
+                !accepting ||
+                (!leaving &&
+                  (event.registered >= event.capacity || Boolean(event.price && !gateway)))
               }
-              setBusy(true);
-              try {
-                const leaving = event.joined || paying;
-                const response = await api<{ order_id: string | null }>(
-                  'events/' + id + (leaving ? '/leave' : ''),
-                  'POST',
-                  {},
-                );
-                await refresh();
-                if (response.order_id) router.push('/orders/' + response.order_id);
-                else toast(leaving ? 'ثبت‌نام لغو شد.' : 'ثبت‌نام شما انجام شد.');
-              } catch (e) {
-                toast((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {event.joined || paying
-              ? 'لغو ثبت‌نام'
-              : event.price
-                ? 'دریافت و پرداخت بلیت'
-                : 'شرکت در رویداد'}
-          </button>
+              onClick={async () => {
+                if (!data?.user) {
+                  router.push('/login?next=' + encodeURIComponent('/events/' + id));
+                  return;
+                }
+                setBusy(true);
+                try {
+                  const response = await api<{ order_id: string | null }>(
+                    'events/' + id + (leaving ? '/leave' : ''),
+                    'POST',
+                    {},
+                  );
+                  detail.reload();
+                  await refresh();
+                  if (response.order_id) router.push('/orders/' + response.order_id);
+                  else toast(leaving ? 'ثبت‌نام لغو شد.' : 'ثبت‌نام شما انجام شد.');
+                } catch (e) {
+                  toast((e as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {leaving ? 'لغو ثبت‌نام' : event.price ? 'دریافت و پرداخت بلیت' : 'شرکت در رویداد'}
+            </button>
+          )}
         </div>
       </div>
     </>
@@ -1236,28 +1241,31 @@ export function ScannerView() {
   const router = useRouter(),
     video = useRef<HTMLVideoElement>(null),
     stream = useRef<MediaStream | null>(null),
-    scanningRequest = useRef(0);
+    scanningRequest = useRef(0),
+    resolutionRequest = useRef(0);
   const [value, setValue] = useState(''),
     [error, setError] = useState(''),
-    [scanning, setScanning] = useState(false);
+    [scanning, setScanning] = useState(false),
+    [resolving, setResolving] = useState(false);
   useEffect(
     () => () => {
       scanningRequest.current++;
+      resolutionRequest.current++;
       stream.current?.getTracks().forEach((t) => t.stop());
     },
     [],
   );
-  function navigate(raw: string) {
+  async function navigate(raw: string) {
+    setError('');
+    setResolving(true);
+    const attempt = ++resolutionRequest.current;
     try {
-      const url = new URL(raw, window.location.origin);
-      if (
-        url.origin !== window.location.origin ||
-        !/^\/(cafes|products|t)\/[a-zA-Z0-9_-]+$/.test(url.pathname)
-      )
-        throw new Error();
-      router.push(url.pathname);
-    } catch {
-      setError('پیوند باید مربوط به میز، کافه یا محصول همین سامانه باشد.');
+      const result = await api<{ href: string }>('scanner/resolve', 'POST', { url: raw });
+      if (attempt === resolutionRequest.current) router.push(result.href);
+    } catch (err) {
+      if (attempt === resolutionRequest.current) setError((err as Error).message);
+    } finally {
+      if (attempt === resolutionRequest.current) setResolving(false);
     }
   }
   async function scan() {
@@ -1293,7 +1301,7 @@ export function ScannerView() {
           });
           if (code) {
             stop();
-            navigate(code.data);
+            void navigate(code.data);
             return;
           }
         }
@@ -1319,7 +1327,7 @@ export function ScannerView() {
       <div className="panel narrow form">
         <ScanLine size={44} />
         <video ref={video} playsInline muted className={scanning ? 'scanner-video' : 'hidden'} />
-        <button className="button primary" onClick={scanning ? stop : scan}>
+        <button className="button primary" disabled={resolving} onClick={scanning ? stop : scan}>
           {scanning ? 'بستن دوربین' : 'باز کردن دوربین'}
         </button>
         <Field label="یا پیوند کافه را وارد کن">
@@ -1327,11 +1335,18 @@ export function ScannerView() {
             dir="ltr"
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !resolving) void navigate(value);
+            }}
             placeholder="نشانی صفحه کافه"
           />
         </Field>
-        <button className="button secondary" onClick={() => navigate(value)}>
-          باز کردن منو
+        <button
+          className="button secondary"
+          disabled={resolving}
+          onClick={() => void navigate(value)}
+        >
+          {resolving ? 'در حال بررسی پیوند…' : 'باز کردن پیوند QR'}
         </button>
         {error && <ErrorBox message={error} />}
       </div>

@@ -28,6 +28,10 @@ import {
 } from './accounting';
 import { loyaltyManagement, saveLoyalty } from './loyalty';
 import { cafeFeatures } from './cafe-features';
+import { qrMappings, saveQrMapping } from './qr-mappings';
+import { qrScanHistory } from './qr-activity';
+import { tableStatusList, updateTableState } from './table-states';
+import { paymentActivity } from './payment-activity';
 import type { User } from './types';
 import * as v from './validation';
 
@@ -44,6 +48,12 @@ export async function operationsApi(
     if (action === 'accounting')
       return accountingOverview(user, cafeId, request.nextUrl.searchParams);
     if (action === 'loyalty') return loyaltyManagement(user, cafeId);
+    if (action === 'payments')
+      return {
+        payments: paymentActivity(user, cafeId, request.nextUrl.searchParams.get('status') || ''),
+      };
+    if (action === 'qr-mappings') return { mappings: qrMappings(user, cafeId) };
+    if (action === 'qr-activity') return qrScanHistory(user, cafeId, request.nextUrl.searchParams);
     if (action === 'export' && itemId)
       return new Response(readFinancialExport(user, cafeId, itemId), {
         headers: {
@@ -52,10 +62,15 @@ export async function operationsApi(
           'Cache-Control': 'no-store',
         },
       });
-    if (action === 'qr' && itemId) {
-      const table = tableCodesFor(user, cafeId).find((item) => item.id === itemId);
-      v.ensure(table?.code, 'کد میز پیدا نشد.', 404);
-      const url = new URL('/t/' + table.code, process.env.APP_ORIGIN || request.nextUrl.origin);
+    if (action === 'qr') {
+      v.ensure(access.owner, 'دسترسی به کد QR کافه مجاز نیست.', 403);
+      let href = '/cafes/' + encodeURIComponent(cafeId);
+      if (itemId) {
+        const table = tableCodesFor(user, cafeId).find((item) => item.id === itemId);
+        v.ensure(table?.code, 'کد میز پیدا نشد.', 404);
+        href = '/t/' + table.code;
+      }
+      const url = new URL(href, process.env.APP_ORIGIN || request.nextUrl.origin);
       const { toString } = await import('qrcode');
       const svg = await toString(url.href, { type: 'svg', width: 384, margin: 4 });
       return new Response(svg, {
@@ -90,9 +105,11 @@ export async function operationsApi(
           tour_url: cafe.tour_url,
         },
         access,
+        ...(access.cashier && {
+          tables: access.owner ? tableCodesFor(user, cafeId) : tableStatusList(cafe),
+        }),
         ...(access.owner && {
           hours: workingHours(cafeId),
-          tables: tableCodesFor(user, cafeId),
           staff: staffMembers(user, cafeId),
           categories: menuCategoriesFor(cafeId, true),
           features: cafeFeatures(cafeId),
@@ -110,6 +127,10 @@ export async function operationsApi(
       else saveMenuCategory(user, cafeId, input);
     } else if (action === 'qr')
       changeTableCode(user, cafeId, v.text(input.table_id, 'میز', 1, 100), input.revoke !== true);
+    else if (action === 'qr-mappings')
+      saveQrMapping(user, cafeId, process.env.APP_ORIGIN || request.nextUrl.origin, input);
+    else if (action === 'tables' && itemId)
+      updateTableState(user, cafeById(cafeId), itemId, input.state);
     else if (action === 'cashier' && itemId) updateCashierCall(user, cafeId, itemId, input.status);
     else if (action === 'calendar' && itemId) rescheduleReservation(user, cafeId, itemId, input);
     else if (action === 'accounting') recordManualEntry(user, cafeId, input);

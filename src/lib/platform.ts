@@ -8,17 +8,23 @@ import { paymentIntakeSettings, updatePaymentIntake } from './payment-intake';
 import type { Order, User } from './types';
 import * as v from './validation';
 
+export type ArticleBlock =
+  | { kind: 'paragraph' | 'heading' | 'quote' | 'list'; text: string }
+  | { kind: 'image'; src: string; alt: string };
 export type Article = {
   slug: string;
   title: string;
   category: string;
   summary: string;
   body: string;
+  body_blocks: ArticleBlock[];
   image: string;
   published: number;
+  publish_at: string;
   created_at: string;
   updated_at: string;
 };
+export type ArticleSummary = Omit<Article, 'body' | 'body_blocks'>;
 export type Testimonial = {
   id: string;
   name: string;
@@ -75,18 +81,35 @@ function articleSlug(value: unknown) {
   );
   return slug;
 }
-export function publicArticles(slug?: string, category?: string | null) {
+const publishedArticle = "published=1 AND (publish_at='' OR publish_at<=?)";
+const articleSummary =
+  'slug,title,category,summary,image,published,publish_at,created_at,updated_at';
+const articleSort = "ORDER BY COALESCE(NULLIF(publish_at,''),created_at) DESC,slug";
+export function publicArticles(
+  slug?: string,
+  category?: string | null,
+  now = new Date().toISOString(),
+) {
   if (slug) {
-    const article = one<Article>('SELECT * FROM articles WHERE slug=? AND published=1', slug);
-    v.ensure(article, 'این نوشته پیدا نشد.', 404);
-    return { article };
+    const row = one('SELECT * FROM articles WHERE slug=? AND ' + publishedArticle, slug, now);
+    v.ensure(row, 'این نوشته پیدا نشد.', 404);
+    const article = hydrate<Article>(row);
+    const related = all<ArticleSummary>(
+      `SELECT ${articleSummary} FROM articles WHERE slug<>? AND category=? AND ${publishedArticle} ${articleSort} LIMIT 3`,
+      slug,
+      article.category,
+      now,
+    );
+    return { article, related };
   }
   return {
     categories: all<{ category: string }>(
-      'SELECT DISTINCT category FROM articles WHERE published=1 ORDER BY category',
+      'SELECT DISTINCT category FROM articles WHERE ' + publishedArticle + ' ORDER BY category',
+      now,
     ).map((row) => row.category),
-    articles: all<Omit<Article, 'body'>>(
-      'SELECT slug,title,category,summary,image,published,created_at,updated_at FROM articles WHERE published=1 AND (? IS NULL OR category=?) ORDER BY updated_at DESC LIMIT 100',
+    articles: all<ArticleSummary>(
+      `SELECT ${articleSummary} FROM articles WHERE ${publishedArticle} AND (? IS NULL OR category=?) ${articleSort} LIMIT 100`,
+      now,
       category ?? null,
       category ?? null,
     ),
@@ -117,12 +140,40 @@ export function submitContact(kind: string, input: Record<string, unknown>) {
   );
   return { id };
 }
+function articleBlocks(input: unknown): ArticleBlock[] {
+  return v.list(input, 60).map((item) => {
+    const block = v.object(item);
+    if (block.kind === 'image') {
+      const src = v.imagePath(block.src);
+      v.ensure(src, 'تصویر بخش مقاله را بارگذاری کنید.');
+      return { kind: 'image', src, alt: v.text(block.alt ?? '', 'توضیح تصویر', 0, 160) };
+    }
+    const kind = block.kind;
+    v.ensure(
+      kind === 'paragraph' || kind === 'heading' || kind === 'quote' || kind === 'list',
+      'نوع بخش مقاله معتبر نیست.',
+    );
+    return { kind, text: v.text(block.text, 'محتوای بخش', 1, 32000) };
+  });
+}
 function saveArticle(input: Record<string, unknown>, existing?: string) {
   const slug = existing || articleSlug(input.slug);
   const title = v.text(input.title, 'عنوان', 3, 160),
     category = v.text(input.category, 'دسته‌بندی', 2, 60);
+  const blocks = input.body_blocks === undefined ? [] : articleBlocks(input.body_blocks);
+  const textBody = blocks
+    .flatMap((block) => (block.kind === 'image' ? [] : [block.text]))
+    .join('\n\n');
   const summary = v.text(input.summary, 'خلاصه', 5, 360),
-    body = v.text(input.body, 'متن نوشته', 10, 32000);
+    body = v.text(blocks.length ? textBody : input.body, 'متن نوشته', 10, 32000);
+  const publication =
+    input.publish_date === undefined
+      ? null
+      : input.publish_date
+        ? new Date(
+            v.date(input.publish_date) + 'T' + v.time(input.publish_time) + ':00+03:30',
+          ).toISOString()
+        : '';
   const image = v.imagePath(input.image),
     published = Number(v.flag(input.published)),
     now = new Date().toISOString();
@@ -133,13 +184,17 @@ function saveArticle(input: Record<string, unknown>, existing?: string) {
     );
     if (existing) {
       const count = run(
-        'UPDATE articles SET title=?,category=?,summary=?,body=?,image=?,published=?,updated_at=? WHERE slug=?',
+        'UPDATE articles SET title=?,category=?,summary=?,body=?,body_blocks=CASE WHEN ? OR body<>? THEN ? ELSE body_blocks END,image=?,published=?,publish_at=COALESCE(?,publish_at),updated_at=? WHERE slug=?',
         title,
         category,
         summary,
         body,
+        Number(input.body_blocks !== undefined),
+        body,
+        JSON.stringify(blocks),
         image,
         published,
+        publication,
         now,
         slug,
       );
@@ -152,14 +207,16 @@ function saveArticle(input: Record<string, unknown>, existing?: string) {
       409,
     );
     run(
-      'INSERT INTO articles(slug,title,category,summary,body,image,published,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO articles(slug,title,category,summary,body,body_blocks,image,published,publish_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
       slug,
       title,
       category,
       summary,
       body,
+      JSON.stringify(blocks),
       image,
       published,
+      publication ?? '',
       now,
       now,
     );
@@ -281,7 +338,7 @@ export function adminApi(
       };
     if (section === 'articles')
       return {
-        articles: all<Article>('SELECT * FROM articles ORDER BY updated_at DESC'),
+        articles: all('SELECT * FROM articles ORDER BY updated_at DESC').map(hydrate<Article>),
         categories: categories(),
       };
     if (section === 'testimonials')

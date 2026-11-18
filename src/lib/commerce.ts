@@ -8,6 +8,7 @@ import { cafeAccess, cafeHours, platformAdmin } from './cafe-access';
 import type { TableContext } from './table-service';
 import { changeLoyaltyPoints, earnOrderPoints } from './loyalty';
 import { cafeFeatures } from './cafe-features';
+import { disabledTables } from './table-states';
 import type {
   Cafe,
   CafeTable,
@@ -177,6 +178,7 @@ function createOrderRecord(
       409,
     );
   const reservationId = text(input.reservation_id ?? '', 'رزرو', 0, 100);
+  let bookedTable: Pick<Reservation, 'table_id' | 'table_name'> | undefined;
   if (table) {
     ensure(
       q.mode === 'dine_in' && table.cafe_id === q.cafe.id && !reservationId,
@@ -203,6 +205,7 @@ function createOrderRecord(
       'برای این رزرو قبلاً سفارش ثبت شده است.',
       409,
     );
+    bookedTable = reservation;
   } else ensure(!reservationId, 'فقط سفارش داخل کافه می‌تواند به رزرو متصل شود.');
   let address: Address | null = null;
   if (q.mode === 'delivery') {
@@ -237,7 +240,7 @@ function createOrderRecord(
   const id = randomUUID(),
     now = new Date().toISOString();
   run(
-    'INSERT INTO orders (id,user_id,cafe_id,mode,status,items,subtotal,discount,delivery_fee,points_used,total,address,pickup_at,note,created_at,updated_at,request_key,reservation_id,payment_method,table_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    'INSERT INTO orders (id,user_id,cafe_id,mode,status,items,subtotal,discount,delivery_fee,points_used,total,address,pickup_at,note,created_at,updated_at,request_key,reservation_id,payment_method,table_name,table_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
     id,
     user.id,
     q.cafe.id,
@@ -257,7 +260,8 @@ function createOrderRecord(
     requestKey,
     reservationId,
     paymentMethod,
-    table?.table_name ?? '',
+    table?.table_name ?? bookedTable?.table_name ?? '',
+    table?.table_id ?? bookedTable?.table_id ?? '',
   );
   if (q.points_used) {
     changeLoyaltyPoints(user.id, q.cafe.id, -q.points_used, 'استفاده از امتیاز در سفارش');
@@ -402,11 +406,13 @@ export function availableTables(
     exclude,
   );
   const slot = availableSlots(cafe, selectedDate, exclude).find((s) => s.time === selectedTime);
+  const disabled = disabledTables(cafe.id);
   return cafe.tables.map((table) => ({
     ...table,
     available: Boolean(
       slot &&
       table.enabled !== false &&
+      !disabled.has(table.id) &&
       slot.remaining >= guests &&
       table.seats >= guests &&
       !booked.some((b) => b.table_id === table.id && overlaps(b.time, selectedTime)),

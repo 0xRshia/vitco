@@ -66,6 +66,17 @@ export function createSession(userId: string, response: NextResponse) {
     maxAge: 30 * 86400,
   });
 }
+export function logoutOtherSessions(user: User, request: NextRequest) {
+  const current = request.cookies.get('vitrin_session')?.value;
+  ensure(current, 'ابتدا وارد حساب خود شوید.', 401);
+  const result = run(
+    'DELETE FROM sessions WHERE user_id=? AND token<>? AND expires>?',
+    user.id,
+    hash(current),
+    Date.now(),
+  );
+  return Number(result.changes);
+}
 export function limit(key: string, maximum = 15, seconds = 900) {
   const now = Date.now();
   run('DELETE FROM rate_limits WHERE expires<?', now);

@@ -49,7 +49,7 @@ import {
   NotificationsView,
   SupportView,
 } from './account';
-import { CartView, OrdersView, ReserveView, ReservationsView } from './orders';
+import { CartView, OrderReceipt, OrdersView, ReserveView, ReservationsView } from './orders';
 import { DashboardView } from './dashboard';
 import { InvoicePaymentView } from './invoice-payment';
 import { TableLanding } from './table-service';
@@ -102,13 +102,18 @@ export function Application() {
       view = <ProductView key={id} id={id} />;
       break;
     case 'cart':
-      view = <CartView />;
+      view = <CartView key={query.get('cafe') || 'cart'} />;
       break;
     case 'bill':
       view = <InvoicePaymentView key={query.get('cafe') || ''} />;
       break;
     case 'orders':
-      view = <OrdersView id={id} />;
+      view =
+        id && segments[2] === 'invoice' ? (
+          <OrderReceipt key={id} id={id} />
+        ) : (
+          <OrdersView id={id} />
+        );
       break;
     case 'reserve':
       view = <ReserveView />;

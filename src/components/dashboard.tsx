@@ -76,6 +76,7 @@ export function DashboardView() {
     [removeProduct, setRemoveProduct] = useState<Product | null>(null),
     [branchOf, setBranchOf] = useState(''),
     [eventRoster, setEventRoster] = useState<CafeEvent | null>(null),
+    [removeEvent, setRemoveEvent] = useState<CafeEvent | null>(null),
     [order, setOrder] = useState<Order | null>(null),
     [selectedCafe, setSelectedCafe] = useState(''),
     [productCafe, setProductCafe] = useState(''),
@@ -674,14 +675,23 @@ export function DashboardView() {
                                   <Pencil size={16} /> ویرایش
                                 </button>
                                 {e.status === 'draft' && (
-                                  <button
-                                    className="button primary"
-                                    onClick={() =>
-                                      void status('dashboard/events', e.id, 'published')
-                                    }
-                                  >
-                                    انتشار
-                                  </button>
+                                  <>
+                                    <button
+                                      className="button primary"
+                                      onClick={() =>
+                                        void status('dashboard/events', e.id, 'published')
+                                      }
+                                    >
+                                      انتشار
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="button danger-outline"
+                                      onClick={() => setRemoveEvent(e)}
+                                    >
+                                      حذف پیش‌نویس
+                                    </button>
+                                  </>
                                 )}
                                 <button
                                   className="button danger-outline"
@@ -849,6 +859,23 @@ export function DashboardView() {
               >
                 {eventRoster && <EventRoster key={eventRoster.id} event={eventRoster} />}
               </Modal>
+              <Confirm
+                open={Boolean(removeEvent)}
+                title="پیش‌نویس رویداد حذف شود؟"
+                description={removeEvent?.title || ''}
+                onClose={() => setRemoveEvent(null)}
+                onConfirm={async () => {
+                  if (!removeEvent) return;
+                  try {
+                    await api('dashboard/events/' + removeEvent.id, 'DELETE');
+                    await updated();
+                  } catch (error) {
+                    toast((error as Error).message);
+                  } finally {
+                    setRemoveEvent(null);
+                  }
+                }}
+              />
               <Modal
                 open={Boolean(order)}
                 title="جزئیات سفارش مشتری"

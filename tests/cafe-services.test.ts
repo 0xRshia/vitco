@@ -17,14 +17,23 @@ import {
   saveMenuCategory,
 } from '../src/lib/cafe-operations';
 import { complementaryItems, setFeatures } from '../src/lib/cafe-features';
-import { createOrder, createReservation, quote, transitionOrder } from '../src/lib/commerce';
+import {
+  availableTables,
+  cafeById,
+  createOrder,
+  createReservation,
+  quote,
+  transitionOrder,
+} from '../src/lib/commerce';
 import { issueReminders, savePreferences } from '../src/lib/customer-settings';
 import { all, database, one, run, transaction } from '../src/lib/database';
 import {
   expireEventHolds,
+  deleteDraftEvent,
   eventGuests,
   leaveEvent,
   listEvents,
+  publicEvent,
   registerEvent,
   saveEvent,
   setEventState,
@@ -46,7 +55,11 @@ import {
   writeMeetingChat,
 } from '../src/lib/meetings';
 import { paymentCallback, startPayment } from '../src/lib/payments';
+import { paymentActivity } from '../src/lib/payment-activity';
 import { adminApi, publicArticles, submitContact } from '../src/lib/platform';
+import { qrScanHistory } from '../src/lib/qr-activity';
+import { resolveQr, saveQrMapping } from '../src/lib/qr-mappings';
+import { tableStatusList, updateTableState } from '../src/lib/table-states';
 import {
   bindTable,
   cashierQueue,
@@ -360,6 +373,10 @@ test('online event checkout holds capacity and reconciles verified and expired t
   assert.equal(paid.result, 'success');
   assert.deepEqual({ ...snapshots(first) }, { status: 'completed', payment_status: 'paid' });
   assert.equal(eventGuests(owner, event.id)[0].status, 'registered');
+  const attempts = paymentActivity(manager, 'branch', 'paid');
+  assert.ok(attempts.some((attempt) => attempt.order_id === first && attempt.kind === 'event'));
+  assert.ok(attempts.every((attempt) => !('merchant_id' in attempt) && !('state_hash' in attempt)));
+  assert.throws(() => paymentActivity(visitor, 'branch'), { status: 403 });
   leaveEvent(buyer, event.id);
   assert.equal(snapshots(first)?.payment_status, 'refund_required');
 
@@ -574,5 +591,155 @@ test('admin contents, messages, and suspension are persisted and inaccessible to
   assert.equal(
     one<{ suspended: number }>('SELECT suspended FROM users WHERE id=?', buyer.id)?.suspended,
     1,
+  );
+});
+
+test('printed QR mappings resolve only registered destinations and a menu scan detaches the table without losing guest receipts', () => {
+  const origin = 'https://vitco.example.test';
+  const printed = 'https://menu-provider.example.test/visit?table=5&site=1';
+  const scansBefore = qrScanHistory(owner, 'cafe', params).total;
+  assert.throws(() => resolveQr(printed, origin, undefined), { status: 404 });
+  assert.throws(
+    () =>
+      saveQrMapping(manager, 'cafe', origin, { url: printed, target: 'table', table_id: 'garden' }),
+    { status: 403 },
+  );
+  saveQrMapping(owner, 'cafe', origin, { url: printed, target: 'table', table_id: 'garden' });
+  assert.throws(() => saveQrMapping(visitor, 'other', origin, { url: printed, target: 'menu' }), {
+    status: 409,
+  });
+  const scan = resolveQr(
+    'https://menu-provider.example.test/visit/?site=1&table=5&utm_source=print#preview',
+    origin,
+    undefined,
+  );
+  assert.equal(scan.href, '/cafes/cafe');
+  assert.equal(tableContext(scan.token)?.table_id, 'garden');
+  const guest = tableGuest(scan.token, true);
+  assert.ok(guest);
+  saveQrMapping(owner, 'cafe', origin, {
+    url: 'https://menu-provider.example.test/menu',
+    target: 'menu',
+  });
+  resolveQr('https://menu-provider.example.test/menu', origin, scan.token);
+  assert.equal(tableContext(scan.token), null);
+  assert.equal(tableGuest(scan.token)?.id, guest.id);
+  assert.throws(() => requestCashier(scan.token), { status: 403 });
+  assert.equal(qrScanHistory(owner, 'cafe', params).total, scansBefore + 2);
+  assert.throws(() => qrScanHistory(visitor, 'cafe', params), { status: 403 });
+});
+
+test('table statuses are branch scoped and out-of-service tables cannot be scanned or reserved', () => {
+  changeTableCode(owner, 'cafe', 'garden', true);
+  createReservation(buyer, {
+    cafe_id: 'branch',
+    date: future,
+    time: '14:00',
+    table_id: 'garden',
+    guests: 2,
+    request_key: randomUUID(),
+  });
+  assert.throws(() => updateTableState(manager, cafeById('cafe'), 'garden', 'occupied'), {
+    status: 403,
+  });
+  updateTableState(owner, cafeById('cafe'), 'garden', 'occupied');
+  assert.equal(
+    tableStatusList(cafeById('cafe')).find((row) => row.id === 'garden')?.state,
+    'occupied',
+  );
+  assert.throws(() => updateTableState(owner, cafeById('branch'), 'garden', 'disabled'), {
+    status: 409,
+  });
+  updateTableState(owner, cafeById('cafe'), 'garden', 'disabled');
+  const code = tableCodesFor(owner, 'cafe').find((row) => row.id === 'garden')!.code;
+  assert.throws(() => bindTable(code, undefined), { status: 404 });
+  assert.throws(() => changeTableCode(owner, 'cafe', 'garden', true), { status: 404 });
+  assert.equal(
+    availableTables(cafeById('cafe'), future, '10:00', 2).find((row) => row.id === 'garden')
+      ?.available,
+    false,
+  );
+  updateTableState(owner, cafeById('cafe'), 'garden', 'available');
+  assert.equal(bindTable(code, undefined).table.table_id, 'garden');
+});
+
+test('event draft deletion is owner-only and leaves published events in place', () => {
+  const details = {
+    cafe_id: 'branch',
+    description: 'توضیح رویداد در انتظار انتشار',
+    date: future,
+    time: '10:00',
+    end_time: '11:00',
+    capacity: 4,
+  };
+  saveEvent(owner, { ...details, title: 'پیش‌نویس برای حذف', status: 'draft' }, '');
+  saveEvent(owner, { ...details, title: 'رویداد منتشرشده برای آزمون', status: 'published' }, '');
+  const draft = listEvents(owner, 'owner').find((event) => event.title === 'پیش‌نویس برای حذف')!;
+  assert.throws(() => publicEvent(null, draft.id), { status: 404 });
+  assert.throws(() => deleteDraftEvent(visitor, draft.id), { status: 403 });
+  deleteDraftEvent(owner, draft.id);
+  assert.ok(!listEvents(owner, 'owner').some((event) => event.id === draft.id));
+  const published = listEvents(owner, 'owner').find(
+    (event) => event.title === 'رویداد منتشرشده برای آزمون',
+  )!;
+  assert.throws(() => deleteDraftEvent(owner, published.id), { status: 409 });
+});
+
+test('article schedules protect direct links and related lists while keeping structured content and legacy text', () => {
+  const category = 'قهوه و نوشیدنی';
+  adminApi(admin, ['admin', 'categories'], 'POST', { name: category }, params);
+  const article = {
+    slug: 'برنامه-انتشار',
+    title: 'مقاله برنامه انتشار',
+    category,
+    summary: 'چه زمانی باید این مقاله منتشر شود؟',
+    published: true,
+    publish_date: '2090-01-02',
+    publish_time: '12:15',
+    body_blocks: [
+      { kind: 'heading', text: 'بخش آغازین' },
+      { kind: 'image', src: '/api/media/ab1.png', alt: 'فنجان قهوه' },
+      { kind: 'paragraph', text: 'بخش دوم مقاله درباره آزمون انتشار زمان‌بندی شده است.' },
+    ],
+  };
+  adminApi(admin, ['admin', 'articles'], 'POST', article, params);
+  adminApi(
+    admin,
+    ['admin', 'articles'],
+    'POST',
+    {
+      slug: 'مقاله-قدیمی',
+      title: 'مقاله قدیمی',
+      category,
+      summary: 'خلاصه مقاله قدیمی',
+      published: true,
+      body: 'متن ساده مقاله پیش از تغییرات انتشار.',
+    },
+    params,
+  );
+  assert.throws(() => publicArticles(article.slug, null, '2090-01-02T08:44:59.999Z'), {
+    status: 404,
+  });
+  assert.equal(publicArticles('مقاله-قدیمی', null, '2090-01-02T08:44:59.999Z').related?.length, 0);
+  const published = publicArticles(article.slug, null, '2090-01-02T08:45:00.000Z');
+  assert.deepEqual(published.article?.body_blocks, article.body_blocks);
+  assert.equal(published.related?.[0].slug, 'مقاله-قدیمی');
+  assert.throws(
+    () =>
+      adminApi(
+        admin,
+        ['admin', 'articles'],
+        'POST',
+        {
+          ...article,
+          slug: 'نشانی-نامعتبر',
+          body_blocks: [
+            ...article.body_blocks,
+            { kind: 'image', src: 'https://invalid.example/image.png' },
+          ],
+        },
+        params,
+      ),
+    { status: 400 },
   );
 });

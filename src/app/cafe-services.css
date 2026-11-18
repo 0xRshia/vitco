@@ -126,6 +126,19 @@
   flex-wrap: wrap;
   justify-content: center;
 }
+.service-article-figure {
+  margin-inline: 0;
+}
+.service-article-figure img {
+  max-inline-size: 100%;
+  block-size: auto;
+}
+.service-receipt {
+  max-inline-size: 700px;
+}
+.service-receipt dd {
+  margin-inline-start: 0;
+}
 @media (max-width: 480px) {
   .service-hour-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));

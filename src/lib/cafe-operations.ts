@@ -319,7 +319,8 @@ export function rescheduleReservation(
     );
     if (order && ['pending', 'approved'].includes(order.status))
       run(
-        'UPDATE orders SET table_name=?,updated_at=? WHERE reservation_id=?',
+        'UPDATE orders SET table_id=?,table_name=?,updated_at=? WHERE reservation_id=?',
+        tableId,
         table?.name || '',
         new Date().toISOString(),
         id,

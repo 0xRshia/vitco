@@ -159,6 +159,7 @@ export function CustomerSettings() {
           )}
         </section>
       </div>
+      <OtherSessions />
       <details className="panel">
         <summary>بستن حساب کاربری</summary>
         <p className="muted">
@@ -207,5 +208,42 @@ export function CustomerSettings() {
         }}
       />
     </div>
+  );
+}
+
+function OtherSessions() {
+  const { toast } = useApp();
+  const [confirm, setConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  return (
+    <section className="panel stack">
+      <h2>نشست‌های حساب</h2>
+      {error && <ErrorBox message={error} />}
+      <div>
+        <button className="button secondary" disabled={saving} onClick={() => setConfirm(true)}>
+          خروج از دستگاه‌های دیگر
+        </button>
+      </div>
+      <Confirm
+        open={confirm}
+        title="از دستگاه‌های دیگر خارج می‌شوی؟"
+        description="برای استفاده در دستگاه‌های دیگر، باید دوباره وارد حساب شوی."
+        onClose={() => setConfirm(false)}
+        onConfirm={async () => {
+          setConfirm(false);
+          setSaving(true);
+          setError('');
+          try {
+            const result = await api<{ revoked: number }>('auth/logout-others', 'POST', {});
+            toast(result.revoked ? 'نشست‌های دیگر بسته شدند.' : 'نشست دیگری فعال نیست.');
+          } catch (err) {
+            setError((err as Error).message);
+          } finally {
+            setSaving(false);
+          }
+        }}
+      />
+    </section>
   );
 }

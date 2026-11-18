@@ -3,15 +3,16 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { api, useApp, useResource } from '@/lib/client';
 import { dateLabel } from '@/lib/format';
-import type { Article, Testimonial } from '@/lib/platform';
+import type { Article, ArticleSummary, Testimonial } from '@/lib/platform';
 import { Empty, ErrorBox, Field, Form, Loading, Media, PageTitle, SectionTitle } from './ui';
 
 export function BlogView({ id }: { id?: string }) {
   const [category, setCategory] = useState('');
   const resource = useResource<{
     article?: Article;
-    articles?: Omit<Article, 'body'>[];
+    articles?: ArticleSummary[];
     categories?: string[];
+    related?: ArticleSummary[];
   }>(id ? 'blog/' + id : 'blog' + (category ? '?category=' + encodeURIComponent(category) : ''));
   if (resource.error) return <ErrorBox message={resource.error} retry={resource.reload} />;
   if (id) {
@@ -21,7 +22,9 @@ export function BlogView({ id }: { id?: string }) {
       <>
         <PageTitle
           title={article.title}
-          description={article.category + ' · ' + dateLabel(article.updated_at)}
+          description={
+            article.category + ' · ' + dateLabel(article.publish_at || article.created_at)
+          }
           back="/blog"
         />
         <article className="panel prose">
@@ -31,8 +34,53 @@ export function BlogView({ id }: { id?: string }) {
           <p>
             <strong>{article.summary}</strong>
           </p>
-          <p className="service-body">{article.body}</p>
+          {article.body_blocks.length ? (
+            article.body_blocks.map((block, index) => {
+              if (block.kind === 'image')
+                return (
+                  <figure className="service-article-figure" key={index}>
+                    <img src={block.src} alt={block.alt} loading="lazy" />
+                  </figure>
+                );
+              if (block.kind === 'heading') return <h2 key={index}>{block.text}</h2>;
+              if (block.kind === 'quote')
+                return (
+                  <blockquote className="service-body" key={index}>
+                    {block.text}
+                  </blockquote>
+                );
+              if (block.kind === 'list')
+                return (
+                  <ul key={index}>
+                    {block.text
+                      .split('\n')
+                      .map((line) => line.trim())
+                      .filter(Boolean)
+                      .map((line, position) => (
+                        <li key={position}>{line}</li>
+                      ))}
+                  </ul>
+                );
+              return (
+                <p className="service-body" key={index}>
+                  {block.text}
+                </p>
+              );
+            })
+          ) : (
+            <p className="service-body">{article.body}</p>
+          )}
         </article>
+        {!!resource.data?.related?.length && (
+          <section className="service-section">
+            <SectionTitle title="نوشته‌های مرتبط" />
+            <div className="service-card-grid service-gallery">
+              {resource.data.related.map((item) => (
+                <ArticleCard key={item.slug} article={item} />
+              ))}
+            </div>
+          </section>
+        )}
       </>
     );
   }
@@ -58,25 +106,31 @@ export function BlogView({ id }: { id?: string }) {
       ) : resource.data?.articles?.length ? (
         <div className="service-card-grid service-gallery">
           {resource.data.articles.map((article) => (
-            <article key={article.slug} className="panel">
-              {article.image && <Media src={article.image} alt={article.title} />}
-              <p className="muted">
-                {article.category} · {dateLabel(article.updated_at)}
-              </p>
-              <h2>
-                <Link href={'/blog/' + encodeURIComponent(article.slug)}>{article.title}</Link>
-              </h2>
-              <p>{article.summary}</p>
-              <Link href={'/blog/' + encodeURIComponent(article.slug)} className="text-link">
-                خواندن نوشته
-              </Link>
-            </article>
+            <ArticleCard key={article.slug} article={article} />
           ))}
         </div>
       ) : (
         <Empty title="نوشته‌ای در این بخش منتشر نشده است." />
       )}
     </>
+  );
+}
+function ArticleCard({ article }: { article: ArticleSummary }) {
+  const href = '/blog/' + encodeURIComponent(article.slug);
+  return (
+    <article className="panel">
+      {article.image && <Media src={article.image} alt={article.title} />}
+      <p className="muted">
+        {article.category} · {dateLabel(article.publish_at || article.created_at)}
+      </p>
+      <h2>
+        <Link href={href}>{article.title}</Link>
+      </h2>
+      <p>{article.summary}</p>
+      <Link href={href} className="text-link">
+        خواندن نوشته
+      </Link>
+    </article>
   );
 }
 

@@ -27,9 +27,27 @@ export const cafeServiceSchema = `
   CREATE UNIQUE INDEX IF NOT EXISTS table_code_active ON table_codes(cafe_id,table_id) WHERE revoked_at='';
   CREATE TABLE IF NOT EXISTS table_visits (
     token_hash TEXT PRIMARY KEY, code TEXT NOT NULL REFERENCES table_codes(code),
-    guest_id TEXT REFERENCES users(id), expires INTEGER NOT NULL
+    guest_id TEXT REFERENCES users(id), expires INTEGER NOT NULL, bound INTEGER NOT NULL DEFAULT 1
   );
   CREATE INDEX IF NOT EXISTS table_visits_expiry ON table_visits(expires);
+  CREATE TABLE IF NOT EXISTS table_states (
+    cafe_id TEXT NOT NULL REFERENCES cafes(id), table_id TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('available','occupied','reserved','disabled')),
+    PRIMARY KEY(cafe_id, table_id)
+  );
+  CREATE TABLE IF NOT EXISTS qr_aliases (
+    id TEXT PRIMARY KEY, cafe_id TEXT NOT NULL REFERENCES cafes(id),
+    url_hash TEXT NOT NULL UNIQUE, display_url TEXT NOT NULL,
+    target TEXT NOT NULL CHECK(target IN ('menu','reservation','table','cashier')),
+    table_id TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE INDEX IF NOT EXISTS qr_aliases_cafe ON qr_aliases(cafe_id);
+  CREATE TABLE IF NOT EXISTS qr_scan_counts (
+    cafe_id TEXT NOT NULL REFERENCES cafes(id), day TEXT NOT NULL,
+    target TEXT NOT NULL, table_id TEXT NOT NULL, label TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY(cafe_id, day, target, table_id)
+  );
   CREATE TABLE IF NOT EXISTS cashier_calls (
     id TEXT PRIMARY KEY, cafe_id TEXT NOT NULL REFERENCES cafes(id), table_id TEXT NOT NULL,
     table_name TEXT NOT NULL, code TEXT NOT NULL REFERENCES table_codes(code),
@@ -113,6 +131,7 @@ export const cafeServiceSchema = `
   CREATE TABLE IF NOT EXISTS articles (
     slug TEXT PRIMARY KEY, title TEXT NOT NULL, category TEXT NOT NULL, summary TEXT NOT NULL,
     body TEXT NOT NULL, image TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 0,
+    body_blocks TEXT NOT NULL DEFAULT '[]', publish_at TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS article_categories (name TEXT PRIMARY KEY);

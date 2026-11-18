@@ -15,7 +15,7 @@ import type { CashierCall } from '@/lib/table-service';
 import type { CafeFeatures } from '@/lib/cafe-features';
 import { categoryKinds } from '@/lib/catalog';
 import type { MeetingSummary } from '@/lib/meetings';
-import type { Cafe, CafeTable, CartLine, Reservation } from '@/lib/types';
+import type { Cafe, CafeTable, CartLine, Reservation, TableState } from '@/lib/types';
 import {
   Badge,
   Confirm,
@@ -33,8 +33,10 @@ import { cashierLabels } from './table-service';
 import { MeetingList } from './meetings';
 import { ImageUpload } from './account';
 import { AccountingWorkspace, LoyaltyWorkspace } from './finance-workspace';
+import { QrWorkspace, TableStatusControl } from './qr-workspace';
+import { PaymentActivityView } from './payment-activity';
 
-type TableCode = CafeTable & { code: string; scans: number };
+type TableCode = CafeTable & { state: TableState; code?: string; scans?: number };
 type Operations = {
   cafe: Pick<Cafe, 'id' | 'name' | 'opens' | 'closes' | 'tour_url'>;
   access: {
@@ -116,11 +118,12 @@ function LocationWorkspace({ id }: { id: string }) {
     { id: 'cashier', label: 'درخواست‌های صندوق', allowed: data.access.cashier },
     { id: 'calendar', label: 'تقویم رزرو', allowed: data.access.reservations },
     { id: 'meetings', label: 'دورهمی‌ها', allowed: data.access.meetings },
-    { id: 'tables', label: 'کد میزها', allowed: data.access.owner },
+    { id: 'tables', label: 'میزها و QR', allowed: data.access.cashier },
     { id: 'staff', label: 'کارکنان', allowed: data.access.owner },
     { id: 'hours', label: 'ساعت کاری', allowed: data.access.owner },
     { id: 'catalog', label: 'منو و گالری', allowed: data.access.owner },
     { id: 'accounting', label: 'حسابداری', allowed: data.access.accounting },
+    { id: 'payments', label: 'تراکنش‌های درگاه', allowed: data.access.accounting },
     { id: 'loyalty', label: 'باشگاه مشتریان', allowed: data.access.owner },
   ].filter((tab) => tab.allowed);
   const tab = areas.find((area) => area.id === selected)?.id || areas[0]?.id;
@@ -164,20 +167,25 @@ function LocationWorkspace({ id }: { id: string }) {
       {tab === 'calendar' && <ReservationCalendar id={id} />}
       {tab === 'meetings' && <CaféMeetingQueue id={id} />}
       {tab === 'accounting' && <AccountingWorkspace id={id} />}
+      {tab === 'payments' && <PaymentActivityView id={id} />}
       {tab === 'loyalty' && <LoyaltyWorkspace id={id} />}
       {tab === 'tables' && (
         <section className="stack">
-          <h2>کد قابل چاپ میز</h2>
+          <h2>میزهای شعبه</h2>
           {data.tables?.length ? (
             <div className="service-card-grid">
               {data.tables.map((table) => (
                 <article key={table.id} className="panel stack">
                   <div className="card-heading">
                     <h3>{table.name}</h3>
-                    <span>{digits(table.scans)} اسکن</span>
+                    {table.scans !== undefined && <span>{digits(table.scans)} اسکن کد میز</span>}
                   </div>
                   {table.vip && <span className="badge">میز ویژه</span>}
                   {table.enabled === false && <p className="muted">میز غیرفعال است.</p>}
+                  <TableStatusControl
+                    table={table}
+                    save={(state) => save('tables/' + encodeURIComponent(table.id), { state })}
+                  />
                   {table.code && (
                     <>
                       <img
@@ -208,7 +216,7 @@ function LocationWorkspace({ id }: { id: string }) {
                       </div>
                     </>
                   )}
-                  {(table.enabled !== false || table.code) && (
+                  {data.access.owner && (table.state !== 'disabled' || table.code) && (
                     <button
                       type="button"
                       className="button secondary"
@@ -226,6 +234,9 @@ function LocationWorkspace({ id }: { id: string }) {
             </div>
           ) : (
             <p className="notice">ابتدا میزها را در بخش ویرایش کافه ثبت کنید.</p>
+          )}
+          {data.access.owner && (
+            <QrWorkspace id={id} tables={data.tables || []} onSaved={resource.reload} />
           )}
         </section>
       )}

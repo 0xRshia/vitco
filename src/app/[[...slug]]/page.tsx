@@ -1,7 +1,8 @@
 import { Suspense } from 'react';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { Application } from '@/components/application';
 import { Loading } from '@/components/ui';
+import { storefrontRedirect } from '@/lib/cafe-links';
 const routes = [
   'cafes',
   'menu',
@@ -45,7 +46,12 @@ const routes = [
 ];
 export default async function Page({ params }: { params: Promise<{ slug?: string[] }> }) {
   const { slug = [] } = await params;
-  if (slug.length > 2 || (slug[0] && !routes.includes(slug[0]))) notFound();
+  const storefront = storefrontRedirect(slug);
+  if (storefront) redirect(storefront);
+  if (slug.length === 1 && slug[0] === 'loyalty') redirect('/rewards');
+  if (slug.length === 2 && slug[0] === 'user' && slug[1] === 'dashboard') redirect('/profile');
+  const orderReceipt = slug.length === 3 && slug[0] === 'orders' && slug[2] === 'invoice';
+  if (!orderReceipt && (slug.length > 2 || (slug[0] && !routes.includes(slug[0])))) notFound();
   return (
     <Suspense fallback={<Loading />}>
       <Application />

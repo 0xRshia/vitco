@@ -49,7 +49,7 @@ export function TableServicePanel({ cafeId }: { cafeId: string }) {
   if (!table || table.cafe_id !== cafeId) return null;
   const requested = call?.status === 'pending' || call?.status === 'accepted';
   return (
-    <section className="panel service-table-banner" aria-label="سرویس میز">
+    <section id="table-service" className="panel service-table-banner" aria-label="سرویس میز">
       <QrCode size={23} />
       <div>
         <strong>{table.table_name}</strong>

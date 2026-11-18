@@ -2,14 +2,16 @@ import { expect, test, type APIRequestContext } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 
 async function register(client: APIRequestContext, name: string) {
+  const email = 'vitco-' + randomUUID() + '@example.test';
   const response = await client.post('/api/auth/register', {
     data: {
       name,
-      email: 'vitco-' + randomUUID() + '@example.test',
+      email,
       password: 'Test-password-123',
     },
   });
   expect(response.status()).toBe(201);
+  return email;
 }
 async function addCafe(
   owner: APIRequestContext,
@@ -100,6 +102,10 @@ test('a guest scans a table, calls the cashier, places an order and sees prepara
   });
   expect(prepared.ok(), await prepared.text()).toBe(true);
   await expect(page.getByText(/زمان تقریبی آماده شدن/)).toBeVisible();
+  await page.getByRole('link', { name: 'رسید قابل چاپ' }).click();
+  await expect(page).toHaveURL('/orders/' + orderId + '/invoice');
+  await expect(page.getByRole('heading', { name: 'رسید سفارش', exact: true })).toBeVisible();
+  await expect(page.getByText('لاته تراس × ۱')).toBeVisible();
   const stranger = await browser.newContext();
   try {
     expect(
@@ -111,6 +117,79 @@ test('a guest scans a table, calls the cashier, places an order and sees prepara
   expect(await page.locator('body').evaluate((body) => body.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+});
+
+test('legacy storefront links and printed QR codes reach their registered café', async ({
+  request: owner,
+  page,
+}) => {
+  await page.goto('/cafes/kafh-aaala/cart');
+  await expect(page).toHaveURL('/cart?cafe=vitrin-aala');
+  await expect(page.getByRole('link', { name: 'دیدن منوی این کافه' })).toHaveAttribute(
+    'href',
+    '/cafes/vitrin-aala',
+  );
+  await page.goto('/branches/31b4c345-62c3-44a4-a83d-5ec9cc3cd7eb/menu');
+  await expect(page).toHaveURL('/cafes/vitrin-aala');
+  await expect(page.getByRole('heading', { name: 'کافه اعلا', level: 1 })).toBeVisible();
+
+  await register(owner, 'مدیر کدهای چاپ‌شده');
+  const cafeId = await addCafe(owner, 'کافه کدهای چاپ‌شده', [
+    { id: 'old-table', name: 'میز کنار در', seats: 2 },
+  ]);
+  const path = '/api/operations/' + cafeId;
+  const menuQr = await owner.get(path + '/qr');
+  expect(menuQr.headers()['content-type']).toContain('image/svg+xml');
+  expect(await menuQr.text()).toContain('<svg');
+  expect((await page.request.get(path + '/qr')).status()).toBe(401);
+  const printed = 'https://menu-provider.example.test/' + cafeId + '?table=1';
+  const mapped = await owner.post(path + '/qr-mappings', {
+    data: { url: printed, target: 'table', table_id: 'old-table' },
+  });
+  expect(mapped.ok(), await mapped.text()).toBe(true);
+  await page.goto('/scanner');
+  await page
+    .getByRole('textbox', { name: 'یا پیوند کافه را وارد کن' })
+    .fill(printed + '&utm_source=print');
+  await page.getByRole('button', { name: 'باز کردن پیوند QR', exact: true }).click();
+  await expect(page).toHaveURL('/cafes/' + cafeId);
+  await expect(
+    page.getByRole('region', { name: 'سرویس میز' }).getByText('میز کنار در'),
+  ).toBeVisible();
+  expect(await (await owner.get(path + '/qr-activity')).json()).toMatchObject({ total: 1 });
+  const disabled = await owner.post(path + '/tables/old-table', { data: { state: 'disabled' } });
+  expect(disabled.ok(), await disabled.text()).toBe(true);
+  expect(await (await owner.get(path + '/qr')).text()).toBe(await menuQr.text());
+  await expect(page.getByRole('region', { name: 'سرویس میز' })).toHaveCount(0, { timeout: 10000 });
+});
+
+test('signing out other sessions keeps the current browser and other accounts signed in', async ({
+  context,
+  request: otherAccount,
+  page,
+  browser,
+  baseURL,
+}) => {
+  const email = await register(context.request, 'صاحب نشست');
+  await register(otherAccount, 'کاربر دیگر');
+  const secondDevice = await browser.newContext({ baseURL });
+  try {
+    const login = await secondDevice.request.post('/api/auth/login', {
+      data: { email, password: 'Test-password-123' },
+    });
+    expect(login.ok(), await login.text()).toBe(true);
+    expect((await secondDevice.request.get('/api/addresses')).ok()).toBe(true);
+    await page.goto('/settings');
+    await page.getByRole('button', { name: 'خروج از دستگاه‌های دیگر' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'بله، ادامه بده' }).click();
+    await expect
+      .poll(async () => (await secondDevice.request.get('/api/addresses')).status())
+      .toBe(401);
+    expect((await context.request.get('/api/addresses')).ok()).toBe(true);
+    expect((await otherAccount.get('/api/addresses')).ok()).toBe(true);
+  } finally {
+    await secondDevice.close();
+  }
 });
 
 test('a café approves a meeting and only joined accounts can post or read chat', async ({

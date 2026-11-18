@@ -63,6 +63,7 @@ export function database() {
     ['orders', 'payment_ref', "TEXT NOT NULL DEFAULT ''"],
     ['orders', 'kind', "TEXT NOT NULL DEFAULT 'menu'"],
     ['orders', 'table_name', "TEXT NOT NULL DEFAULT ''"],
+    ['orders', 'table_id', "TEXT NOT NULL DEFAULT ''"],
     ['orders', 'preparation_minutes', 'INTEGER'],
     ['orders', 'preparation_started_at', "TEXT NOT NULL DEFAULT ''"],
     ['events', 'status', "TEXT NOT NULL DEFAULT 'published'"],
@@ -108,6 +109,15 @@ export function database() {
     );
   `);
   db.exec(cafeServiceSchema);
+  for (const [table, column, definition] of [
+    ['table_visits', 'bound', 'INTEGER NOT NULL DEFAULT 1'],
+    ['articles', 'body_blocks', "TEXT NOT NULL DEFAULT '[]'"],
+    ['articles', 'publish_at', "TEXT NOT NULL DEFAULT ''"],
+  ]) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!columns.some((item) => item.name === column))
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
   const cafe = source.cafe;
   db.prepare(
     `INSERT OR IGNORE INTO cafes (id,owner_id,name,description,city,address,phone,amenities,capacity,pickup,active,source) VALUES (?,NULL,?,?,?,?,?,?,0,0,0,?)`,
@@ -170,7 +180,15 @@ export function transaction<T>(work: () => T): T {
     throw error;
   }
 }
-const jsonColumns = new Set(['amenities', 'sizes', 'addons', 'items', 'images', 'tables']);
+const jsonColumns = new Set([
+  'amenities',
+  'sizes',
+  'addons',
+  'items',
+  'images',
+  'tables',
+  'body_blocks',
+]);
 const booleanColumns = new Set([
   'active',
   'available',
