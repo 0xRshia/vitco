@@ -87,6 +87,8 @@ test('a guest scans a table, calls the cashier, places an order and sees prepara
   await page.getByRole('dialog').getByRole('button', { name: 'افزودن به سبد خرید' }).click();
   await table.getByRole('link', { name: 'دیدن سبد میز' }).click();
   await expect(page.getByText('سرویس میز تراس', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'ادامه و پرداخت' }).click();
+  await expect(page.getByRole('heading', { name: 'تسویه حساب', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'ثبت سفارش', exact: true }).click();
   await expect(page).toHaveURL(/\/orders\/[\w-]+/);
   await expect(page.getByRole('heading', { name: 'سفارش شما ثبت شد!' })).toBeVisible();
@@ -132,6 +134,11 @@ test('legacy storefront links and printed QR codes reach their registered café'
   await page.goto('/branches/31b4c345-62c3-44a4-a83d-5ec9cc3cd7eb/menu');
   await expect(page).toHaveURL('/cafes/vitrin-aala');
   await expect(page.getByRole('heading', { name: 'کافه اعلا', level: 1 })).toBeVisible();
+  await page.goto('/cafes/kafh-aaala/checkout');
+  await expect(page).toHaveURL('/cart?cafe=vitrin-aala&step=checkout');
+  await expect(page.getByRole('heading', { name: 'تسویه حساب', level: 1 })).toBeVisible();
+  await page.goto('/dashboard/admin/articles');
+  await expect(page).toHaveURL('/admin/articles');
 
   await register(owner, 'مدیر کدهای چاپ‌شده');
   const cafeId = await addCafe(owner, 'کافه کدهای چاپ‌شده', [
@@ -149,9 +156,9 @@ test('legacy storefront links and printed QR codes reach their registered café'
   expect(mapped.ok(), await mapped.text()).toBe(true);
   await page.goto('/scanner');
   await page
-    .getByRole('textbox', { name: 'یا پیوند کافه را وارد کن' })
+    .getByRole('textbox', { name: 'یا آدرس QR را وارد کنید' })
     .fill(printed + '&utm_source=print');
-  await page.getByRole('button', { name: 'باز کردن پیوند QR', exact: true }).click();
+  await page.getByRole('button', { name: 'بررسی آدرس', exact: true }).click();
   await expect(page).toHaveURL('/cafes/' + cafeId);
   await expect(
     page.getByRole('region', { name: 'سرویس میز' }).getByText('میز کنار در'),

@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { notFound, redirect } from 'next/navigation';
 import { Application } from '@/components/application';
 import { Loading } from '@/components/ui';
-import { storefrontRedirect } from '@/lib/cafe-links';
+import { dashboardRedirect, storefrontRedirect } from '@/lib/cafe-links';
 const routes = [
   'cafes',
   'menu',
@@ -46,9 +46,10 @@ const routes = [
 ];
 export default async function Page({ params }: { params: Promise<{ slug?: string[] }> }) {
   const { slug = [] } = await params;
-  const storefront = storefrontRedirect(slug);
-  if (storefront) redirect(storefront);
+  const destination = storefrontRedirect(slug) || dashboardRedirect(slug);
+  if (destination) redirect(destination);
   if (slug.length === 1 && slug[0] === 'loyalty') redirect('/rewards');
+  if (slug.length === 2 && slug[0] === 'settings' && slug[1] === 'profile') redirect('/profile');
   if (slug.length === 2 && slug[0] === 'user' && slug[1] === 'dashboard') redirect('/profile');
   const orderReceipt = slug.length === 3 && slug[0] === 'orders' && slug[2] === 'invoice';
   if (!orderReceipt && (slug.length > 2 || (slug[0] && !routes.includes(slug[0])))) notFound();

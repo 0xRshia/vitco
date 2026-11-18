@@ -51,6 +51,38 @@ export function listEvents(user: User | null, scope: 'public' | 'owner' | 'histo
     ...(scope === 'public' ? [] : [user?.id || '']),
   ).map(hydrate<CafeEvent>);
 }
+export function browseEvents(user: User | null, params: URLSearchParams) {
+  const search = v.text(params.get('q') ?? '', 'عبارت جستجو', 0, 120);
+  const city = v.text(params.get('city') ?? '', 'شهر', 0, 80);
+  const free = params.get('is_free') || '';
+  const sort = params.get('sort') || 'starts_at';
+  v.ensure(['', 'true', 'false'].includes(free), 'نوع رویداد معتبر نیست.');
+  v.ensure(sort === 'starts_at' || sort === 'newest', 'مرتب‌سازی معتبر نیست.');
+  const where = ` WHERE e.status IN ('published','completed')
+    AND (?='' OR instr(lower(e.title||' '||e.description||' '||c.name),lower(?))>0)
+    AND (?='' OR instr(lower(c.city),lower(?))>0)
+    AND (?='' OR (e.price=0)=(?='true'))`;
+  const filters = [search, search, city, city, free, free] as const;
+  const total = one<{ count: number }>(
+    'SELECT COUNT(*) count FROM events e JOIN cafes c ON c.id=e.cafe_id' + where,
+    ...filters,
+  )!.count;
+  const pageSize = 12;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(pages, v.integer(params.get('page') || 1, 'صفحه', 1));
+  const now = Date.now();
+  const order = sort === 'newest' ? 'e.rowid DESC' : 'e.date,e.time,e.id';
+  const events = all(
+    listing + where + ' ORDER BY ' + order + ' LIMIT ? OFFSET ?',
+    now,
+    now,
+    user?.id || '',
+    ...filters,
+    pageSize,
+    (page - 1) * pageSize,
+  ).map(hydrate<CafeEvent>);
+  return { events, page, pages };
+}
 export function publicEvent(user: User | null, id: string) {
   const now = Date.now();
   const row = one(

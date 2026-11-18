@@ -29,6 +29,7 @@ import type { Cafe } from '@/lib/types';
 import { CafeCard } from './browse-cards';
 import { MapCanvas, type MapBounds as Bounds } from './map-canvas';
 import { Empty, Field, LoginGate, Modal, PageTitle } from './ui';
+import { useVitrinCafeFilter } from './vitrin-layout';
 
 type Camera = { points: GeoPoint[]; zoom?: number; revision: number };
 type MappedCafe = Cafe & GeoPoint;
@@ -116,6 +117,11 @@ export function CafeExplorer({
     Number(filters.online) +
     Number(filters.discount) +
     Number(filters.sort !== 'recommended');
+  const openFilters = () => {
+    setDraft(filters);
+    setFilterOpen(true);
+  };
+  useVitrinCafeFilter(openFilters, !favorites && !listOnly);
   const headerClearance = height <= 500 ? 64 : 132;
   const maximumDrawer = Math.max(80, height - headerClearance - 16);
   const snaps = {
@@ -267,10 +273,7 @@ export function CafeExplorer({
           type="button"
           className={'explorer-filter-trigger' + (activeCount ? ' selected' : '')}
           aria-label={'فیلترها' + (activeCount ? ' · ' + digits(activeCount) + ' فعال' : '')}
-          onClick={() => {
-            setDraft(filters);
-            setFilterOpen(true);
-          }}
+          onClick={openFilters}
         >
           <SlidersHorizontal size={20} />
           {activeCount > 0 && <span>{digits(activeCount)}</span>}

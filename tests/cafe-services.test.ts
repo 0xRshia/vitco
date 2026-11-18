@@ -724,6 +724,16 @@ test('article schedules protect direct links and related lists while keeping str
   const published = publicArticles(article.slug, null, '2090-01-02T08:45:00.000Z');
   assert.deepEqual(published.article?.body_blocks, article.body_blocks);
   assert.equal(published.related?.[0].slug, 'مقاله-قدیمی');
+  const listing = publicArticles(
+    undefined,
+    category,
+    '2090-01-02T08:45:00.000Z',
+    new URLSearchParams({ q: 'زمان‌بندی' }),
+  );
+  assert.deepEqual(
+    listing.articles?.map((item) => item.slug),
+    [article.slug],
+  );
   assert.throws(
     () =>
       adminApi(

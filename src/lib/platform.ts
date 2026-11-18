@@ -89,6 +89,7 @@ export function publicArticles(
   slug?: string,
   category?: string | null,
   now = new Date().toISOString(),
+  params = new URLSearchParams(),
 ) {
   if (slug) {
     const row = one('SELECT * FROM articles WHERE slug=? AND ' + publishedArticle, slug, now);
@@ -102,16 +103,29 @@ export function publicArticles(
     );
     return { article, related };
   }
+  const search = v.text(params.get('q') ?? '', 'عبارت جستجو', 0, 120);
+  const filter = `${publishedArticle} AND (? IS NULL OR category=?)
+    AND (?='' OR instr(lower(title || ' ' || summary || ' ' || body),lower(?))>0)`;
+  const values = [now, category ?? null, category ?? null, search, search] as const;
+  const pageSize = 12;
+  const total = one<{ count: number }>(
+    'SELECT COUNT(*) count FROM articles WHERE ' + filter,
+    ...values,
+  )!.count;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(pages, v.integer(params.get('page') || 1, 'صفحه', 1));
   return {
+    page,
+    pages,
     categories: all<{ category: string }>(
       'SELECT DISTINCT category FROM articles WHERE ' + publishedArticle + ' ORDER BY category',
       now,
     ).map((row) => row.category),
     articles: all<ArticleSummary>(
-      `SELECT ${articleSummary} FROM articles WHERE ${publishedArticle} AND (? IS NULL OR category=?) ${articleSort} LIMIT 100`,
-      now,
-      category ?? null,
-      category ?? null,
+      `SELECT ${articleSummary} FROM articles WHERE ${filter} ${articleSort} LIMIT ? OFFSET ?`,
+      ...values,
+      pageSize,
+      (page - 1) * pageSize,
     ),
   };
 }

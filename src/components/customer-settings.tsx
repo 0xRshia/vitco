@@ -103,7 +103,7 @@ export function CustomerSettings() {
             </>
           )}
         </section>
-        <section className="panel stack">
+        <section id="account-phone" className="panel stack">
           <h2>شماره همراه حساب</h2>
           {data?.user?.phone && <p dir="ltr">{digits(data.user.phone)}</p>}
           {!data?.smsAvailable ? (

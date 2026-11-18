@@ -1,25 +1,40 @@
 'use client';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
+import {
+  ArrowUpLeft,
+  CalendarCheck,
+  Coffee,
+  Headphones,
+  LayoutDashboard,
+  MapPin,
+  Search,
+  Star,
+  Store,
+} from 'lucide-react';
 import { api, useApp, useResource } from '@/lib/client';
 import { dateLabel } from '@/lib/format';
 import type { Article, ArticleSummary, Testimonial } from '@/lib/platform';
 import { Empty, ErrorBox, Field, Form, Loading, Media, PageTitle, SectionTitle } from './ui';
+import { VitrinListingFilters, VitrinListingPages } from './vitrin-listing';
 
 export function BlogView({ id }: { id?: string }) {
-  const [category, setCategory] = useState('');
+  const query = useSearchParams();
   const resource = useResource<{
     article?: Article;
     articles?: ArticleSummary[];
     categories?: string[];
     related?: ArticleSummary[];
-  }>(id ? 'blog/' + id : 'blog' + (category ? '?category=' + encodeURIComponent(category) : ''));
-  if (resource.error) return <ErrorBox message={resource.error} retry={resource.reload} />;
+    page?: number;
+    pages?: number;
+  }>(id ? 'blog/' + id : 'blog' + (query.size ? '?' + query : ''));
   if (id) {
+    if (resource.error) return <ErrorBox message={resource.error} retry={resource.reload} />;
     const article = resource.data?.article;
     if (!article) return <Loading />;
     return (
-      <>
+      <div className="vitrin-article-detail">
         <PageTitle
           title={article.title}
           description={
@@ -74,51 +89,62 @@ export function BlogView({ id }: { id?: string }) {
         {!!resource.data?.related?.length && (
           <section className="service-section">
             <SectionTitle title="نوشته‌های مرتبط" />
-            <div className="service-card-grid service-gallery">
+            <div className="vitrin-list-cards">
               {resource.data.related.map((item) => (
                 <ArticleCard key={item.slug} article={item} />
               ))}
             </div>
           </section>
         )}
-      </>
+      </div>
     );
   }
   return (
-    <>
-      <PageTitle title="مجله ویتکو" />
-      {!!resource.data?.categories?.length && (
-        <div className="tabs service-tabs">
-          {['', ...resource.data.categories].map((name) => (
-            <button
-              key={name}
-              aria-pressed={name === category}
-              className={name === category ? 'active' : ''}
-              onClick={() => setCategory(name)}
-            >
-              {name || 'همه نوشته‌ها'}
-            </button>
+    <div className="vitrin-listing">
+      <PageTitle
+        title="مقالات"
+        description="تازه‌ترین مطالب درباره دنیای کافه‌ها برای صاحبان کافه و علاقه‌مندان به کافه‌گردی."
+      />
+      <VitrinListingFilters kind="blog">
+        <select
+          key={resource.data?.categories?.length || 0}
+          aria-label="دسته‌بندی مقاله"
+          name="category"
+          defaultValue={query.get('category') || ''}
+        >
+          <option value="">همه دسته‌ها</option>
+          {resource.data?.categories?.map((name) => (
+            <option key={name}>{name}</option>
           ))}
-        </div>
-      )}
+        </select>
+      </VitrinListingFilters>
       {resource.loading ? (
         <Loading />
+      ) : resource.error ? (
+        <ErrorBox message={resource.error} retry={resource.reload} />
       ) : resource.data?.articles?.length ? (
-        <div className="service-card-grid service-gallery">
-          {resource.data.articles.map((article) => (
-            <ArticleCard key={article.slug} article={article} />
-          ))}
-        </div>
+        <>
+          <div className="vitrin-list-cards">
+            {resource.data.articles.map((article) => (
+              <ArticleCard key={article.slug} article={article} />
+            ))}
+          </div>
+          <VitrinListingPages page={resource.data.page || 1} pages={resource.data.pages || 1} />
+        </>
       ) : (
-        <Empty title="نوشته‌ای در این بخش منتشر نشده است." />
+        <Empty
+          title="مقاله‌ای پیدا نشد"
+          href={query.size ? '/blog' : undefined}
+          label="پاک کردن فیلترها"
+        />
       )}
-    </>
+    </div>
   );
 }
 function ArticleCard({ article }: { article: ArticleSummary }) {
   const href = '/blog/' + encodeURIComponent(article.slug);
   return (
-    <article className="panel">
+    <article className="panel vitrin-article-card">
       {article.image && <Media src={article.image} alt={article.title} />}
       <p className="muted">
         {article.category} · {dateLabel(article.publish_at || article.created_at)}
@@ -156,24 +182,157 @@ const questions = [
     'با حساب خود وارد شوید و از بخش ثبت و مدیریت کافه، صفحه کافه را بسازید. تنظیمات شعبه، منو، رزرو، میز و کارکنان در فضای کار کافه قرار دارند.',
   ],
 ];
-export function FaqView() {
+
+export function VitrinMarketingHeading({
+  title,
+  highlight,
+  description,
+}: {
+  title: string;
+  highlight: string;
+  description?: string;
+}) {
   return (
-    <>
-      <PageTitle title="پرسش‌های متداول" />
-      <div className="panel prose service-disclosures">
-        {questions.map(([question, answer]) => (
-          <details key={question}>
-            <summary>{question}</summary>
-            <p>{answer}</p>
-          </details>
-        ))}
+    <div className="vitrin-marketing-heading">
+      <div>
+        <h1>
+          {title} <span>{highlight}</span>
+          <svg viewBox="0 0 60 48" width={60} height={48} aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M0.715272 6.72034C-1.16519 3.83619 0.881685 0 4.2987 0.00560028L55.6981 0C59.1206 0 61.1675 3.83619 59.2815 6.72034L33.5818 46.0511C31.8844 48.6496 28.1124 48.6496 26.415 46.0511L0.715272 6.72034Z"
+            />
+          </svg>
+        </h1>
+        <hr />
       </div>
-      <p>
-        <Link className="text-link" href="/contact">
-          تماس با ویتکو
+      {description && <p>{description}</p>}
+    </div>
+  );
+}
+
+export function AboutView() {
+  const features = [
+    {
+      icon: MapPin,
+      title: 'کشف کافه‌ها',
+      body: 'کافه‌های شهر را جستجو کنید، روی نقشه ببینید و قبل از رفتن با فضا و موقعیت هر کافه آشنا شوید.',
+    },
+    {
+      icon: Coffee,
+      title: 'منو و تجربه حضور',
+      body: 'منوی دیجیتال را ببینید، رویدادها و میتینگ‌ها را دنبال کنید و برای رزرو میز برنامه‌ریزی کنید.',
+    },
+    {
+      icon: Store,
+      title: 'ویترینی برای کافه‌ها',
+      body: 'صاحبان کافه می‌توانند منو، سفارش و حضور آنلاین خود را در یک پنل مدیریت کنند و بهتر دیده شوند.',
+    },
+  ];
+  return (
+    <div className="vitrin-marketing">
+      <VitrinMarketingHeading title="درباره" highlight="ویترین کافه" />
+      <article className="vitrin-about-copy">
+        <p>
+          ویترین کافه بستری است برای پیدا کردن کافه‌ها و تجربه‌ای ساده‌تر از کافه‌گردی. اطلاعات
+          پراکنده منو، فضا، موقعیت و برنامه‌ها در یک مسیر دیجیتال جمع شده تا هم مهمان و هم صاحب کافه
+          کار راحت‌تری داشته باشند.
+        </p>
+        <h2>ویترین کافه چیست؟</h2>
+        <p>
+          به‌جای جستجوی پراکنده در نقشه‌ها و شبکه‌های اجتماعی، کافه‌های شهر را در یک جا می‌بینید.
+          می‌توانید فضا و منو را بررسی کنید، رویدادها و میتینگ‌ها را دنبال کنید و در صورت نیاز سفارش
+          دهید یا میز رزرو کنید.
+        </p>
+        <h3>اگر دنبال کافه می‌گردید</h3>
+        <p>
+          کافه‌ها را جستجو کنید، روی نقشه ببینید و قبل از رفتن با فضا و منوی هر مجموعه آشنا شوید.
+          رویدادها و میتینگ‌ها هم در همین مسیر در دسترس هستند.
+        </p>
+        <h3>اگر کافه دارید</h3>
+        <p>
+          منو، سفارش و حضور آنلاین کافه در یک پنل مدیریت می‌شود تا مهمان‌ها راحت‌تر پیدایتان کنند.
+        </p>
+      </article>
+      <section className="vitrin-marketing-section">
+        <SectionTitle title="امکانات ویترین کافه" description="سه مسیر اصلی تجربه در ویترین کافه" />
+        <div className="vitrin-list-cards">
+          {features.map(({ icon: Icon, title, body }) => (
+            <article className="vitrin-marketing-feature" key={title}>
+              <Icon size={22} />
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <Testimonials />
+      <section className="vitrin-marketing-cta">
+        <div>
+          <h2>کافه‌گردی را شروع کنید</h2>
+          <p>فهرست کافه‌ها را ببینید و کافه مناسب خود را پیدا کنید.</p>
+        </div>
+        <Link href="/cafes" className="button primary">
+          مشاهده کافه‌ها <ArrowUpLeft size={18} />
         </Link>
-      </p>
-    </>
+      </section>
+    </div>
+  );
+}
+
+export function FaqView() {
+  const [search, setSearch] = useState('');
+  const normalized = search.trim();
+  const matching = questions.filter(([question, answer]) =>
+    (question + ' ' + answer).includes(normalized),
+  );
+  return (
+    <div className="vitrin-marketing">
+      <VitrinMarketingHeading
+        title="سوالات"
+        highlight="متداول"
+        description="پاسخ شفاف به رایج‌ترین پرسش‌ها درباره سفارش، پرداخت، رزرو و حساب کاربری."
+      />
+      <section className="vitrin-marketing-section">
+        <SectionTitle title="پرسش‌های پرتکرار" description="سریع‌ترین مسیر برای پیدا کردن پاسخ" />
+        <div className="vitrin-list-cards">
+          {questions.slice(0, 3).map(([question, answer]) => (
+            <article className="vitrin-marketing-feature" key={question}>
+              <Star size={20} />
+              <h3>{question}</h3>
+              <p>{answer}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <section className="vitrin-marketing-section">
+        <SectionTitle title="همه سوالات" description="جستجو کنید و پاسخ پرسش خود را پیدا کنید" />
+        <div className="vitrin-list-search">
+          <Search size={16} aria-hidden="true" />
+          <input
+            aria-label="جستجوی سوال"
+            placeholder="جستجوی سوال…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+        <div className="panel prose service-disclosures">
+          {matching.map(([question, answer]) => (
+            <details key={question}>
+              <summary>{question}</summary>
+              <p>{answer}</p>
+            </details>
+          ))}
+          {!matching.length && <p>سوالی با این عبارت پیدا نشد.</p>}
+        </div>
+      </section>
+      <section className="vitrin-marketing-cta">
+        <h2>هنوز سوالی دارید؟</h2>
+        <Link className="button primary" href="/contact">
+          تماس با ما <ArrowUpLeft size={18} />
+        </Link>
+      </section>
+    </div>
   );
 }
 
@@ -181,10 +340,60 @@ export function ContactView({ partnership = false }: { partnership?: boolean }) 
   const { data } = useApp();
   const [sent, setSent] = useState(false);
   return (
-    <>
-      <PageTitle title={partnership ? 'همکاری با ویتکو' : 'تماس با ویتکو'} />
-      <div className="service-card-grid">
-        <section className="panel">
+    <div className="vitrin-marketing">
+      <VitrinMarketingHeading
+        title={partnership ? 'همکاری با' : 'تماس با'}
+        highlight={partnership ? 'ویترین کافه' : 'ما'}
+        description={
+          partnership
+            ? 'کافه خود را به جامعه عاشقان قهوه معرفی کنید؛ با منوی دیجیتال، رزرو هوشمند، گزارش‌ها و ابزارهای رشد.'
+            : 'اگر سوالی دارید یا نیاز به راهنمایی دارید، از طریق راه‌های ارتباطی زیر با ما در تماس باشید.'
+        }
+      />
+      {partnership && (
+        <section className="vitrin-marketing-section">
+          <img
+            className="vitrin-partnership-photo"
+            src="/images/coop.webp"
+            alt="همکاری با ویترین کافه"
+          />
+          <SectionTitle
+            title="امکانات پلتفرم"
+            description="ابزارهایی که مدیریت کافه را ساده‌تر و حرفه‌ای‌تر می‌کند"
+          />
+          <div className="vitrin-list-cards">
+            {(
+              [
+                [LayoutDashboard, 'داشبورد مدیریت'],
+                [Coffee, 'منوی دیجیتال'],
+                [CalendarCheck, 'رزرو هوشمند'],
+              ] as const
+            ).map(([Icon, label]) => (
+              <article className="vitrin-marketing-feature" key={label}>
+                <Icon size={22} />
+                <h3>{label}</h3>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+      <div className="vitrin-contact-grid">
+        <aside className="vitrin-contact-aside">
+          <section className="panel prose">
+            <h2>{partnership ? 'مدیریت کافه در ویترین کافه' : 'پیگیری سفارش و رزرو'}</h2>
+            <Link className="button secondary" href={partnership ? '/dashboard' : '/support'}>
+              {partnership ? <Store size={18} /> : <Headphones size={18} />}
+              {partnership ? 'ثبت و مدیریت کافه' : 'گفت‌وگو با پشتیبانی'}
+            </Link>
+            <p>
+              <Link className="text-link" href={partnership ? '/contact' : '/partnership'}>
+                {partnership ? 'تماس با ما' : 'همکاری با ویترین کافه'}
+              </Link>
+            </p>
+          </section>
+          {!partnership && <img src="/vitrin/location.webp" alt="موقعیت کافه" />}
+        </aside>
+        <section className="panel vitrin-contact-form">
           <h2>{partnership ? 'درخواست همکاری' : 'پیام شما'}</h2>
           {sent ? (
             <div role="status">
@@ -229,19 +438,8 @@ export function ContactView({ partnership = false }: { partnership?: boolean }) 
             </Form>
           )}
         </section>
-        <section className="panel prose">
-          <h2>{partnership ? 'مدیریت کافه در ویتکو' : 'پیگیری سفارش و رزرو'}</h2>
-          <Link className="button secondary" href={partnership ? '/dashboard' : '/support'}>
-            {partnership ? 'ثبت و مدیریت کافه' : 'گفت‌وگو با پشتیبانی'}
-          </Link>
-          <p>
-            <Link className="text-link" href={partnership ? '/contact' : '/partnership'}>
-              {partnership ? 'تماس با ما' : 'همکاری با ویتکو'}
-            </Link>
-          </p>
-        </section>
       </div>
-    </>
+    </div>
   );
 }
 

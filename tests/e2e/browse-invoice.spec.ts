@@ -54,7 +54,7 @@ async function setup(client: APIRequestContext, suffix: string, percent = 30) {
   return cafe;
 }
 
-test('full-screen map selects real café details, supports drawer and filters, and opens compact menu options', async ({
+test('responsive map selects café details, supports drawer and filters, and opens menu options', async ({
   page,
   context,
 }, testInfo) => {
@@ -86,7 +86,12 @@ test('full-screen map selects real café details, supports drawer and filters, a
   const map = page.getByRole('region', { name: 'نقشه کافه‌های اطراف' });
   await expect(map).toBeVisible();
   const box = await map.boundingBox();
-  expect(box!.height).toBeGreaterThan(testInfo.project.use.viewport!.height - 5);
+  if (testInfo.project.name === 'mobile') {
+    expect(box!.height).toBeGreaterThan(testInfo.project.use.viewport!.height - 5);
+  } else {
+    expect(box!.width).toBeLessThan(testInfo.project.use.viewport!.width / 2);
+    expect(box!.height).toBeGreaterThan(400);
+  }
   await map.getByRole('button', { name: cafe.name, exact: true }).click();
   const drawer = page.getByRole('region', { name: 'کافه‌های این محدوده' });
   await expect(

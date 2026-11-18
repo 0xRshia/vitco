@@ -65,6 +65,7 @@ import {
 import { myLoyalty, redeemReward } from '@/lib/loyalty';
 import {
   attendEvent,
+  browseEvents,
   deleteDraftEvent,
   eventGuests,
   leaveEvent,
@@ -225,8 +226,10 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       }
     }
     const user = currentUser(request);
-    if (resource === 'blog' && method === 'GET')
-      return json(publicArticles(id, request.nextUrl.searchParams.get('category')));
+    if (resource === 'blog' && method === 'GET') {
+      const params = request.nextUrl.searchParams;
+      return json(publicArticles(id, params.get('category'), undefined, params));
+    }
     if (resource === 'testimonials' && method === 'GET')
       return json({ testimonials: publicTestimonials() });
     if (resource === 'contact-messages' && method === 'POST') {
@@ -291,8 +294,11 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
         ),
       });
     }
-    if (resource === 'events' && method === 'GET' && id && !action)
-      return json({ event: publicEvent(user, id) });
+    if (resource === 'events' && method === 'GET' && !action) {
+      return json(
+        id ? { event: publicEvent(user, id) } : browseEvents(user, request.nextUrl.searchParams),
+      );
+    }
     if (resource === 'table-checkout' && method === 'POST') {
       const table = tableContext(tableToken);
       v.ensure(table, 'ابتدا کد معتبر میز را اسکن کنید.', 403);

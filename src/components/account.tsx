@@ -23,7 +23,6 @@ import {
   Gift,
   Settings,
   Headphones,
-  LogOut,
   Plus,
   Pencil,
   Trash2,
@@ -34,7 +33,6 @@ import {
   ShieldCheck,
   Upload,
   Store,
-  LockKeyhole,
   ArrowUpLeft,
 } from 'lucide-react';
 import { api, useApp, useResource } from '@/lib/client';
@@ -120,25 +118,18 @@ export function AuthView({ page }: { page: string }) {
     }
   }
   const title = register
-    ? 'یک قرار تازه با ویتکو'
+    ? 'ثبت‌نام در ویترین کافه'
     : verify
       ? 'کد تأیید را وارد کن'
       : forgot
         ? 'رمزت را فراموش کردی؟'
         : reset
           ? 'یک رمز تازه انتخاب کن'
-          : 'خوش برگشتی!';
+          : method === 'phone'
+            ? 'ورود با موبایل'
+            : 'ورود با ایمیل';
   return (
     <div className="auth-form">
-      <span className="auth-icon">
-        {verify ? (
-          <Smartphone size={28} />
-        ) : forgot || reset ? (
-          <LockKeyhole size={28} />
-        ) : (
-          <Coffee size={28} />
-        )}
-      </span>
       <h1>{title}</h1>
       {query.get('google') && (
         <ErrorBox message={googleIssues[query.get('google') || ''] || googleIssues.failed} />
@@ -160,7 +151,9 @@ export function AuthView({ page }: { page: string }) {
               ? 'ایمیلت را وارد کن تا کد بازیابی برایت ارسال شود.'
               : reset
                 ? 'اگر این ایمیل در سامانه ثبت شده باشد، کد بازیابی برای آن ارسال می‌شود.'
-                : 'وارد شو و قرارهای خوبت را ادامه بده.'}
+                : method === 'phone'
+                  ? 'کد تأیید به شماره شما پیامک می‌شود.'
+                  : 'با ایمیل و رمز عبور وارد حساب کاربری شوید.'}
       </p>
       {!register && !verify && !forgot && !reset && (
         <div className="segmented">
@@ -302,7 +295,7 @@ export function AuthView({ page }: { page: string }) {
                       ? 'ذخیره رمز جدید'
                       : method === 'phone'
                         ? 'دریافت کد ورود'
-                        : 'ورود به ویتکو'}
+                        : 'ورود به حساب'}
             <ArrowLeft size={18} />
           </button>
         </fieldset>
@@ -329,14 +322,14 @@ export function AuthView({ page }: { page: string }) {
         </div>
       ) : (
         <p className="auth-bottom">
-          {register ? 'قبلاً عضو ویتکو شدی؟' : 'هنوز حساب نداری؟'}
+          {register ? 'از قبل حساب کاربری دارید؟' : 'هنوز حساب کاربری ندارید؟'}
           <Link
             href={
               (register ? '/login' : '/register') +
               (returnTo ? '?next=' + encodeURIComponent(returnTo) : '')
             }
           >
-            {register ? 'وارد شو' : 'ثبت‌نام در ویتکو'}
+            {register ? 'ورود' : 'ثبت‌نام'}
           </Link>
         </p>
       )}
@@ -399,174 +392,63 @@ export function ImageUpload({
   );
 }
 export function ProfileView() {
-  const { data, refresh, toast, setCart } = useApp(),
-    router = useRouter();
-  const [edit, setEdit] = useState(false),
-    [logout, setLogout] = useState(false),
-    [avatar, setAvatar] = useState(data?.user?.avatar || '');
+  const { data, refresh, toast } = useApp();
+  const user = data?.user;
+  const [avatar, setAvatar] = useState(user?.avatar || '');
   return (
     <div className="vitco-profile">
-      <PageTitle
-        title="حساب من"
-        action={
-          <Link href="/settings" className="icon-button" aria-label="تنظیمات حساب">
-            <Settings size={22} />
-          </Link>
-        }
-      />
-      {data?.user ? (
+      <PageTitle title="پروفایل کاربری" description="اطلاعات شخصی خود را مشاهده و ویرایش کنید." />
+      {user ? (
         <>
-          <div className="profile-layout">
-            <div className="profile-summary">
-              <section className="profile-identity">
-                <div className="avatar large">
-                  {data.user.avatar ? (
-                    <img src={data.user.avatar} alt="تصویر حساب" />
-                  ) : (
-                    <UserRound size={44} />
-                  )}
-                </div>
-                <div className="profile-identity-copy">
-                  <span className="eyebrow">همراه ویتکو</span>
-                  <h2>{data.user.name}</h2>
-                  <p dir="auto">{data.user.email || digits(data.user.phone)}</p>
-                </div>
-                <button
-                  className="button secondary compact"
-                  onClick={() => {
-                    setAvatar(data?.user?.avatar || '');
-                    setEdit(true);
-                  }}
-                >
-                  <Pencil size={16} />
-                  ویرایش پروفایل
-                </button>
-              </section>
-              <LoyaltyCard points={data.user.points} />
-            </div>
-            <div className="profile-details">
-              <h2 className="profile-group-title">قرارها و حساب تو</h2>
-              <nav className="profile-links" aria-label="بخش‌های حساب کاربری">
-                {[
-                  {
-                    href: '/orders',
-                    icon: ReceiptText,
-                    label: 'سفارش‌های من',
-                    desc: 'پیگیری سفارش‌ها و تاریخچه',
-                  },
-                  {
-                    href: '/reservations',
-                    icon: CalendarCheck,
-                    label: 'رزروهای من',
-                    desc: 'قرارهای آینده و گذشته',
-                  },
-                  {
-                    href: '/addresses',
-                    icon: MapPin,
-                    label: 'آدرس‌های من',
-                    desc: 'مدیریت نشانی‌های تحویل',
-                  },
-                  {
-                    href: '/registrations',
-                    icon: CalendarCheck,
-                    label: 'ثبت‌نام‌های رویداد',
-                    desc: 'بلیت‌ها و وضعیت حضور',
-                  },
-                  {
-                    href: '/meetings',
-                    icon: CalendarCheck,
-                    label: 'دورهمی‌ها',
-                    desc: 'ساخت دورهمی و گفت‌وگو',
-                  },
-                  {
-                    href: '/favorites',
-                    icon: Heart,
-                    label: 'علاقه‌مندی‌ها',
-                    desc: 'کافه‌هایی که دوست داری',
-                  },
-                  {
-                    href: '/payment',
-                    icon: CreditCard,
-                    label: 'روش پرداخت',
-                    desc: 'پرداخت در کافه یا هنگام تحویل',
-                  },
-                  {
-                    href: '/rewards',
-                    icon: Gift,
-                    label: 'امتیازهای من',
-                    desc: digits(data.user.points) + ' امتیاز همراهی',
-                  },
-                  {
-                    href: '/dashboard',
-                    icon: Store,
-                    label: 'مدیریت کافه',
-                    desc: 'کافه و منوی خودت را بساز',
-                  },
-                  {
-                    href: '/settings',
-                    icon: Settings,
-                    label: 'تنظیمات',
-                    desc: 'ظاهر برنامه و امنیت حساب',
-                  },
-                  {
-                    href: '/support',
-                    icon: Headphones,
-                    label: 'پشتیبانی',
-                    desc: 'همیشه راهی برای گفت‌وگو هست',
-                  },
-                ].map((x) => (
-                  <Link key={x.href} href={x.href}>
-                    <span className="action-icon peach">
-                      <x.icon size={22} />
-                    </span>
-                    <div>
-                      <h3>{x.label}</h3>
-                      <p>{x.desc}</p>
-                    </div>
-                    <ChevronLeft size={18} />
-                  </Link>
-                ))}
-              </nav>
-              <button className="button danger-outline" onClick={() => setLogout(true)}>
-                <LogOut size={18} />
-                خروج از حساب
-              </button>
-            </div>
-          </div>
-          <Modal title="ویرایش پروفایل" open={edit} onClose={() => setEdit(false)}>
-            <Form
-              onSubmit={async (form) => {
-                await api('profile', 'PATCH', { name: form.get('name'), avatar });
-                await refresh();
-                setEdit(false);
-                toast('پروفایل به‌روز شد.');
-              }}
-            >
-              <ImageUpload value={avatar} onChange={setAvatar} label="پروفایل" />
-              <Field label="نام و نام خانوادگی">
-                <input name="name" defaultValue={data.user.name} />
-              </Field>
-              <Field label="ایمیل">
-                <input value={data.user.email} readOnly dir="auto" />
-              </Field>
-            </Form>
-          </Modal>
-          <Confirm
-            open={logout}
-            title="از حساب خارج می‌شوی؟"
-            description="برای دیدن سفارش‌ها و رزروها می‌توانی دوباره وارد شوی."
-            onClose={() => setLogout(false)}
-            onConfirm={async () => {
-              try {
-                await api('auth/logout', 'POST', {});
-                setCart([]);
-                await refresh();
-                router.push('/');
-              } catch (e) {
-                toast((e as Error).message);
-              }
+          <Form
+            className="panel vitrin-profile-editor"
+            key={user.id}
+            onSubmit={async (form) => {
+              await api('profile', 'PATCH', { name: form.get('name'), avatar });
+              await refresh();
+              toast('پروفایل به‌روز شد.');
             }}
-          />
+          >
+            <ImageUpload value={avatar} onChange={setAvatar} label="تصویر پروفایل" />
+            <Field label="نام و نام خانوادگی">
+              <input name="name" autoComplete="name" defaultValue={user.name} required />
+            </Field>
+            {user.email && (
+              <Field label="ایمیل">
+                <input value={user.email} readOnly dir="auto" />
+              </Field>
+            )}
+            <Field label="شماره همراه">
+              <input
+                value={user.phone ? digits(user.phone) : ''}
+                readOnly
+                dir="ltr"
+                placeholder="شماره‌ای ثبت نشده است"
+              />
+            </Field>
+            <Link className="text-link" href="/settings#account-phone">
+              تنظیم شماره همراه
+            </Link>
+          </Form>
+          <div className="vitrin-profile-extras">
+            <LoyaltyCard points={user.points} />
+            <nav className="profile-links" aria-label="خدمات حساب">
+              {[
+                { href: '/reservations', icon: CalendarCheck, label: 'رزروهای من' },
+                { href: '/addresses', icon: MapPin, label: 'آدرس‌های من' },
+                { href: '/meetings', icon: CalendarCheck, label: 'دورهمی‌ها' },
+                { href: '/favorites', icon: Heart, label: 'علاقه‌مندی‌ها' },
+                { href: '/payment', icon: CreditCard, label: 'روش پرداخت' },
+                { href: '/dashboard', icon: Store, label: 'مدیریت کافه' },
+              ].map(({ href, icon: Icon, label }) => (
+                <Link href={href} key={href}>
+                  <Icon size={20} />
+                  <span>{label}</span>
+                  <ChevronLeft size={16} />
+                </Link>
+              ))}
+            </nav>
+          </div>
         </>
       ) : (
         <div className="profile-guest-layout">
@@ -608,7 +490,10 @@ export function SettingsView() {
   const [success, setSuccess] = useState(false);
   return (
     <>
-      <PageTitle title="تنظیمات" description="ویتکو را به سلیقه خودت بچین." />
+      <PageTitle
+        title="تنظیمات حساب"
+        description="رمز عبور و اعلان‌های حساب کاربری را مدیریت کنید."
+      />
       <div className="two-columns">
         <section className="panel form">
           <h2>ظاهر برنامه</h2>

@@ -15,7 +15,6 @@ import {
   Bell,
   ShoppingBag,
   Search,
-  MapPin,
   ChevronDown,
   ArrowUpLeft,
   LogIn,
@@ -24,7 +23,6 @@ import {
   ScanLine,
   Menu,
   X,
-  LayoutDashboard,
 } from 'lucide-react';
 import { useApp } from '@/lib/client';
 import { digits } from '@/lib/format';
@@ -56,8 +54,9 @@ import { TableLanding } from './table-service';
 import { MeetingsView } from './meetings';
 import { OperationsView } from './cafe-operations';
 import { EventRegistrations } from './event-registrations';
-import { BlogView, ContactView, FaqView } from './public-content';
+import { AboutView, BlogView, ContactView, FaqView } from './public-content';
 import { PlatformAdminView } from './platform-admin';
+import { VitrinAuthLayout, VitrinLayout } from './vitrin-layout';
 
 const navigation = [
   { href: '/', label: 'خانه', icon: Home },
@@ -145,7 +144,7 @@ export function Application() {
       view = <SupportView key={id || 'list'} id={id} />;
       break;
     case 'dashboard':
-      view = <DashboardView />;
+      view = <DashboardView key={query.get('tab') || 'overview'} />;
       break;
     case 'events':
       view = <EventsView id={id} />;
@@ -164,13 +163,16 @@ export function Application() {
       view = <MeetingsView key={id || 'list'} id={id} />;
       break;
     case 'operations':
-      view = <OperationsView key={id || 'list'} id={id} />;
+      view = <OperationsView key={(id || 'list') + ':' + (query.get('tab') || '')} id={id} />;
       break;
     case 'blog':
       view = <BlogView key={id || 'list'} id={id} />;
       break;
     case 'faq':
       view = <FaqView />;
+      break;
+    case 'about':
+      view = <AboutView />;
       break;
     case 'contact':
     case 'partnership':
@@ -182,37 +184,21 @@ export function Application() {
     default:
       view = auth ? <AuthView key={page} page={page} /> : <InfoView page={page} />;
   }
-  if (auth)
+  if (auth) return <VitrinAuthLayout>{view}</VitrinAuthLayout>;
+  if (page !== 'home')
     return (
-      <div className="auth-layout">
-        <div className="auth-visual">
-          <Brand />
-          <div>
-            <span className="eyebrow">یک فنجان، هزار بهانه برای دیدار</span>
-            <h1>
-              لحظه‌های خوب،
-              <br />
-              از یک قرار شروع می‌شوند.
-            </h1>
-            <img src="/images/hero.webp" alt="قهوه و شیرینی ویترین کافه" />
-          </div>
-          <p>کشف کافه‌های شهر، رزرو میز و تجربه طعم‌های تازه</p>
-        </div>
-        <div className="auth-content">
-          <Link href="/" className="back-link">
-            بازگشت به خانه <ArrowUpLeft size={18} />
-          </Link>
-          <Brand small />
-          {view}
-        </div>
-      </div>
+      <VitrinLayout page={page} id={id}>
+        {error ? (
+          <ErrorBox message={error} retry={() => void refresh()} />
+        ) : loading ? (
+          <Loading />
+        ) : (
+          view
+        )}
+      </VitrinLayout>
     );
   return (
-    <div
-      className={
-        'app-shell' + (page === 'cafes' && !id && query.get('view') !== 'list' ? ' map-mode' : '')
-      }
-    >
+    <div className="app-shell">
       <a href="#main-content" className="skip-link">
         رفتن به محتوای اصلی
       </a>
@@ -252,40 +238,22 @@ export function Application() {
               {n.href === '/orders' && <span className="nav-dot" />}
             </Link>
           ))}
-          {page !== 'home' && (
-            <Link className={'nav-item ' + (page === 'meetings' ? 'active' : '')} href="/meetings">
-              <CalendarDays size={20} />
-              دورهمی‌ها
-            </Link>
-          )}
         </nav>
         <div className="sidebar-separator" />
         <span className="nav-label">همراه شما</span>
         <nav>
-          <Link className={'nav-item ' + (page === 'scan' ? 'active' : '')} href="/scan">
+          <Link className="nav-item" href="/scan">
             <ScanLine size={20} />
             اسکن منوی کافه
           </Link>
-          <Link className={'nav-item ' + (page === 'support' ? 'active' : '')} href="/support">
+          <Link className="nav-item" href="/support">
             <Headphones size={20} />
             پشتیبانی
           </Link>
-          <Link className={'nav-item ' + (page === 'settings' ? 'active' : '')} href="/settings">
+          <Link className="nav-item" href="/settings">
             <Settings size={20} />
             تنظیمات
           </Link>
-          {data?.user && page !== 'home' && (
-            <Link className="nav-item" href="/operations">
-              <LayoutDashboard size={20} />
-              فضای کار کافه
-            </Link>
-          )}
-          {data?.platformAdmin && page !== 'home' && (
-            <Link className="nav-item" href="/admin">
-              <LayoutDashboard size={20} />
-              مدیریت ویتکو
-            </Link>
-          )}
         </nav>
         <div className="owner-invite">
           <span className="invite-icon">
@@ -394,16 +362,9 @@ export function Application() {
         </main>
         <footer className="footer">
           <span>ویتکو؛ جایی برای قرارهای خوب.</span>
-          <div className={page !== 'home' ? 'service-footer-links' : undefined}>
+          <div>
             <Link href="/about">درباره ما</Link>
             <Link href="/contact">تماس با ما</Link>
-            {page !== 'home' && (
-              <>
-                <Link href="/partnership">همکاری</Link>
-                <Link href="/faq">پرسش‌های متداول</Link>
-                <Link href="/blog">مجله</Link>
-              </>
-            )}
             <Link href="/privacy">حریم خصوصی</Link>
           </div>
         </footer>

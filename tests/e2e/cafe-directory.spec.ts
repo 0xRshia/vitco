@@ -24,7 +24,9 @@ test('source cafés appear on the uncluttered map with real coordinates, attribu
   await expect(page.locator('.explorer-floating-header .shared-menu-categories')).toHaveCount(0);
   await expect(page.locator('.explorer-floating-header select')).toHaveCount(0);
   const location = await page.getByRole('button', { name: 'موقعیت من', exact: true }).boundingBox();
-  expect(location!.x).toBeGreaterThan(testInfo.project.use.viewport!.width / 2);
+  const mapBounds = (await map.boundingBox())!;
+  expect(location!.x).toBeGreaterThan(mapBounds.x);
+  expect(location!.x + location!.width).toBeLessThanOrEqual(mapBounds.x + mapBounds.width);
   const credits = map.locator('.map-source-credit');
   await expect(credits.getByRole('link')).toHaveCount(3);
   expect(await credits.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(

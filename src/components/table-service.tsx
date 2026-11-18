@@ -76,7 +76,7 @@ export function TableServicePanel({ cafeId }: { cafeId: string }) {
       >
         <BellRing size={17} /> درخواست صندوق‌دار
       </button>
-      <Link className="text-link" href="/cart">
+      <Link className="text-link" href={'/cart?cafe=' + encodeURIComponent(cafeId)}>
         دیدن سبد میز
       </Link>
     </section>

@@ -14,6 +14,8 @@ import {
   Percent,
   ShoppingBag,
   CalendarDays,
+  Camera,
+  MessageCircleMore,
   Heart,
   Star,
   Wifi,
@@ -37,7 +39,9 @@ import { api, useApp, useLiveResource, useResource } from '@/lib/client';
 import { reservationDemoNotice } from '@/lib/reservation-demo';
 import { TableServicePanel } from './table-service';
 import { CafeMeetings } from './meetings';
-import { Testimonials } from './public-content';
+import { VitrinCafeHero } from './vitrin-cafe-hero';
+import { VitrinListingFilters, VitrinListingPages } from './vitrin-listing';
+import { VitrinMarketingHeading } from './public-content';
 import type { CafeFeatures } from '@/lib/cafe-features';
 import type { MenuCategory, WorkingHour } from '@/lib/cafe-operations';
 import { onlinePaymentForCafe } from './payment-status';
@@ -90,7 +94,10 @@ export function CartDock() {
           </li>
         ))}
       </ul>
-      <Link href="/cart" className="selection-cart-checkout">
+      <Link
+        href={'/cart?cafe=' + encodeURIComponent(cart[0].cafe_id)}
+        className="selection-cart-checkout"
+      >
         مشاهده سبد و پرداخت <ArrowLeft size={18} />
       </Link>
     </aside>
@@ -326,9 +333,17 @@ function MemberHome() {
 export function CafesView({ favorites = false }: { favorites?: boolean }) {
   return <CafeExplorer favorites={favorites} />;
 }
+const cafeDetailTabs = [
+  { id: 'menu', label: 'منوی کافه', icon: Coffee },
+  { id: 'gallery', label: 'گالری', icon: Camera },
+  { id: 'events', label: 'رویدادها و جلسات', icon: CalendarDays },
+  { id: 'reviews', label: 'نظرها', icon: MessageCircleMore },
+] as const;
+
 export function CafeView({ id }: { id: string }) {
   const { data: app, toast, cart } = useApp(),
-    router = useRouter();
+    router = useRouter(),
+    query = useSearchParams();
   const { data, loading, error, reload } = useResource<{
     cafe: Cafe;
     products: Product[];
@@ -339,13 +354,34 @@ export function CafeView({ id }: { id: string }) {
     reviews: Review[];
     own_review: Review | null;
   }>('cafes/' + id);
-  const [tab, setTab] = useState('menu'),
-    [category, setCategory] = useState(''),
+  const [category, setCategory] = useState(''),
     [rating, setRating] = useState(5),
     [review, setReview] = useState(''),
     [reviewEdit, setReviewEdit] = useState(false),
     [reviewDelete, setReviewDelete] = useState(false),
     [busy, setBusy] = useState(false);
+  const [hash, setHash] = useState('');
+  useEffect(() => {
+    const update = () => setHash(window.location.hash.slice(1));
+    update();
+    window.addEventListener('hashchange', update);
+    return () => window.removeEventListener('hashchange', update);
+  }, []);
+  const tab =
+    cafeDetailTabs.find((item) => item.id === hash)?.id ||
+    cafeDetailTabs.find((item) => item.id === query.get('tab'))?.id ||
+    'menu';
+  function setTab(next: (typeof cafeDetailTabs)[number]['id']) {
+    const params = new URLSearchParams(query);
+    params.delete('tab');
+    const tag = next === 'menu' ? '' : '#' + next;
+    window.history.replaceState(
+      null,
+      '',
+      '/cafes/' + encodeURIComponent(id) + (params.size ? '?' + params : '') + tag,
+    );
+    setHash(next);
+  }
   if (loading) return <Loading />;
   if (error || !data) return <ErrorBox message={error || 'کافه پیدا نشد.'} />;
   const {
@@ -361,378 +397,333 @@ export function CafeView({ id }: { id: string }) {
   const photos = [...new Set([cafe.image, ...(cafe.images || [])].filter(Boolean))];
   return (
     <div className={'cafe-discovery-page' + (cart.length ? ' has-cart-dock' : '')}>
-      <PageTitle
-        title={cafe.name}
-        description={cafe.description}
-        back="/cafes"
-        action={<FavoriteButton id={id} />}
-      />
-      {cafe.is_demo && (
-        <p className="notice" role="note">
-          {reservationDemoNotice}
-        </p>
-      )}
-      <div className="cafe-detail-top">
-        <div className="cafe-gallery">
-          <Media className="cafe-cover" src={photos[0] || ''} alt={cafe.name} kind="store" />
-          {photos.length > 1 && (
-            <div className="cafe-gallery-extra" aria-label="عکس‌های کافه">
-              {photos.slice(1).map((photo, index) => (
-                <Media
-                  key={photo}
-                  src={photo}
-                  alt={`${cafe.name}، عکس ${digits(index + 2)}`}
-                  kind="store"
-                />
-              ))}
-            </div>
-          )}
-          <div className="cafe-photo-filters">
+      <VitrinCafeHero cafe={cafe} cover={photos[0]} vip={features.vip_cafe} />
+      <div className="vitrin-cafe-body">
+        <aside className="vitrin-cafe-sidebar">
+          <h2>{cafe.name}</h2>
+          <nav aria-label="بخش‌های صفحهٔ کافه">
+            {cafeDetailTabs.map(({ id: value, label, icon: Icon }) => (
+              <button
+                type="button"
+                key={value}
+                aria-pressed={tab === value}
+                onClick={() => setTab(value)}
+              >
+                {label} <Icon size={20} aria-hidden="true" />
+              </button>
+            ))}
+          </nav>
+          <div className="vitrin-cafe-utilities">
+            {!cafe.is_demo && (
+              <Link className="cafe-invoice-entry" href={'/bill?cafe=' + id}>
+                <span className="invoice-entry-icon">
+                  <ReceiptText size={25} />
+                </span>
+                <span>
+                  <strong>پرداخت صورت‌حساب حضوری</strong>
+                  <small>مبلغ فاکتور را وارد کن، تخفیف‌ها را ببین و پرداخت کن</small>
+                </span>
+                <ArrowLeft size={20} />
+              </Link>
+            )}
+
             {cafe.amenities.length > 0 && (
               <div className="amenity-tags" aria-label="امکانات کافه">
-                {cafe.amenities.map((a) => (
-                  <span key={a}>{amenities[a] || a}</span>
+                {cafe.amenities.map((name) => (
+                  <span key={name}>{amenities[name] || name}</span>
                 ))}
               </div>
             )}
+            {cafe.owner_id && (
+              <p>
+                <Clock3 size={18} />
+                {digits(cafe.opens)} تا {digits(cafe.closes)}
+              </p>
+            )}
+            {hours.length > 0 && (
+              <details>
+                <summary>ساعت کاری هفته</summary>
+                <dl className="service-hours">
+                  {hours.map((hour) => (
+                    <div key={hour.weekday}>
+                      <dt>
+                        {
+                          ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه'][
+                            hour.weekday
+                          ]
+                        }
+                      </dt>
+                      <dd>
+                        {hour.opens ? digits(hour.opens) + ' تا ' + digits(hour.closes) : 'تعطیل'}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </details>
+            )}
+            {branches.length > 1 && (
+              <div className="service-inline" aria-label="شعبه‌های کافه">
+                {branches.map((branch) => (
+                  <Link
+                    className={branch.id === id ? 'badge' : 'text-link'}
+                    aria-current={branch.id === id ? 'page' : undefined}
+                    href={'/cafes/' + branch.id}
+                    key={branch.id}
+                  >
+                    {branch.name}
+                  </Link>
+                ))}
+              </div>
+            )}
+            {cafe.owner_id ? (
+              <div className="button-row">
+                {cafe.active && (
+                  <Link
+                    href={'/reserve?cafe=' + id}
+                    className="button primary"
+                    aria-label="رزرو و سفارش"
+                  >
+                    <CalendarDays size={18} />
+                    رزرو میز
+                  </Link>
+                )}
+                {!cafe.active && <p className="notice">رزرو این کافه در حال حاضر غیرفعال است.</p>}
+                {cafe.phone && (
+                  <a className="button secondary" href={'tel:' + cafe.phone}>
+                    <Phone size={18} />
+                    تماس
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="source-note">
+                اطلاعات این کافه از{' '}
+                <a href={cafe.source} target="_blank" rel="noreferrer">
+                  {cafe.directory_source === 'hmghadam'
+                    ? 'این‌ورا، از طریق داده‌های همقدم'
+                    : 'ویترین کافه'}
+                </a>{' '}
+                دریافت شده است. رزرو و سفارش آنلاین این کافه در این سامانه فعال نیست.
+              </div>
+            )}
+            {cafe.external_menu_url && (
+              <a
+                className="text-link"
+                href={cafe.external_menu_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                مشاهده منو در منبع اصلی
+              </a>
+            )}
+            {cafe.latitude !== null && cafe.longitude !== null && (
+              <a
+                href={`https://www.openstreetmap.org/?mlat=${cafe.latitude}&mlon=${cafe.longitude}#map=17/${cafe.latitude}/${cafe.longitude}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-link"
+              >
+                <Navigation size={16} />
+                مسیریابی
+              </a>
+            )}
           </div>
-        </div>
-        <div className="panel cafe-information">
-          {cafe.city && <span className="eyebrow">یک قرار تازه در {cafe.city}</span>}
-          <h2>{cafe.name}</h2>
-          {cafe.logo && (
-            <img src={cafe.logo} alt={'نشان ' + cafe.name} className="service-cafe-logo" />
-          )}
-          {features.vip_cafe && <span className="badge">کافه ویژه</span>}
-          <p>
-            <MapPin size={18} />
-            {cafe.address}
-          </p>
-          {cafe.owner_id && (
-            <p>
-              <Clock3 size={18} />
-              {digits(cafe.opens)} تا {digits(cafe.closes)}
+        </aside>
+        <div className="vitrin-cafe-tab">
+          {cafe.is_demo && (
+            <p className="notice" role="note">
+              {reservationDemoNotice}
             </p>
           )}
-          {hours.length > 0 && (
-            <details>
-              <summary>ساعت کاری هفته</summary>
-              <dl className="service-hours">
-                {hours.map((hour) => (
-                  <div key={hour.weekday}>
-                    <dt>
-                      {
-                        ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه'][
-                          hour.weekday
-                        ]
-                      }
-                    </dt>
-                    <dd>
-                      {hour.opens ? digits(hour.opens) + ' تا ' + digits(hour.closes) : 'تعطیل'}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </details>
-          )}
-          {branches.length > 1 && (
-            <div className="service-inline" aria-label="شعبه‌های کافه">
-              {branches.map((branch) => (
-                <Link
-                  className={branch.id === id ? 'badge' : 'text-link'}
-                  aria-current={branch.id === id ? 'page' : undefined}
-                  href={'/cafes/' + branch.id}
-                  key={branch.id}
-                >
-                  {branch.name}
-                </Link>
-              ))}
-            </div>
-          )}
-          {cafe.owner_id ? (
-            <div className="button-row">
-              {cafe.active && (
-                <Link href={'/reserve?cafe=' + id} className="button primary">
-                  <CalendarDays size={18} />
-                  رزرو میز
-                </Link>
+          {tab === 'menu' && (
+            <>
+              <TableServicePanel cafeId={id} />
+              {menuGroups.some((group) => group.image) && (
+                <div className="service-category-gallery" aria-label="تصاویر دسته‌های منو">
+                  {menuGroups
+                    .filter((group) => group.image)
+                    .map((group) => (
+                      <button
+                        type="button"
+                        key={group.id}
+                        aria-pressed={category === group.name}
+                        onClick={() => setCategory(group.name)}
+                      >
+                        <Media src={group.image} alt="" />
+                        <span>{group.name}</span>
+                      </button>
+                    ))}
+                </div>
               )}
-              {!cafe.active && <p className="notice">رزرو این کافه در حال حاضر غیرفعال است.</p>}
-              {cafe.phone && (
-                <a className="button secondary" href={'tel:' + cafe.phone}>
-                  <Phone size={18} />
-                  تماس
-                </a>
-              )}
-            </div>
-          ) : (
-            <div className="source-note">
-              اطلاعات این کافه از{' '}
-              <a href={cafe.source} target="_blank" rel="noreferrer">
-                {cafe.directory_source === 'hmghadam'
-                  ? 'این‌ورا، از طریق داده‌های همقدم'
-                  : 'ویترین کافه'}
-              </a>{' '}
-              دریافت شده است. رزرو و سفارش آنلاین این کافه در این سامانه فعال نیست.
-            </div>
-          )}
-          {cafe.external_menu_url && (
-            <a className="text-link" href={cafe.external_menu_url} target="_blank" rel="noreferrer">
-              مشاهده منو در منبع اصلی
-            </a>
-          )}
-          {cafe.latitude !== null && cafe.longitude !== null && (
-            <a
-              href={`https://www.openstreetmap.org/?mlat=${cafe.latitude}&mlon=${cafe.longitude}#map=17/${cafe.latitude}/${cafe.longitude}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-link"
-            >
-              <Navigation size={16} />
-              مسیریابی
-            </a>
-          )}
-        </div>
-      </div>
-      {!cafe.is_demo && (
-        <Link className="cafe-invoice-entry" href={'/bill?cafe=' + id}>
-          <span className="invoice-entry-icon">
-            <ReceiptText size={25} />
-          </span>
-          <span>
-            <strong>پرداخت صورت‌حساب حضوری</strong>
-            <small>مبلغ فاکتور را وارد کن، تخفیف‌ها را ببین و پرداخت کن</small>
-          </span>
-          <ArrowLeft size={20} />
-        </Link>
-      )}
-      <nav className="cafe-main-actions" aria-label="خدمات اصلی کافه">
-        {cafe.owner_id && cafe.active ? (
-          <Link href={'/reserve?cafe=' + id} className="panel cafe-main-action">
-            <CalendarDays size={26} />
-            <span>
-              <strong>رزرو و سفارش</strong>
-              <small>منو را ببین، میزت را انتخاب کن و سفارش بده</small>
-            </span>
-            <ArrowLeft size={20} />
-          </Link>
-        ) : (
-          <button className="panel cafe-main-action" onClick={() => setTab('menu')}>
-            <Utensils size={26} />
-            <span>
-              <strong>منو و رزرو</strong>
-              <small>مشاهده منو؛ پذیرش سفارش و رزرو غیرفعال است</small>
-            </span>
-            <ArrowLeft size={20} />
-          </button>
-        )}
-        <button className="panel cafe-main-action" onClick={() => setTab('events')}>
-          <CalendarDays size={26} />
-          <span>
-            <strong>مشاهده و شرکت در رویداد</strong>
-            <small>تمام رویدادها، پیش رو و در حال برگزاری</small>
-          </span>
-          <ArrowLeft size={20} />
-        </button>
-      </nav>
-      <div className="tabs">
-        {[
-          { id: 'menu', label: 'منوی کافه' },
-          { id: 'gallery', label: 'گالری' },
-          { id: 'reviews', label: 'نظرهای کاربران' },
-          { id: 'events', label: 'رویدادها و دورهمی‌ها' },
-        ].map((t) => (
-          <button
-            key={t.id}
-            aria-pressed={tab === t.id}
-            className={tab === t.id ? 'active' : ''}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-      {tab === 'menu' && (
-        <>
-          <TableServicePanel cafeId={id} />
-          {menuGroups.some((group) => group.image) && (
-            <div className="service-category-gallery" aria-label="تصاویر دسته‌های منو">
-              {menuGroups
-                .filter((group) => group.image)
-                .map((group) => (
-                  <button
-                    type="button"
-                    key={group.id}
-                    aria-pressed={category === group.name}
-                    onClick={() => setCategory(group.name)}
-                  >
-                    <Media src={group.image} alt="" />
-                    <span>{group.name}</span>
-                  </button>
-                ))}
-            </div>
-          )}
-          <ReservationMenu
-            cafeId={id}
-            variant="catalog"
-            products={products}
-            category={category}
-            onCategoryChange={setCategory}
-          />
-        </>
-      )}
-      {tab === 'gallery' && (
-        <section className="panel stack" aria-label="گالری کافه">
-          {cafe.tour_url && (
-            <a className="button secondary" href={cafe.tour_url} target="_blank" rel="noreferrer">
-              باز کردن تور مجازی
-            </a>
-          )}
-          {photos.length ? (
-            <div className="service-gallery">
-              {photos.map((photo, index) => (
-                <a key={photo} href={photo} target="_blank" rel="noreferrer">
-                  <Media src={photo} alt={cafe.name + '، عکس ' + digits(index + 1)} />
-                </a>
-              ))}
-            </div>
-          ) : (
-            <p className="muted">هنوز عکسی برای این کافه ثبت نشده است.</p>
-          )}
-        </section>
-      )}
-      {tab === 'reviews' && (
-        <div className="two-columns">
-          <div>
-            {reviews.length ? (
-              reviews.map((r) => (
-                <article className="review panel" key={r.id}>
-                  <div className="card-heading">
-                    <strong>{r.name}</strong>
-                    <span className="rating">
-                      <Star size={16} />
-                      {digits(r.rating)}
-                    </span>
-                  </div>
-                  <p>{r.body}</p>
-                  {r.verified && <p className="muted">تجربه تأییدشده</p>}
-                  <small>{dateLabel(r.created_at)}</small>
-                </article>
-              ))
-            ) : (
-              <Empty
-                title="اولین تجربه را شما بنویسید"
-                description="هنوز نظری برای این کافه ثبت نشده است."
+              <ReservationMenu
+                cafeId={id}
+                variant="catalog"
+                products={products}
+                categoryOrder={menuGroups.map((group) => group.name)}
+                category={category}
+                onCategoryChange={setCategory}
               />
-            )}
-          </div>
-          {ownReview && !reviewEdit ? (
-            <section className="panel">
-              <h3>نظر شما</h3>
-              <p>{ownReview.body}</p>
-              {ownReview.visible === 0 && (
-                <p className="muted">این نظر از دید عموم پنهان شده است.</p>
-              )}
-              <div className="button-row">
-                <button
+            </>
+          )}
+          {tab === 'gallery' && (
+            <section className="panel stack" aria-label="گالری کافه">
+              {cafe.tour_url && (
+                <a
                   className="button secondary"
-                  onClick={() => {
-                    setReview(ownReview.body);
-                    setRating(ownReview.rating);
-                    setReviewEdit(true);
+                  href={cafe.tour_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  باز کردن تور مجازی
+                </a>
+              )}
+              {photos.length ? (
+                <div className="service-gallery">
+                  {photos.map((photo, index) => (
+                    <a key={photo} href={photo} target="_blank" rel="noreferrer">
+                      <Media src={photo} alt={cafe.name + '، عکس ' + digits(index + 1)} />
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted">هنوز عکسی برای این کافه ثبت نشده است.</p>
+              )}
+            </section>
+          )}
+          {tab === 'reviews' && (
+            <div className="two-columns">
+              <div>
+                {reviews.length ? (
+                  reviews.map((r) => (
+                    <article className="review panel" key={r.id}>
+                      <div className="card-heading">
+                        <strong>{r.name}</strong>
+                        <span className="rating">
+                          <Star size={16} />
+                          {digits(r.rating)}
+                        </span>
+                      </div>
+                      <p>{r.body}</p>
+                      {r.verified && <p className="muted">تجربه تأییدشده</p>}
+                      <small>{dateLabel(r.created_at)}</small>
+                    </article>
+                  ))
+                ) : (
+                  <Empty
+                    title="اولین تجربه را شما بنویسید"
+                    description="هنوز نظری برای این کافه ثبت نشده است."
+                  />
+                )}
+              </div>
+              {ownReview && !reviewEdit ? (
+                <section className="panel">
+                  <h3>نظر شما</h3>
+                  <p>{ownReview.body}</p>
+                  {ownReview.visible === 0 && (
+                    <p className="muted">این نظر از دید عموم پنهان شده است.</p>
+                  )}
+                  <div className="button-row">
+                    <button
+                      className="button secondary"
+                      onClick={() => {
+                        setReview(ownReview.body);
+                        setRating(ownReview.rating);
+                        setReviewEdit(true);
+                      }}
+                    >
+                      ویرایش نظر
+                    </button>
+                    <button className="text-link" onClick={() => setReviewDelete(true)}>
+                      حذف نظر
+                    </button>
+                  </div>
+                </section>
+              ) : (
+                <form
+                  className="panel form"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!app?.user) {
+                      router.push('/login');
+                      return;
+                    }
+                    setBusy(true);
+                    try {
+                      await api('reviews/' + id, ownReview ? 'PATCH' : 'POST', {
+                        rating,
+                        body: review,
+                      });
+                      setReview('');
+                      setReviewEdit(false);
+                      reload();
+                      toast('نظر شما ثبت شد.');
+                    } catch (e) {
+                      toast((e as Error).message);
+                    } finally {
+                      setBusy(false);
+                    }
                   }}
                 >
-                  ویرایش نظر
-                </button>
-                <button className="text-link" onClick={() => setReviewDelete(true)}>
-                  حذف نظر
-                </button>
-              </div>
-            </section>
-          ) : (
-            <form
-              className="panel form"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!app?.user) {
-                  router.push('/login');
-                  return;
-                }
-                setBusy(true);
-                try {
-                  await api('reviews/' + id, ownReview ? 'PATCH' : 'POST', {
-                    rating,
-                    body: review,
-                  });
-                  setReview('');
-                  setReviewEdit(false);
-                  reload();
-                  toast('نظر شما ثبت شد.');
-                } catch (e) {
-                  toast((e as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <h3>تجربه شما از این کافه</h3>
-              <div className="stars">
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    aria-label={digits(s) + ' ستاره'}
-                    onClick={() => setRating(s)}
-                  >
-                    <Star fill={s <= rating ? 'currentColor' : 'none'} />
-                  </button>
-                ))}
-              </div>
-              <Field label="نظر شما">
-                <textarea
-                  value={review}
-                  onChange={(e) => setReview(e.target.value)}
-                  maxLength={1500}
-                  placeholder="از فضا، کیفیت و تجربه‌ات بگو…"
-                />
-              </Field>
-              <Submit busy={busy}>{ownReview ? 'ذخیره نظر' : 'ثبت نظر'}</Submit>
-              {ownReview && (
-                <button
-                  type="button"
-                  className="button secondary"
-                  onClick={() => setReviewEdit(false)}
-                >
-                  انصراف
-                </button>
+                  <h3>تجربه شما از این کافه</h3>
+                  <div className="stars">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        aria-label={digits(s) + ' ستاره'}
+                        onClick={() => setRating(s)}
+                      >
+                        <Star fill={s <= rating ? 'currentColor' : 'none'} />
+                      </button>
+                    ))}
+                  </div>
+                  <Field label="نظر شما">
+                    <textarea
+                      value={review}
+                      onChange={(e) => setReview(e.target.value)}
+                      maxLength={1500}
+                      placeholder="از فضا، کیفیت و تجربه‌ات بگو…"
+                    />
+                  </Field>
+                  <Submit busy={busy}>{ownReview ? 'ذخیره نظر' : 'ثبت نظر'}</Submit>
+                  {ownReview && (
+                    <button
+                      type="button"
+                      className="button secondary"
+                      onClick={() => setReviewEdit(false)}
+                    >
+                      انصراف
+                    </button>
+                  )}
+                </form>
               )}
-            </form>
+              <Confirm
+                open={reviewDelete}
+                title="حذف نظر"
+                description="نظر شما از صفحه این کافه حذف می‌شود."
+                onClose={() => setReviewDelete(false)}
+                onConfirm={() => {
+                  setReviewDelete(false);
+                  void api('reviews/' + id, 'DELETE')
+                    .then(() => {
+                      setRating(5);
+                      setReview('');
+                      reload();
+                      toast('نظر حذف شد.');
+                    })
+                    .catch((e) => toast(e.message));
+                }}
+              />
+            </div>
           )}
-          <Confirm
-            open={reviewDelete}
-            title="حذف نظر"
-            description="نظر شما از صفحه این کافه حذف می‌شود."
-            onClose={() => setReviewDelete(false)}
-            onConfirm={() => {
-              setReviewDelete(false);
-              void api('reviews/' + id, 'DELETE')
-                .then(() => {
-                  setRating(5);
-                  setReview('');
-                  reload();
-                  toast('نظر حذف شد.');
-                })
-                .catch((e) => toast(e.message));
-            }}
-          />
+          {tab === 'events' && (
+            <>
+              <EventList events={app?.events.filter((e) => e.cafe_id === id) || []} />
+              {cafe.owner_id && !cafe.is_demo && <CafeMeetings cafeId={id} />}
+            </>
+          )}
         </div>
-      )}
-      {tab === 'events' && (
-        <>
-          <EventList events={app?.events.filter((e) => e.cafe_id === id) || []} />
-          {cafe.owner_id && !cafe.is_demo && <CafeMeetings cafeId={id} />}
-        </>
-      )}
+      </div>
       <CartDock />
     </div>
   );
@@ -1029,24 +1020,8 @@ function EventList({ events }: { events: CafeEvent[] }) {
       </div>
       {filtered.length ? (
         <div className="cafe-grid">
-          {filtered.map((e) => (
-            <article className="event-card panel" key={e.id}>
-              <Media src={e.image} alt={e.title} />
-              <span className="eyebrow">{e.cafe_name}</span>
-              <span className={'badge event-phase event-phase-' + eventPhase(e, now)}>
-                {eventPhaseLabels[eventPhase(e, now)]}
-              </span>
-              <h3>{e.title}</h3>
-              <p>
-                <CalendarDays size={16} />
-                {dateLabel(e.date)} · {digits(e.time)}
-                {e.end_time ? ' تا ' + digits(e.end_time) : ''}
-              </p>
-              <Link className="button secondary" href={'/events/' + e.id}>
-                جزئیات رویداد
-                <ArrowLeft size={16} />
-              </Link>
-            </article>
+          {filtered.map((event) => (
+            <VitrinEventCard key={event.id} event={event} now={now} />
           ))}
         </div>
       ) : (
@@ -1063,6 +1038,110 @@ function EventList({ events }: { events: CafeEvent[] }) {
     </section>
   );
 }
+function VitrinEventCard({
+  event,
+  now,
+  featured = false,
+}: {
+  event: CafeEvent;
+  now: number;
+  featured?: boolean;
+}) {
+  const phase = eventPhase(event, now);
+  const { data } = useApp();
+  const cover = event.image || data?.cafes.find((cafe) => cafe.id === event.cafe_id)?.image;
+  return (
+    <article
+      className={'event-card panel vitrin-event-card' + (featured ? ' vitrin-event-featured' : '')}
+    >
+      <Media src={cover} alt={event.title} />
+      <div className="vitrin-event-card-body">
+        <div className="service-inline">
+          <span className="eyebrow">{event.cafe_name}</span>
+          <span className={'badge event-phase event-phase-' + phase}>
+            {eventPhaseLabels[phase]}
+          </span>
+        </div>
+        <h3>{event.title}</h3>
+        <p>
+          <CalendarDays size={16} /> {dateLabel(event.date)} · {digits(event.time)}
+          {event.end_time ? ' تا ' + digits(event.end_time) : ''}
+        </p>
+        <p>
+          {event.price ? money(event.price) : 'رایگان'} ·{' '}
+          {digits(Math.max(0, event.capacity - event.registered))} ظرفیت باقی‌مانده
+        </p>
+        <Link className="button secondary" href={'/events/' + event.id}>
+          جزئیات رویداد <ArrowLeft size={16} />
+        </Link>
+      </div>
+    </article>
+  );
+}
+
+function VitrinEventsIndex() {
+  const query = useSearchParams();
+  const now = useEventNow();
+  const resource = useLiveResource<{ events: CafeEvent[]; page: number; pages: number }>(
+    'events' + (query.size ? '?' + query : ''),
+    20000,
+  );
+  const events = resource.data?.events || [];
+  const featured = !query.size ? events[0] : undefined;
+  const filtered = featured ? events.slice(1) : events;
+  return (
+    <div className="vitrin-listing">
+      <PageTitle
+        title="رویدادها"
+        description="رویدادها و برنامه‌های میزبانی‌شده توسط کافه‌ها را کشف کنید، زمان و ظرفیت را ببینید و ثبت‌نام کنید."
+      />
+      <VitrinListingFilters kind="events">
+        <input
+          aria-label="شهر"
+          name="city"
+          placeholder="شهر"
+          maxLength={80}
+          defaultValue={query.get('city') || ''}
+        />
+        <select aria-label="نوع رویداد" name="is_free" defaultValue={query.get('is_free') || ''}>
+          <option value="">همه</option>
+          <option value="true">رایگان</option>
+          <option value="false">پولی</option>
+        </select>
+        <select aria-label="مرتب‌سازی" name="sort" defaultValue={query.get('sort') || 'starts_at'}>
+          <option value="starts_at">نزدیک‌ترین</option>
+          <option value="newest">جدیدترین</option>
+        </select>
+      </VitrinListingFilters>
+      {resource.loading ? (
+        <Loading />
+      ) : resource.error ? (
+        <ErrorBox message={resource.error} retry={resource.reload} />
+      ) : !events.length ? (
+        <Empty
+          title={query.size ? 'رویدادی با این مشخصات پیدا نشد' : 'رویدادی برای نمایش وجود ندارد'}
+          href={query.size ? '/events' : '/cafes'}
+          label={query.size ? 'پاک کردن فیلترها' : 'مشاهده کافه‌ها'}
+        />
+      ) : (
+        <>
+          {featured && <VitrinEventCard event={featured} now={now} featured />}
+          {filtered.length > 0 && (
+            <div className="vitrin-list-cards">
+              {filtered.map((event) => (
+                <VitrinEventCard event={event} now={now} key={event.id} />
+              ))}
+            </div>
+          )}
+          {resource.data && (
+            <VitrinListingPages page={resource.data.page} pages={resource.data.pages} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function EventsView({ id }: { id?: string }) {
   const { data, refresh, toast } = useApp(),
     router = useRouter();
@@ -1071,23 +1150,7 @@ export function EventsView({ id }: { id?: string }) {
   const detail = useLiveResource<{ event: CafeEvent }>(id ? 'events/' + id : null, 15000);
   const event =
     detail.data?.event ?? (detail.loading ? data?.events.find((e) => e.id === id) : undefined);
-  if (!id)
-    return (
-      <>
-        <PageTitle
-          title="رویدادهای کافه‌ها"
-          description="دورهمی، موسیقی و تجربه‌های تازه؛ بهانه‌هایی برای دیدار."
-          action={
-            data?.user && (
-              <Link className="button secondary" href="/registrations">
-                ثبت‌نام‌های من
-              </Link>
-            )
-          }
-        />
-        <EventList events={data?.events || []} />
-      </>
-    );
+  if (!id) return <VitrinEventsIndex />;
   if (detail.loading && !event) return <Loading />;
   if (!event)
     return (
@@ -1106,7 +1169,7 @@ export function EventsView({ id }: { id?: string }) {
   return (
     <>
       <PageTitle title={event.title} back="/events" description={event.cafe_name} />
-      <div className="two-columns">
+      <div className="two-columns vitrin-event-detail">
         <Media src={event.image} alt={event.title} className="event-cover" />
         <div className="panel form">
           <h2>{event.title}</h2>
@@ -1187,15 +1250,6 @@ export function EventsView({ id }: { id?: string }) {
 }
 export function InfoView({ page }: { page: string }) {
   const content: Record<string, { title: string; intro: string; paragraphs: string[] }> = {
-    about: {
-      title: 'هر کافه، یک دنیای تازه',
-      intro: 'ویتکو؛ قرارِ لحظه‌های خوب',
-      paragraphs: [
-        'در ویتکو، کافه‌های شهر را کشف می‌کنید، منوها و فضاها را می‌شناسید و برای دیدارهای بعدی برنامه می‌ریزید. از گوشه‌ای آرام برای کار تا یک دورهمی دوستانه؛ انتخاب با شماست.',
-        'کافه‌ها می‌توانند صفحه خود را بسازند، منو و رویدادها را منتشر کنند و سفارش‌ها و رزروهایشان را در یک‌جا مدیریت کنند.',
-        'اطلاعات اولیه کافه اعلا از وب‌سایت ویترین کافه دریافت شده است. سفارش و رزرو در این برنامه فقط برای کافه‌هایی فعال است که صاحب آن‌ها خدمات خود را در همین سامانه ارائه می‌کند.',
-      ],
-    },
     privacy: {
       title: 'حریم خصوصی شما',
       intro: 'اعتماد شما برای ما مهم است.',
@@ -1217,14 +1271,46 @@ export function InfoView({ page }: { page: string }) {
       ],
     },
   };
-  const item = content[page] || content.about;
+  const item = content[page] || content.terms;
+  if (page === 'terms') {
+    const headings = [
+      'قیمت‌ها و ثبت سفارش',
+      'پرداخت و اطلاعات بانکی',
+      'لغو سفارش و رزرو',
+      'مسئولیت کافه و کاربران',
+    ];
+    return (
+      <div className="vitrin-marketing">
+        <VitrinMarketingHeading
+          title="شرایط و"
+          highlight="قوانین"
+          description="شرایط استفاده از ویترین کافه برای کاربران و کافه‌های همکار."
+        />
+        <div className="vitrin-terms-grid">
+          <nav aria-label="فهرست شرایط و قوانین">
+            <h2>فهرست مطالب</h2>
+            {headings.map((heading, index) => (
+              <a href={'#terms-' + index} key={heading}>
+                {heading}
+              </a>
+            ))}
+          </nav>
+          <div className="stack">
+            {item.paragraphs.map((body, index) => (
+              <section className="vitrin-marketing-feature" key={body} id={'terms-' + index}>
+                <h2>{headings[index]}</h2>
+                <p>{body}</p>
+              </section>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <>
       <PageTitle title={item.title} description={item.intro} />
       <article className="panel prose">
-        {page === 'about' && (
-          <img className="about-image" src="/images/coop.webp" alt="همراهی با ویترین کافه" />
-        )}
         {item.paragraphs.map((p) => (
           <p key={p}>{p}</p>
         ))}
@@ -1233,7 +1319,6 @@ export function InfoView({ page }: { page: string }) {
           <ArrowLeft size={17} />
         </Link>
       </article>
-      {page === 'about' && <Testimonials />}
     </>
   );
 }
@@ -1322,34 +1407,45 @@ export function ScannerView() {
     setScanning(false);
   }
   return (
-    <>
-      <PageTitle title="اسکن منوی کافه" description="کد کافه را اسکن کن و مستقیم به منو برس." />
-      <div className="panel narrow form">
-        <ScanLine size={44} />
-        <video ref={video} playsInline muted className={scanning ? 'scanner-video' : 'hidden'} />
-        <button className="button primary" disabled={resolving} onClick={scanning ? stop : scan}>
-          {scanning ? 'بستن دوربین' : 'باز کردن دوربین'}
-        </button>
-        <Field label="یا پیوند کافه را وارد کن">
-          <input
+    <div className="vitrin-scanner">
+      <PageTitle title="اسکنر QR" description="کد QR میز، کافه یا منوی قدیمی را اسکن کنید." />
+      <div className="panel stack vitrin-scanner-panel">
+        <div className="vitrin-scanner-camera">
+          <video ref={video} playsInline muted />
+          {scanning ? (
+            <button type="button" className="vitrin-camera-stop" onClick={stop}>
+              بستن دوربین
+            </button>
+          ) : (
+            <button type="button" className="button secondary" disabled={resolving} onClick={scan}>
+              <ScanLine size={18} /> باز کردن دوربین
+            </button>
+          )}
+        </div>
+        <Field label="یا آدرس QR را وارد کنید">
+          <textarea
             dir="ltr"
+            rows={2}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !resolving) void navigate(value);
+              if (e.key === 'Enter' && !resolving && value.trim()) {
+                e.preventDefault();
+                void navigate(value);
+              }
             }}
-            placeholder="نشانی صفحه کافه"
+            placeholder="https://..."
           />
         </Field>
         <button
-          className="button secondary"
-          disabled={resolving}
+          className="button primary full"
+          disabled={resolving || !value.trim()}
           onClick={() => void navigate(value)}
         >
-          {resolving ? 'در حال بررسی پیوند…' : 'باز کردن پیوند QR'}
+          {resolving ? 'در حال پردازش…' : 'بررسی آدرس'}
         </button>
         {error && <ErrorBox message={error} />}
       </div>
-    </>
+    </div>
   );
 }

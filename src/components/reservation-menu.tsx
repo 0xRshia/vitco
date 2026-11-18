@@ -1,11 +1,10 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { Plus, Search, ShoppingBag } from 'lucide-react';
+import { Plus, PlusCircle, Search, ShoppingBag } from 'lucide-react';
 import { useApp } from '@/lib/client';
 import { money, digits } from '@/lib/format';
 import { normalizeSearch } from '@/lib/cafe-discovery';
 import Link from 'next/link';
-import { MenuCategories } from './menu-categories';
 import { menuCategories, productCategory } from '@/lib/catalog';
 import type { CartLine, Product } from '@/lib/types';
 import { Confirm, Empty, Field, Media, Modal, Quantity } from './ui';
@@ -16,6 +15,7 @@ export function ReservationMenu({
   initialCategory = '',
   category: controlledCategory,
   products: cafeProducts,
+  categoryOrder = [],
   onCategoryChange,
 }: {
   cafeId: string;
@@ -23,6 +23,7 @@ export function ReservationMenu({
   initialCategory?: string;
   category?: string;
   products?: Product[];
+  categoryOrder?: string[];
   onCategoryChange?: (value: string) => void;
 }) {
   const { data, cart, addCart, setCart, toast } = useApp();
@@ -42,9 +43,15 @@ export function ReservationMenu({
     if (!open) opener.current?.focus({ preventScroll: true });
   }, [open]);
   const products = cafeProducts ?? data?.products.filter((p) => p.cafe_id === cafeId) ?? [];
+  const catalog = variant === 'catalog';
+  const cafe = data?.cafes.find((item) => item.id === cafeId);
+  const categories = [
+    ...new Set([...categoryOrder, ...products.map((item) => item.category)].map(productCategory)),
+  ].filter(Boolean);
+  const selection = catalog && !category ? categories[0] || '' : category;
   const filtered = products.filter(
     (p) =>
-      (!category || productCategory(p.category) === category) &&
+      (!selection || (catalog && search) || productCategory(p.category) === selection) &&
       (!search || normalizeSearch(p.name + ' ' + p.description).includes(normalizeSearch(search))),
   );
   const selectedSize = product?.sizes.find((s) => s.id === size);
@@ -87,20 +94,18 @@ export function ReservationMenu({
   }
   return (
     <section
-      className={'panel reservation-menu' + (variant === 'catalog' ? ' catalog-menu' : '')}
-      aria-label={variant === 'catalog' ? 'منوی کافه' : 'منوی رزرو'}
+      className={catalog ? 'vitrin-menu-catalog' : 'panel reservation-menu'}
+      aria-label={catalog ? 'منوی کافه' : 'منوی رزرو'}
     >
-      <div className="section-title">
-        <div>
-          <h2>{variant === 'catalog' ? 'منو' : 'برای میزت چه سفارشی آماده کنیم؟'}</h2>
-          <p>
-            {variant === 'catalog'
-              ? 'غذا یا نوشیدنی دلخواهت را انتخاب کن.'
-              : 'انتخاب غذا اختیاری است؛ سفارش همراه رزرو ثبت می‌شود و پرداخت در کافه است.'}
-          </p>
+      {!catalog && (
+        <div className="section-title">
+          <div>
+            <h2>برای میزت چه سفارشی آماده کنیم؟</h2>
+            <p>انتخاب غذا اختیاری است؛ سفارش همراه رزرو ثبت می‌شود و پرداخت در کافه است.</p>
+          </div>
+          <ShoppingBag size={22} />
         </div>
-        <ShoppingBag size={22} />
-      </div>
+      )}
       <div className="search-input full">
         <Search size={18} />
         <input
@@ -110,13 +115,23 @@ export function ReservationMenu({
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
-      {variant === 'catalog' ? (
-        <MenuCategories
-          products={products}
-          value={category}
-          onChange={setCategory}
-          label="دسته‌بندی منوی کافه"
-        />
+      {catalog ? (
+        <div className="vitrin-menu-categories" role="group" aria-label="دسته‌بندی منوی کافه">
+          {categories.map((name) => (
+            <button
+              key={name}
+              type="button"
+              aria-pressed={name === selection}
+              onClick={() => {
+                setSearch('');
+                setCategory(name);
+              }}
+            >
+              <span aria-hidden="true">{name.slice(0, 1)}</span>
+              {name}
+            </button>
+          ))}
+        </div>
       ) : (
         <div
           className="category-tabs reservation-categories"
@@ -136,45 +151,83 @@ export function ReservationMenu({
         </div>
       )}
       {filtered.length ? (
-        <div className="reservation-menu-list">
-          {filtered.map((p) => (
-            <article className="reservation-menu-item" key={p.id}>
-              <Media src={p.image} alt={p.name} />
-              <div>
-                <small>{productCategory(p.category)}</small>
-                <h3>{p.name}</h3>
-                {variant === 'catalog' && !p.available && <small>ناموجود</small>}
-                <p>{p.description}</p>
-                <strong>{money(p.price)}</strong>
-              </div>
-              {variant === 'catalog' &&
-              !(
-                data?.cafes.find((c) => c.id === cafeId)?.owner_id &&
-                data?.cafes.find((c) => c.id === cafeId)?.active
-              ) ? (
+        <div className={catalog ? 'vitrin-menu-cards' : 'reservation-menu-list'}>
+          {filtered.map((p) => {
+            const action =
+              catalog && (!cafe?.owner_id || !cafe.active) ? (
                 <Link
-                  className="menu-product-add"
+                  className="button primary compact"
                   href={'/products/' + p.id}
                   aria-label={'مشاهده ' + p.name}
                 >
-                  <Plus size={18} />
+                  مشاهده <PlusCircle size={17} />
                 </Link>
               ) : (
                 <button
-                  className="button secondary"
-                  disabled={!p.available || !data?.cafes.find((c) => c.id === cafeId)?.active}
+                  type="button"
+                  className={catalog ? 'button primary compact' : 'button secondary'}
+                  disabled={!p.available || !cafe?.active}
                   aria-label={'انتخاب ' + p.name}
                   onClick={(event) => {
                     opener.current = event.currentTarget;
                     configure(p);
                   }}
                 >
-                  <Plus size={18} />
-                  {p.available ? 'انتخاب' : 'ناموجود'}
+                  {p.available ? (catalog ? 'افزودن' : 'انتخاب') : 'ناموجود'}
+                  {catalog ? <PlusCircle size={17} /> : <Plus size={18} />}
                 </button>
-              )}
-            </article>
-          ))}
+              );
+            if (catalog) {
+              const line =
+                !p.sizes.length && !p.addons.length
+                  ? cart.find(
+                      (item) => item.product_id === p.id && item.cafe_id === cafeId && !item.note,
+                    )
+                  : undefined;
+              return (
+                <article className="vitrin-menu-card" key={p.id}>
+                  <Media src={p.image} alt={p.name} />
+                  <div className="vitrin-menu-card-details">
+                    <h3>{p.name}</h3>
+                    {p.description && <p>{p.description}</p>}
+                    <div>
+                      <span>{money(p.price)}</span>
+                      {line ? (
+                        <Quantity
+                          value={line.quantity}
+                          min={0}
+                          max={p.available && cafe?.active ? 20 : line.quantity}
+                          onChange={(quantity) =>
+                            setCart(
+                              quantity
+                                ? cart.map((item) =>
+                                    item.key === line.key ? { ...item, quantity } : item,
+                                  )
+                                : cart.filter((item) => item.key !== line.key),
+                            )
+                          }
+                        />
+                      ) : (
+                        action
+                      )}
+                    </div>
+                  </div>
+                </article>
+              );
+            }
+            return (
+              <article className="reservation-menu-item" key={p.id}>
+                <Media src={p.image} alt={p.name} />
+                <div>
+                  <small>{productCategory(p.category)}</small>
+                  <h3>{p.name}</h3>
+                  <p>{p.description}</p>
+                  <strong>{money(p.price)}</strong>
+                </div>
+                {action}
+              </article>
+            );
+          })}
         </div>
       ) : (
         <Empty

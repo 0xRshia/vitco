@@ -79,6 +79,9 @@ export function CartView() {
     query = useSearchParams();
   const scopedCafe = query.get('cafe');
   const menuHref = scopedCafe ? '/cafes/' + encodeURIComponent(scopedCafe) : '/menu';
+  const checkoutStep = Boolean(scopedCafe && query.get('step') === 'checkout');
+  const reviewOnly = Boolean(scopedCafe && !checkoutStep);
+  const reviewHref = scopedCafe ? '/cart?cafe=' + encodeURIComponent(scopedCafe) : '/cart';
   const wrongCafe = Boolean(scopedCafe && cart.length && cart[0].cafe_id !== scopedCafe);
   const tableResource = useResource<{ table: TableContext | null }>(cart.length ? 'table' : null);
   const table =
@@ -121,6 +124,7 @@ export function CartView() {
   const selectedPaymentMethod = onlineAvailable ? paymentMethod : 'offline';
   const returnToCart = new URLSearchParams();
   if (scopedCafe) returnToCart.set('cafe', scopedCafe);
+  if (checkoutStep) returnToCart.set('step', 'checkout');
   if (selectedPaymentMethod === 'zarinpal') returnToCart.set('payment', 'zarinpal');
   const cartHref = '/cart' + (returnToCart.size ? '?' + returnToCart : '');
   const removing = cart.find((item) => item.key === removeKey);
@@ -129,7 +133,7 @@ export function CartView() {
   const points = usePoints ? Math.min(cafePoints, Math.floor(estimated / 1000)) : 0;
   const quotePayload = JSON.stringify({ items: cart, mode, coupon, points });
   useEffect(() => {
-    if (!canCheckout || !cart.length || wrongCafe) return;
+    if (!canCheckout || !cart.length || wrongCafe || reviewOnly) return;
     let active = true;
     setQuoting(true);
     setQuote(null);
@@ -151,7 +155,7 @@ export function CartView() {
     return () => {
       active = false;
     };
-  }, [quotePayload, canCheckout, data?.user?.id, wrongCafe]);
+  }, [quotePayload, canCheckout, data?.user?.id, wrongCafe, reviewOnly]);
   async function checkout() {
     setBusy(true);
     setError('');
@@ -181,12 +185,13 @@ export function CartView() {
   }
   if (wrongCafe || !cart.length)
     return (
-      <div className="vitco-cart">
-        <PageTitle title="سبد خرید" back={menuHref} />
+      <div className={'vitco-cart' + (scopedCafe ? ' vitrin-basket' : '')}>
+        <PageTitle
+          title={checkoutStep ? 'تسویه حساب' : 'سبد خرید'}
+          back={checkoutStep ? reviewHref : menuHref}
+        />
         <Empty
-          title={
-            wrongCafe ? 'هنوز سفارشی از این کافه انتخاب نکرده‌ای' : 'سبدت منتظر یک طعم تازه است'
-          }
+          title={scopedCafe ? 'سبد این کافه خالی است' : 'سبدت منتظر یک طعم تازه است'}
           description="از منو انتخاب کن و اولین محصول را به سبد اضافه کن."
           href={menuHref}
           label={scopedCafe ? 'دیدن منوی این کافه' : 'دیدن منوی کافه‌ها'}
@@ -199,16 +204,18 @@ export function CartView() {
       </div>
     );
   return (
-    <div className="vitco-cart">
+    <div className={'vitco-cart' + (scopedCafe ? ' vitrin-basket' : '')}>
       <PageTitle
-        title="سبد خرید شما"
+        title={checkoutStep ? 'تسویه حساب' : scopedCafe ? 'سبد خرید' : 'سبد خرید شما'}
         description={cafe?.name}
-        back={menuHref}
+        back={checkoutStep ? reviewHref : menuHref}
         action={
-          <button className="button secondary" onClick={() => setClear(true)}>
-            <Trash2 size={17} />
-            خالی کردن سبد
-          </button>
+          !scopedCafe && (
+            <button className="button secondary" onClick={() => setClear(true)}>
+              <Trash2 size={17} />
+              خالی کردن سبد
+            </button>
+          )
         }
       />
       <div className="checkout-layout">
@@ -218,7 +225,11 @@ export function CartView() {
             {mode === 'dine_in' ? 'سرویس ' + table?.table_name : 'تحویل از کافه'}
           </p>
           <section>
-            <SectionTitle title="انتخاب‌های خوش‌طعم تو" href="/menu" label="افزودن محصول" />
+            <SectionTitle
+              title={checkoutStep ? 'اقلام سفارش' : 'محصولات سبد'}
+              href={checkoutStep ? undefined : menuHref}
+              label="افزودن محصول"
+            />
             <div className="stack">
               {cart.map((item) => (
                 <article className="cart-item panel" key={item.key}>
@@ -231,26 +242,32 @@ export function CartView() {
                     {item.note && <small>{item.note}</small>}
                   </div>
                   <div className="cart-item-controls">
-                    <Quantity
-                      value={item.quantity}
-                      onChange={(quantity) =>
-                        setCart(cart.map((i) => (i.key === item.key ? { ...i, quantity } : i)))
-                      }
-                    />
+                    {checkoutStep ? (
+                      <span>{digits(item.quantity)} عدد</span>
+                    ) : (
+                      <Quantity
+                        value={item.quantity}
+                        onChange={(quantity) =>
+                          setCart(cart.map((i) => (i.key === item.key ? { ...i, quantity } : i)))
+                        }
+                      />
+                    )}
                     <strong>{money(item.price * item.quantity)}</strong>
                   </div>
-                  <button
-                    className="icon-button"
-                    aria-label={'حذف ' + item.name}
-                    onClick={() => setRemoveKey(item.key)}
-                  >
-                    <Trash2 size={17} />
-                  </button>
+                  {!checkoutStep && (
+                    <button
+                      className="icon-button"
+                      aria-label={'حذف ' + item.name}
+                      onClick={() => setRemoveKey(item.key)}
+                    >
+                      <Trash2 size={17} />
+                    </button>
+                  )}
                 </article>
               ))}
             </div>
           </section>
-          {complementary.length > 0 && (
+          {!checkoutStep && complementary.length > 0 && (
             <section>
               <SectionTitle title="پیشنهاد کنار سفارش" />
               <div className="stack">
@@ -260,153 +277,175 @@ export function CartView() {
               </div>
             </section>
           )}
-          <section className="panel form">
-            <h2>{mode === 'dine_in' ? table?.table_name : 'دریافت از کافه'}</h2>
-            {table && cafe?.pickup && (
-              <label className="check-row">
+          {!reviewOnly && (
+            <section className="panel form">
+              <h2>{mode === 'dine_in' ? table?.table_name : 'دریافت از کافه'}</h2>
+              {table && cafe?.pickup && (
+                <label className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={takeaway}
+                    onChange={(event) => setTakeaway(event.target.checked)}
+                  />{' '}
+                  سفارش بیرون‌بر
+                </label>
+              )}
+              <p className="icon-text">
+                <MapPin size={18} />
+                {cafe?.city}، {cafe?.address}
+              </p>
+              {mode === 'pickup' && (
+                <button className="checkout-choice" onClick={() => setPickupOpen(true)}>
+                  <Clock3 size={20} />
+                  <span>
+                    <strong>زمان دریافت</strong>
+                    <small>
+                      {pickup
+                        ? dateLabel(pickup) + '، ساعت ' + digits(pickupTime)
+                        : 'اولین زمان ممکن'}
+                    </small>
+                  </span>
+                  <ChevronLeft size={18} />
+                </button>
+              )}
+              <Field label="یادداشت برای کافه (اختیاری)">
+                <textarea
+                  maxLength={500}
+                  placeholder="نکته‌ای برای آماده‌سازی یا تحویل داری؟"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                />
+              </Field>
+            </section>
+          )}
+        </div>
+        {reviewOnly ? (
+          <aside className="order-summary panel">
+            <h2>خلاصه سفارش</h2>
+            <div className="list-row">
+              <span>جمع محصولات</span>
+              <strong>{money(estimated)}</strong>
+            </div>
+            <div className="vitrin-basket-actions">
+              <button className="button secondary" type="button" onClick={() => setClear(true)}>
+                خالی کردن سبد این کافه
+              </button>
+              <Link className="button primary" href={reviewHref + '&step=checkout'}>
+                ادامه و پرداخت
+              </Link>
+            </div>
+          </aside>
+        ) : (
+          <aside className="order-summary panel">
+            <h2>خلاصه سفارش</h2>
+            <div className="list-row">
+              <span>{canCheckout ? 'قیمت محصولات' : 'قیمت تقریبی محصولات'}</span>
+              <strong>
+                {quote
+                  ? money(quote.subtotal)
+                  : !canCheckout
+                    ? money(estimated)
+                    : quoting
+                      ? 'در حال محاسبه…'
+                      : '—'}
+              </strong>
+            </div>
+            {Boolean(quote?.discount) && (
+              <div className="list-row green">
+                <span>تخفیف</span>
+                <strong>− {money(quote!.discount)}</strong>
+              </div>
+            )}
+            {Boolean(quote?.points_used) && (
+              <div className="list-row green">
+                <span>تخفیف امتیازها</span>
+                <strong>− {money(quote!.points_used * 1000)}</strong>
+              </div>
+            )}
+            <button
+              className="checkout-choice coupon-trigger"
+              disabled={!canCheckout}
+              onClick={() => {
+                setCouponInput(coupon);
+                setCouponOpen(true);
+              }}
+            >
+              <TicketPercent size={20} />
+              <span>
+                <strong>{coupon || 'کد تخفیف داری؟'}</strong>
+                <small>
+                  {!canCheckout
+                    ? 'پس از ورود می‌توانی کد تخفیف اعمال کنی'
+                    : coupon && quote?.discount
+                      ? 'کد تخفیف اعمال شد'
+                      : coupon
+                        ? 'ویرایش یا حذف کد'
+                        : 'افزودن کد تخفیف'}
+                </small>
+              </span>
+              <ChevronLeft size={18} />
+            </button>
+            {data?.user && (
+              <label className="check-row points-row">
                 <input
                   type="checkbox"
-                  checked={takeaway}
-                  onChange={(event) => setTakeaway(event.target.checked)}
-                />{' '}
-                سفارش بیرون‌بر
+                  checked={usePoints}
+                  onChange={(e) => setUsePoints(e.target.checked)}
+                  disabled={!cafePoints}
+                />
+                <span>
+                  استفاده از {digits(cafePoints)} امتیاز
+                  <small>امتیاز همین کافه؛ هر امتیاز هزار تومان</small>
+                </span>
+                <Gift size={20} />
               </label>
             )}
-            <p className="icon-text">
-              <MapPin size={18} />
-              {cafe?.city}، {cafe?.address}
-            </p>
-            {mode === 'pickup' && (
-              <button className="checkout-choice" onClick={() => setPickupOpen(true)}>
-                <Clock3 size={20} />
-                <span>
-                  <strong>زمان دریافت</strong>
-                  <small>
-                    {pickup
-                      ? dateLabel(pickup) + '، ساعت ' + digits(pickupTime)
-                      : 'اولین زمان ممکن'}
-                  </small>
-                </span>
-                <ChevronLeft size={18} />
-              </button>
-            )}
-            <Field label="یادداشت برای کافه (اختیاری)">
-              <textarea
-                maxLength={500}
-                placeholder="نکته‌ای برای آماده‌سازی یا تحویل داری؟"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-              />
-            </Field>
-          </section>
-        </div>
-        <aside className="order-summary panel">
-          <h2>خلاصه سفارش</h2>
-          <div className="list-row">
-            <span>{canCheckout ? 'قیمت محصولات' : 'قیمت تقریبی محصولات'}</span>
-            <strong>
-              {quote
-                ? money(quote.subtotal)
-                : !canCheckout
+            <div className="summary-total" aria-live="polite">
+              <span>{canCheckout ? 'مبلغ قابل پرداخت' : 'جمع تقریبی'}</span>
+              <strong>
+                {!canCheckout
                   ? money(estimated)
                   : quoting
                     ? 'در حال محاسبه…'
-                    : '—'}
-            </strong>
-          </div>
-          {Boolean(quote?.discount) && (
-            <div className="list-row green">
-              <span>تخفیف</span>
-              <strong>− {money(quote!.discount)}</strong>
+                    : quote
+                      ? money(quote.total)
+                      : '—'}
+              </strong>
             </div>
-          )}
-          {Boolean(quote?.points_used) && (
-            <div className="list-row green">
-              <span>تخفیف امتیازها</span>
-              <strong>− {money(quote!.points_used * 1000)}</strong>
-            </div>
-          )}
-          <button
-            className="checkout-choice coupon-trigger"
-            disabled={!canCheckout}
-            onClick={() => {
-              setCouponInput(coupon);
-              setCouponOpen(true);
-            }}
-          >
-            <TicketPercent size={20} />
-            <span>
-              <strong>{coupon || 'کد تخفیف داری؟'}</strong>
-              <small>
-                {!canCheckout
-                  ? 'پس از ورود می‌توانی کد تخفیف اعمال کنی'
-                  : coupon && quote?.discount
-                    ? 'کد تخفیف اعمال شد'
-                    : coupon
-                      ? 'ویرایش یا حذف کد'
-                      : 'افزودن کد تخفیف'}
-              </small>
-            </span>
-            <ChevronLeft size={18} />
-          </button>
-          {data?.user && (
-            <label className="check-row points-row">
-              <input
-                type="checkbox"
-                checked={usePoints}
-                onChange={(e) => setUsePoints(e.target.checked)}
-                disabled={!cafePoints}
-              />
-              <span>
-                استفاده از {digits(cafePoints)} امتیاز
-                <small>امتیاز همین کافه؛ هر امتیاز هزار تومان</small>
-              </span>
-              <Gift size={20} />
-            </label>
-          )}
-          <div className="summary-total" aria-live="polite">
-            <span>{canCheckout ? 'مبلغ قابل پرداخت' : 'جمع تقریبی'}</span>
-            <strong>
-              {!canCheckout
-                ? money(estimated)
-                : quoting
-                  ? 'در حال محاسبه…'
-                  : quote
-                    ? money(quote.total)
-                    : '—'}
-            </strong>
-          </div>
-          {!canCheckout && <p className="guest-quote-note">مبلغ نهایی پس از ورود محاسبه می‌شود.</p>}
-          <PaymentMethodPicker
-            available={onlineAvailable}
-            sandbox={Boolean(data?.onlinePayment?.sandbox)}
-            value={selectedPaymentMethod}
-            onChange={setPaymentMethod}
-            disabled={busy}
-          />
-          {error && <ErrorBox message={error} />}
-          <button
-            className="button primary full"
-            disabled={busy || (canCheckout && (!quote || quoting))}
-            onClick={() =>
-              canCheckout
-                ? void checkout()
-                : router.push('/login?next=' + encodeURIComponent(cartHref))
-            }
-          >
-            {busy
-              ? 'در حال ثبت سفارش…'
-              : canCheckout
-                ? selectedPaymentMethod === 'zarinpal'
-                  ? 'ثبت سفارش و ادامه پرداخت'
-                  : 'ثبت سفارش'
-                : 'ورود و ادامه سفارش'}
-            <ArrowLeft size={18} />
-          </button>
-          <p className="checkout-terms">
-            با ثبت سفارش، <Link href="/terms">شرایط استفاده</Link> را می‌پذیرید.
-          </p>
-        </aside>
+            {!canCheckout && (
+              <p className="guest-quote-note">مبلغ نهایی پس از ورود محاسبه می‌شود.</p>
+            )}
+            <PaymentMethodPicker
+              available={onlineAvailable}
+              sandbox={Boolean(data?.onlinePayment?.sandbox)}
+              value={selectedPaymentMethod}
+              onChange={setPaymentMethod}
+              disabled={busy}
+            />
+            {error && <ErrorBox message={error} />}
+            <button
+              className="button primary full"
+              disabled={busy || (canCheckout && (!quote || quoting))}
+              onClick={() =>
+                canCheckout
+                  ? void checkout()
+                  : router.push('/login?next=' + encodeURIComponent(cartHref))
+              }
+            >
+              {busy
+                ? 'در حال ثبت سفارش…'
+                : canCheckout
+                  ? selectedPaymentMethod === 'zarinpal'
+                    ? 'ثبت سفارش و ادامه پرداخت'
+                    : 'ثبت سفارش'
+                  : 'ورود و ادامه سفارش'}
+              <ArrowLeft size={18} />
+            </button>
+            <p className="checkout-terms">
+              با ثبت سفارش، <Link href="/terms">شرایط استفاده</Link> را می‌پذیرید.
+            </p>
+          </aside>
+        )}
       </div>
       <Modal
         open={couponOpen}
@@ -531,7 +570,7 @@ export function OrdersView({ id }: { id?: string }) {
       ? ['pending', 'preparing', 'delivering', 'completed']
       : ['pending', 'preparing', 'ready', 'completed'];
   return (
-    <div className="vitco-orders">
+    <div className={'vitco-orders' + (id ? ' vitrin-order-detail' : '')}>
       <PageTitle
         title={
           id

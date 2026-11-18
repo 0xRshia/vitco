@@ -126,7 +126,7 @@ test('menu categories follow the selected location and café event paths use rea
     'href',
     '/reserve?cafe=' + cafes[0].id,
   );
-  await page.getByRole('button', { name: 'مشاهده و شرکت در رویداد' }).click();
+  await page.getByRole('button', { name: 'رویدادها و جلسات' }).click();
   const filters = page.getByRole('group', { name: 'زمان برگزاری رویدادها' });
   await filters.getByRole('button', { name: /^در حال برگزاری/ }).click();
   await expect(page.getByRole('heading', { name: ongoingTitle, exact: true })).toBeVisible();
@@ -140,4 +140,12 @@ test('menu categories follow the selected location and café event paths use rea
     true,
   );
   await page.screenshot({ path: testInfo.outputPath('cafe-events.png'), fullPage: true });
+  await page.goto('/events');
+  await page.getByRole('textbox', { name: 'جستجوی رویداد' }).fill(upcomingTitle);
+  await page.getByRole('textbox', { name: 'شهر' }).fill('تهران');
+  await page.getByRole('combobox', { name: 'نوع رویداد' }).selectOption('true');
+  await page.getByRole('button', { name: 'اعمال', exact: true }).click();
+  await expect(page).toHaveURL(/is_free=true/);
+  await expect(page.getByRole('heading', { name: upcomingTitle, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: ongoingTitle, exact: true })).toHaveCount(0);
 });
