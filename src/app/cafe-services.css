@@ -1,0 +1,136 @@
+.service-card-grid,
+.service-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+}
+.service-card-grid > *,
+.service-gallery > * {
+  min-width: 0;
+}
+.service-section {
+  margin-block: 24px;
+}
+.service-inline,
+.service-table-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.service-table-banner {
+  margin-block: 12px;
+}
+.service-table-banner > div {
+  flex: 1 1 150px;
+}
+.service-tabs {
+  flex-wrap: wrap;
+}
+.service-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.service-chat-list {
+  max-block-size: 390px;
+  overflow-y: auto;
+}
+.service-chat-list .list-row > div {
+  min-width: 0;
+}
+.service-field-grid {
+  align-items: end;
+}
+.service-hour-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border-block-end: 1px solid var(--line);
+  padding-block: 10px;
+}
+.service-qr {
+  display: block;
+  width: min(100%, 192px);
+  height: auto;
+}
+.service-hours {
+  margin: 8px 0;
+}
+.service-hours > div {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+}
+.service-hours dt {
+  min-inline-size: 75px;
+}
+.service-hours dd {
+  margin: 0;
+}
+.service-category-gallery {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  margin-block: 16px;
+}
+.service-category-gallery button {
+  inline-size: 120px;
+  flex-shrink: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.service-category-gallery button[aria-pressed='true'] {
+  border-color: var(--accent);
+}
+.service-category-gallery .media {
+  min-height: 76px;
+  aspect-ratio: 4 / 3;
+}
+.service-gallery .media {
+  aspect-ratio: 4 / 3;
+}
+.service-admin-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-end: 20px;
+}
+.service-disclosures details {
+  padding-block: 14px;
+  border-block-end: 1px solid var(--line);
+}
+.service-disclosures details:last-child {
+  border-block-end: 0;
+}
+.service-disclosures summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+.service-article-image {
+  inline-size: 100%;
+  max-block-size: 480px;
+  aspect-ratio: 16 / 9;
+}
+.service-table-options {
+  grid-column: 1 / -1;
+}
+.service-cafe-logo {
+  inline-size: 56px;
+  block-size: 56px;
+  border-radius: 12px;
+  object-fit: contain;
+}
+.service-footer-links {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+@media (max-width: 480px) {
+  .service-hour-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .service-hour-row > label:first-child {
+    grid-column: 1 / -1;
+  }
+}

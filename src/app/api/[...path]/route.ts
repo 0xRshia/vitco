@@ -35,37 +35,65 @@ import {
 import { ownerAnalytics } from '@/lib/owner-analytics';
 import { adjustCategoryPrices } from '@/lib/pricing';
 import { productCategory } from '@/lib/catalog';
-import { zarinpalPublicConfig } from '@/lib/zarinpal';
+import { publicPaymentAvailability } from '@/lib/payment-intake';
 import { startPayment, checkPayment, paymentCallback } from '@/lib/payments';
 import { quoteInvoice, createInvoice } from '@/lib/invoices';
 import { syncCafeDirectory, directoryStatus } from '@/lib/cafe-directory';
-import type { Cafe, CafeTable, Product, Order, Reservation, User, Ticket } from '@/lib/types';
+import {
+  bindTable,
+  latestCashierCall,
+  requestCashier,
+  tableContext,
+  tableGuest,
+  visitCookie,
+  visitSeconds,
+} from '@/lib/table-service';
+import { operationsApi } from '@/lib/operations-api';
+import { menuCategoriesFor, publicBranches, workingHours } from '@/lib/cafe-operations';
+import { platformAdmin, cafeHours } from '@/lib/cafe-access';
+import {
+  changeMeeting,
+  meetingChat,
+  meetingDetail,
+  meetings,
+  saveMeeting,
+  writeMeetingChat,
+} from '@/lib/meetings';
+import { myLoyalty, redeemReward } from '@/lib/loyalty';
+import {
+  attendEvent,
+  eventGuests,
+  leaveEvent,
+  listEvents,
+  registerEvent,
+  saveEvent,
+  setEventState,
+} from '@/lib/event-registration';
+import { operatorTickets, readTicketForm, ticketsApi } from '@/lib/tickets';
+import { googleAvailable, googleSignIn } from '@/lib/google-auth';
+import {
+  closeAccount,
+  customerSettings,
+  savePreferences,
+  updatePhone,
+} from '@/lib/customer-settings';
+import { linkTelegram, telegramStatus, telegramWebhook, unlinkTelegram } from '@/lib/telegram';
+import { cafeFeatures, complementaryItems } from '@/lib/cafe-features';
+import { adminApi, publicArticles, publicTestimonials, submitContact } from '@/lib/platform';
+import type { Cafe, CafeTable, Product, Order, Reservation, User } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const json = (value: unknown, status = 200) =>
   NextResponse.json(value, { status, headers: { 'Cache-Control': 'no-store' } });
 const cafeSql =
-  'SELECT c.*,(SELECT AVG(rating) FROM reviews WHERE cafe_id=c.id) rating,(SELECT COUNT(*) FROM reviews WHERE cafe_id=c.id) review_count FROM cafes c';
+  'SELECT c.*,(SELECT AVG(rating) FROM reviews WHERE cafe_id=c.id AND visible=1) rating,(SELECT COUNT(*) FROM reviews WHERE cafe_id=c.id AND visible=1) review_count FROM cafes c';
+const visibleProducts =
+  'NOT EXISTS(SELECT 1 FROM menu_categories m WHERE m.cafe_id=p.cafe_id AND m.name=p.category AND visible=0)';
 const orderSql =
   'SELECT o.*,c.name cafe_name,u.name customer_name FROM orders o JOIN cafes c ON c.id=o.cafe_id JOIN users u ON u.id=o.user_id';
 const reservationSql =
   'SELECT r.*,c.name cafe_name,u.name customer_name,(SELECT id FROM orders WHERE reservation_id=r.id) order_id,(SELECT payment_method FROM orders WHERE reservation_id=r.id) payment_method,(SELECT payment_status FROM orders WHERE reservation_id=r.id) payment_status FROM reservations r JOIN cafes c ON c.id=r.cafe_id JOIN users u ON u.id=r.user_id';
-function ticketWithReplies(ticket: Ticket) {
-  return {
-    ...ticket,
-    replies: all(
-      'SELECT r.id,r.body,r.created_at,u.name FROM ticket_replies r JOIN users u ON u.id=r.user_id WHERE r.ticket_id=? ORDER BY r.created_at',
-      ticket.id,
-    ),
-  };
-}
-function events(user: User | null) {
-  return all(
-    'SELECT e.*,c.name cafe_name,(SELECT COUNT(*) FROM event_registrations WHERE event_id=e.id) registered,EXISTS(SELECT 1 FROM event_registrations WHERE event_id=e.id AND user_id=?) joined FROM events e JOIN cafes c ON c.id=e.cafe_id ORDER BY date,time',
-    user?.id || '',
-  ).map(hydrate);
-}
 function options(value: unknown) {
   return v.list(value ?? [], 10).map((item) => {
     const o = v.object(item);
@@ -83,6 +111,8 @@ function cafeTables(value: unknown): CafeTable[] {
       id: v.text(table.id, 'شناسه میز', 1, 100),
       name: v.text(table.name, 'نام میز', 1, 80),
       seats: v.integer(table.seats, 'ظرفیت میز', 1, 20),
+      vip: v.flag(table.vip),
+      enabled: table.enabled !== false,
     };
   });
   v.ensure(
@@ -92,12 +122,20 @@ function cafeTables(value: unknown): CafeTable[] {
   );
   return tables;
 }
+function galleryImages(value: unknown) {
+  const images = v.list(value, 10).map(v.imagePath);
+  v.ensure(
+    images.every(Boolean) && new Set(images).size === images.length,
+    'تصاویر گالری باید معتبر و غیرتکراری باشند.',
+  );
+  return JSON.stringify(images);
+}
 async function handle(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   try {
     const { path } = await context.params;
     const [resource, id, action] = path;
     const method = request.method;
-    if (method !== 'GET') checkOrigin(request);
+    if (method !== 'GET' && !(resource === 'telegram' && id === 'webhook')) checkOrigin(request);
     if (resource === 'media' && method === 'GET') {
       v.ensure(/^[a-f0-9-]+\.(png|jpg|webp)$/.test(id || ''), 'تصویر پیدا نشد.', 404);
       try {
@@ -144,6 +182,17 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       await writeFile(join(resolve('data/uploads'), name), bytes);
       return json({ url: '/api/media/' + name });
     }
+    if (
+      resource === 'tickets' &&
+      method === 'POST' &&
+      request.headers.get('content-type')?.startsWith('multipart/form-data')
+    ) {
+      const account = requireUser(request);
+      limit('ticket-attachments:' + account.id, 10, 60);
+      const { input, attachments } = await readTicketForm(request);
+      const response = ticketsApi(account, path, method, input, attachments);
+      return response instanceof Response ? response : json(response, !id ? 201 : 200);
+    }
     let input: Record<string, unknown> = {};
     if (['POST', 'PUT', 'PATCH'].includes(method)) {
       v.ensure(
@@ -161,6 +210,91 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       }
     }
     const user = currentUser(request);
+    if (resource === 'blog' && method === 'GET')
+      return json(publicArticles(id, request.nextUrl.searchParams.get('category')));
+    if (resource === 'testimonials' && method === 'GET')
+      return json({ testimonials: publicTestimonials() });
+    if (resource === 'contact-messages' && method === 'POST') {
+      limit('contact:' + (user?.id || request.headers.get('x-real-ip') || 'public'), 12, 3600);
+      return json(submitContact(id, input), 201);
+    }
+    if (
+      resource === 'auth' &&
+      id === 'google' &&
+      method === 'GET' &&
+      (!action || action === 'callback')
+    ) {
+      limit('google:' + (request.headers.get('x-real-ip') || 'public'), 150, 60);
+      return await googleSignIn(request, user, action === 'callback');
+    }
+    if (resource === 'telegram' && id === 'webhook' && method === 'POST') {
+      telegramWebhook(request.headers.get('x-telegram-bot-api-secret-token'), input);
+      return json({ ok: true });
+    }
+    const tableToken = request.cookies.get(visitCookie)?.value;
+    if (resource === 'table') {
+      if (method === 'GET' && !id) {
+        const table = tableContext(tableToken);
+        return json({ table, call: table ? latestCashierCall(tableToken) : null });
+      }
+      if (method === 'POST' && id === 'cashier') {
+        limit('cashier:' + hash(tableToken || ''), 12, 60);
+        return json({ id: requestCashier(tableToken) }, 201);
+      }
+      if (method === 'POST' && id) {
+        limit('table-scan:' + (request.headers.get('x-real-ip') || 'local'), 180, 60);
+        const { table, token } = bindTable(id, tableToken);
+        const response = json({ table });
+        response.cookies.set(visitCookie, token, {
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/',
+          maxAge: visitSeconds,
+          secure: (process.env.APP_ORIGIN || request.nextUrl.origin).startsWith('https:'),
+        });
+        return response;
+      }
+    }
+    if (resource === 'meetings' && method === 'GET') {
+      if (id && action !== 'messages') return json({ meeting: meetingDetail(id, user) });
+      if (id && action === 'messages')
+        return json({
+          messages: meetingChat(
+            requireUser(request),
+            id,
+            request.nextUrl.searchParams.get('before'),
+          ),
+        });
+      return json({
+        meetings: meetings(
+          user,
+          request.nextUrl.searchParams.get('cafe'),
+          request.nextUrl.searchParams.get('mine') === '1',
+        ),
+      });
+    }
+    if (resource === 'table-checkout' && method === 'POST') {
+      const table = tableContext(tableToken);
+      v.ensure(table, 'ابتدا کد معتبر میز را اسکن کنید.', 403);
+      limit('table-order:' + hash(tableToken || ''), 60, 60);
+      const payload = { ...input, mode: 'dine_in' };
+      if (id === 'quote') {
+        const q = quote(user, payload, table);
+        v.ensure(q.cafe.id === table.cafe_id, 'سفارش باید برای همین میز باشد.', 403);
+        return json({
+          subtotal: q.subtotal,
+          discount: q.discount,
+          points_used: q.points_used,
+          delivery_fee: q.delivery_fee,
+          total: q.total,
+        });
+      }
+      if (!id) {
+        const buyer = user || tableGuest(tableToken, true);
+        v.ensure(buyer, 'نشست میز معتبر نیست.', 403);
+        return json({ id: createOrder(buyer, payload, table) }, 201);
+      }
+    }
     if (resource === 'health' && method === 'GET') {
       one('SELECT 1 healthy');
       const release = await readFile(resolve('BUILD_COMMIT'), 'utf8').catch(() => '');
@@ -195,7 +329,9 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
     if (resource === 'bootstrap' && method === 'GET')
       return json({
         directory: directoryStatus(),
-        onlinePayment: zarinpalPublicConfig(),
+        platformAdmin: platformAdmin(user),
+        googleAvailable: googleAvailable(),
+        onlinePayment: publicPaymentAvailability(),
         user,
         rewards: user
           ? all(
@@ -205,9 +341,11 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           : [],
         cafes: all(cafeSql + ' ORDER BY c.source ASC,c.name').map(hydrate),
         products: all(
-          'SELECT p.*,c.name cafe_name FROM products p JOIN cafes c ON c.id=p.cafe_id ORDER BY p.category,p.name',
+          'SELECT p.*,c.name cafe_name FROM products p JOIN cafes c ON c.id=p.cafe_id WHERE p.vip_only=0 AND ' +
+            visibleProducts +
+            ' ORDER BY p.category,p.name',
         ).map(hydrate),
-        events: events(user),
+        events: listEvents(user),
         favorites: user
           ? all<{ cafe_id: string }>('SELECT cafe_id FROM favorites WHERE user_id=?', user.id).map(
               (f) => f.cafe_id,
@@ -259,7 +397,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           password = v.text(input.password, 'رمز عبور', 1, 128);
         limit('login:' + email, 10, 900);
         const account = one<{ id: string; password: string }>(
-          'SELECT id,password FROM users WHERE email=?',
+          'SELECT id,password FROM users WHERE email=? AND suspended=0',
           email,
         );
         v.ensure(
@@ -280,7 +418,11 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           code = latin(v.text(input.code, 'کد تأیید', 6, 6));
         limit('verify:' + phone, 10, 900);
         verifyCode(phone, 'phone', code);
-        let account = one<{ id: string }>('SELECT id FROM users WHERE phone=?', phone);
+        let account = one<{ id: string; suspended?: number }>(
+          'SELECT id,suspended FROM users WHERE phone=?',
+          phone,
+        );
+        v.ensure(!account?.suspended, 'دسترسی به این حساب غیرفعال است.', 403);
         if (!account) {
           account = { id: randomUUID() };
           run(
@@ -316,18 +458,60 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
     }
     if (resource === 'cafes' && method === 'GET') {
       const cafe = cafeById(id);
+      const features = cafeFeatures(cafe.id);
+      const table = tableContext(tableToken);
+      const vip = features.vip_menu && table?.cafe_id === id && table.vip;
       return json({
-        cafe,
-        products: all('SELECT * FROM products WHERE cafe_id=? ORDER BY category,name', id).map(
-          hydrate,
-        ),
-        reviews: all(
-          'SELECT r.id,r.rating,r.body,r.created_at,u.name FROM reviews r JOIN users u ON u.id=r.user_id WHERE r.cafe_id=? ORDER BY r.created_at DESC',
+        cafe: { ...cafe, tour_url: features.tour ? cafe.tour_url : '' },
+        features,
+        branches: publicBranches(cafe),
+        hours: workingHours(cafe.id),
+        menu_groups: menuCategoriesFor(cafe.id),
+        products: all(
+          'SELECT p.* FROM products p WHERE p.cafe_id=? AND (p.vip_only=0 OR ?) AND ' +
+            visibleProducts +
+            ' ORDER BY p.category,p.name',
           id,
+          Number(vip),
+        ).map(hydrate),
+        reviews: all(
+          "SELECT r.id,r.rating,r.body,r.created_at,u.name,EXISTS(SELECT 1 FROM orders o WHERE o.user_id=r.user_id AND o.cafe_id=r.cafe_id AND o.status='completed' AND o.kind='menu') verified FROM reviews r JOIN users u ON u.id=r.user_id WHERE r.cafe_id=? AND r.visible=1 ORDER BY r.created_at DESC",
+          id,
+        ),
+        own_review: user
+          ? (one(
+              'SELECT id,rating,body,created_at,visible FROM reviews WHERE cafe_id=? AND user_id=?',
+              id,
+              user.id,
+            ) ?? null)
+          : null,
+      });
+    }
+    if (resource === 'products' && method === 'GET') {
+      const table = tableContext(tableToken);
+      return json({
+        product: productById(
+          id,
+          table?.vip && cafeFeatures(table.cafe_id).vip_menu ? table.cafe_id : '',
         ),
       });
     }
-    if (resource === 'products' && method === 'GET') return json({ product: productById(id) });
+    if (resource === 'recommendations' && method === 'GET') {
+      const cafeId = v.text(request.nextUrl.searchParams.get('cafe'), 'کافه', 1, 100);
+      const selected = (request.nextUrl.searchParams.get('items') || '')
+        .slice(0, 4000)
+        .split(',')
+        .filter(Boolean)
+        .slice(0, 40);
+      const context = tableContext(tableToken);
+      return json({
+        products: complementaryItems(
+          cafeId,
+          selected,
+          Boolean(context?.vip && context.cafe_id === cafeId && cafeFeatures(cafeId).vip_menu),
+        ),
+      });
+    }
     if (resource === 'slots' && method === 'GET') {
       const selectedDate = v.date(request.nextUrl.searchParams.get('date'));
       const cafe = cafeById(id),
@@ -345,13 +529,72 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           : [],
       });
     }
-    const account = requireUser(request);
+    const guestAllowed =
+      (resource === 'orders' && Boolean(id) && ['GET', 'PATCH'].includes(method)) ||
+      (resource === 'payments' && method === 'POST');
+    const account = user || (guestAllowed ? tableGuest(tableToken) : null);
+    v.ensure(account, 'برای ادامه وارد حساب خود شوید.', 401);
     if (method !== 'GET') limit('write:' + account.id, 100, 60);
+    if (resource === 'admin')
+      return json(adminApi(account, path, method, input, request.nextUrl.searchParams));
+    if (resource === 'operations') {
+      const response = await operationsApi(request, account, path, input);
+      return response instanceof Response ? response : json(response);
+    }
+    if (resource === 'loyalty') {
+      if (method === 'GET' && !id) return json(myLoyalty(account));
+      if (method === 'POST' && id && action)
+        return json(
+          {
+            code: redeemReward(
+              account,
+              id,
+              action,
+              v.text(input.request_key, 'شناسه درخواست', 10, 100),
+            ),
+          },
+          201,
+        );
+    }
+    if (resource === 'meetings') {
+      if (method === 'POST' && !id) return json({ id: saveMeeting(account, input) }, 201);
+      if (method === 'PUT' && id && !action) return json({ id: saveMeeting(account, input, id) });
+      if (method === 'POST' && id && action) {
+        if (action === 'messages') writeMeetingChat(account, id, input);
+        else changeMeeting(account, id, action, input);
+        return json({ ok: true });
+      }
+    }
     if (resource === 'profile' && method === 'PATCH') {
       const name = v.text(input.name, 'نام', 2, 80),
         avatar = v.imagePath(input.avatar);
       run('UPDATE users SET name=?,avatar=? WHERE id=?', name, avatar, account.id);
       return json({ ok: true });
+    }
+    if (resource === 'preferences') {
+      if (method === 'GET') return json(customerSettings(account));
+      if (method === 'PATCH') {
+        savePreferences(account, input);
+        return json({ ok: true });
+      }
+    }
+    if (resource === 'telegram' && !id) {
+      if (method === 'GET') return json(telegramStatus(account));
+      if (method === 'POST') return json({ url: linkTelegram(account) });
+      if (method === 'DELETE') {
+        unlinkTelegram(account);
+        return json({ ok: true });
+      }
+    }
+    if (resource === 'profile' && id === 'phone' && method === 'POST') {
+      await updatePhone(account, input, action === 'verify');
+      return json({ ok: true });
+    }
+    if (resource === 'profile' && !id && method === 'DELETE') {
+      closeAccount(account, input);
+      const response = json({ ok: true });
+      response.cookies.delete('vitrin_session');
+      return response;
     }
     if (resource === 'password' && method === 'PATCH') {
       const old = v.text(input.current, 'رمز فعلی', 1, 128),
@@ -462,7 +705,12 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
         return json(id ? { order: rows[0] } : { orders: rows });
       }
       if (method === 'PATCH') {
-        transitionOrder(account, id, v.text(input.status, 'وضعیت', 1, 30));
+        transitionOrder(
+          account,
+          id,
+          v.text(input.status, 'وضعیت', 1, 30),
+          input.preparation_minutes,
+        );
         return json({ ok: true });
       }
     }
@@ -477,22 +725,50 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           201,
         );
       }
-      if (method === 'GET')
+      if (method === 'GET') {
+        if (id) {
+          const booking = one(reservationSql + ' WHERE r.user_id=? AND r.id=?', account.id, id);
+          v.ensure(booking, 'رزرو پیدا نشد.', 404);
+          return json({ reservation: hydrate(booking) });
+        }
         return json({
           reservations: all(
             reservationSql + ' WHERE r.user_id=? ORDER BY r.date DESC,r.time DESC',
             account.id,
           ).map(hydrate),
         });
+      }
       if (method === 'PATCH') {
         transitionReservation(account, id, v.text(input.status, 'وضعیت', 1, 30));
         return json({ ok: true });
       }
     }
-    if (resource === 'reviews' && method === 'POST') {
+    if (resource === 'reviews' && ['POST', 'PATCH', 'DELETE'].includes(method)) {
       cafeById(id);
+      if (method === 'DELETE') {
+        v.ensure(
+          run('DELETE FROM reviews WHERE user_id=? AND cafe_id=?', account.id, id).changes,
+          'نظر پیدا نشد.',
+          404,
+        );
+        return json({ ok: true });
+      }
       const rating = v.integer(input.rating, 'امتیاز', 1, 5),
         body = v.text(input.body, 'نظر', 5, 1500);
+      if (method === 'PATCH') {
+        v.ensure(
+          run(
+            'UPDATE reviews SET rating=?,body=? WHERE user_id=? AND cafe_id=?',
+            rating,
+            body,
+            account.id,
+            id,
+          ).changes,
+          'نظر پیدا نشد.',
+          404,
+        );
+        return json({ ok: true });
+      }
       v.ensure(
         !one('SELECT id FROM reviews WHERE user_id=? AND cafe_id=?', account.id, id),
         'شما قبلاً برای این کافه نظر ثبت کرده‌اید.',
@@ -509,99 +785,26 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       return json({ ok: true });
     }
     if (resource === 'notifications' && method === 'PATCH') {
-      run('UPDATE notifications SET read=1 WHERE user_id=?', account.id);
+      if (id) run('UPDATE notifications SET read=1 WHERE user_id=? AND id=?', account.id, id);
+      else run('UPDATE notifications SET read=1 WHERE user_id=?', account.id);
       return json({ ok: true });
     }
     if (resource === 'tickets') {
-      if (method === 'POST' && action === 'replies') {
-        const ticket = one<{ user_id: string; owner_id: string | null }>(
-          'SELECT t.user_id,c.owner_id FROM tickets t LEFT JOIN orders o ON o.id=t.order_id LEFT JOIN cafes c ON c.id=o.cafe_id WHERE t.id=?',
-          id,
-        );
-        v.ensure(ticket, 'درخواست پیدا نشد.', 404);
-        v.ensure(
-          ticket.owner_id === account.id || account.id === process.env.SUPPORT_USER_ID,
-          'دسترسی مجاز نیست.',
-          403,
-        );
-        transaction(() => {
-          run(
-            'INSERT INTO ticket_replies (id,ticket_id,user_id,body,created_at) VALUES (?,?,?,?,?)',
-            randomUUID(),
-            id,
-            account.id,
-            v.text(input.body, 'پاسخ', 3, 3000),
-            new Date().toISOString(),
-          );
-          run('UPDATE tickets SET status=? WHERE id=?', 'answered', id);
-          notify(
-            ticket.user_id,
-            'پاسخ درخواست پشتیبانی',
-            'پاسخ درخواست خود را در بخش پشتیبانی ببینید.',
-            '/support',
-          );
-        });
+      const response = ticketsApi(account, path, method, input);
+      return response instanceof Response
+        ? response
+        : json(response, method === 'POST' && !id ? 201 : 200);
+    }
+    if (resource === 'registrations' && method === 'GET')
+      return json({ events: listEvents(account, 'history') });
+    if (resource === 'events' && id && method === 'POST') {
+      if (action === 'leave') {
+        leaveEvent(account, id);
         return json({ ok: true });
       }
-      if (method === 'GET')
-        return json({
-          tickets: all<Ticket>(
-            'SELECT * FROM tickets WHERE user_id=? ORDER BY created_at DESC',
-            account.id,
-          ).map(ticketWithReplies),
-        });
-      if (method === 'POST') {
-        const orderId = v.text(input.order_id ?? '', 'سفارش', 0, 100);
-        if (orderId)
-          v.ensure(
-            one('SELECT id FROM orders WHERE id=? AND user_id=?', orderId, account.id),
-            'سفارش پیدا نشد.',
-            404,
-          );
-        run(
-          'INSERT INTO tickets (id,user_id,order_id,subject,body,created_at) VALUES (?,?,?,?,?,?)',
-          randomUUID(),
-          account.id,
-          orderId,
-          v.text(input.subject, 'موضوع', 3, 150),
-          v.text(input.body, 'پیام', 10, 3000),
-          new Date().toISOString(),
-        );
-        return json({ ok: true }, 201);
-      }
-    }
-    if (resource === 'events' && method === 'POST') {
-      transaction(() => {
-        const event = one<{ capacity: number; date: string; time: string; end_time: string }>(
-          'SELECT * FROM events WHERE id=?',
-          id,
-        );
-        v.ensure(event, 'رویداد پیدا نشد.', 404);
-        if (action === 'leave')
-          run('DELETE FROM event_registrations WHERE event_id=? AND user_id=?', id, account.id);
-        else {
-          v.ensure(
-            new Date(event.date + 'T' + (event.end_time || event.time) + ':00+03:30').getTime() >
-              Date.now(),
-            'مهلت ثبت‌نام این رویداد گذشته است.',
-          );
-          const count = one<{ n: number }>(
-            'SELECT COUNT(*) n FROM event_registrations WHERE event_id=?',
-            id,
-          )!.n;
-          v.ensure(count < event.capacity, 'ظرفیت رویداد تکمیل است.', 409);
-          v.ensure(
-            !one(
-              'SELECT 1 FROM event_registrations WHERE event_id=? AND user_id=?',
-              id,
-              account.id,
-            ),
-            'قبلاً در این رویداد ثبت‌نام کرده‌اید.',
-          );
-          run('INSERT INTO event_registrations (event_id,user_id) VALUES (?,?)', id, account.id);
-        }
-      });
-      return json({ ok: true });
+      v.ensure(!action, 'مسیر رویداد پیدا نشد.', 404);
+      const orderId = registerEvent(account, id);
+      return json({ ok: true, order_id: orderId });
     }
     if (resource === 'dashboard') {
       if (id === 'analytics' && method === 'GET')
@@ -613,10 +816,18 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           }),
         );
       if (id === 'prices' && method === 'POST') return json(adjustCategoryPrices(account, input));
+      if (id === 'events' && action && method === 'GET')
+        return json({ guests: eventGuests(account, action) });
+      if (id === 'events' && action && method === 'PATCH') {
+        if (input.guest !== undefined) attendEvent(account, action, input.guest);
+        else setEventState(account, action, input.status);
+        return json({ ok: true });
+      }
       if (method === 'GET') {
         const cafes = all(cafeSql + ' WHERE c.owner_id=?', account.id).map(hydrate<Cafe>);
         return json({
           cafes,
+          cafe_features: Object.fromEntries(cafes.map((cafe) => [cafe.id, cafeFeatures(cafe.id)])),
           products: all(
             'SELECT p.* FROM products p JOIN cafes c ON c.id=p.cafe_id WHERE c.owner_id=?',
             account.id,
@@ -629,28 +840,34 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
             account.id,
           ).map(hydrate<Reservation>),
           coupons: all(
-            'SELECT p.* FROM coupons p JOIN cafes c ON c.id=p.cafe_id WHERE c.owner_id=?',
+            'SELECT p.* FROM coupons p JOIN cafes c ON c.id=p.cafe_id WHERE c.owner_id=? AND p.recipient_id IS NULL',
             account.id,
           ),
-          events: events(account).filter((e) =>
-            cafes.some((c) => c.id === (e as { cafe_id: string }).cafe_id),
-          ),
-          tickets: all<Ticket>(
-            'SELECT t.*,u.name customer_name FROM tickets t LEFT JOIN orders o ON o.id=t.order_id LEFT JOIN cafes c ON c.id=o.cafe_id JOIN users u ON u.id=t.user_id WHERE c.owner_id=? OR ? ORDER BY t.created_at DESC',
-            account.id,
-            account.id === process.env.SUPPORT_USER_ID ? 1 : 0,
-          ).map(ticketWithReplies),
+          events: listEvents(account, 'owner'),
+          tickets: operatorTickets(account),
         });
       }
       if (id === 'cafes' && (method === 'POST' || method === 'PUT')) {
         const existing =
           method === 'PUT' ? ownerCafe(account, v.text(input.id, 'کافه', 1, 100)) : null;
+        const parentId =
+          existing?.parent_id ||
+          (existing ? '' : v.text(input.parent_id ?? '', 'کافه اصلی', 0, 100));
+        if (parentId) {
+          const parent = ownerCafe(account, parentId);
+          v.ensure(!parent.parent_id && !parent.is_demo, 'برای شعبه یک کافه اصلی انتخاب کنید.');
+        }
         const tables = cafeTables(input.tables ?? existing?.tables ?? []);
-        const images = v.list(input.images ?? existing?.images ?? [], 10).map(v.imagePath);
-        v.ensure(
-          images.every(Boolean) && new Set(images).size === images.length,
-          'تصاویر گالری باید معتبر و غیرتکراری باشند.',
-        );
+        if (tables.some((table) => table.vip) && !cafeFeatures(existing?.id || '').vip_tables)
+          v.ensure(
+            tables.every(
+              (table) =>
+                !table.vip || existing?.tables.some((old) => old.id === table.id && old.vip),
+            ),
+            'امکان میز ویژه برای این شعبه فعال نیست.',
+            409,
+          );
+        const images = galleryImages(input.images ?? existing?.images ?? []);
         const opens = v.time(input.opens),
           closes = v.time(input.closes);
         v.ensure(opens < closes, 'ساعت پایان باید بعد از شروع باشد.');
@@ -678,7 +895,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           v.flag(input.pickup) ? 1 : 0,
           0,
           v.flag(input.active) ? 1 : 0,
-          JSON.stringify(images),
+          images,
           JSON.stringify(tables),
           v.integer(
             input.invoice_discount_percent ?? existing?.invoice_discount_percent ?? 0,
@@ -686,6 +903,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
             0,
             99,
           ),
+          v.imagePath(input.logo ?? existing?.logo),
         ];
         const cafeId = method === 'PUT' ? String(input.id) : randomUUID();
         transaction(() => {
@@ -698,15 +916,19 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
             for (const booking of bookings) {
               if (booking.table_id)
                 v.ensure(
-                  tables.some((t) => t.id === booking.table_id && t.seats >= booking.guests),
+                  tables.some(
+                    (t) =>
+                      t.id === booking.table_id && t.seats >= booking.guests && t.enabled !== false,
+                  ),
                   'میز دارای رزرو فعال را نمی‌توان حذف کرد یا ظرفیت آن را کاهش داد.',
                   409,
                 );
               const minutes = (time: string) =>
                 Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+              const hours = cafeHours({ ...existing!, opens, closes }, booking.date);
               v.ensure(
-                minutes(booking.time) >= minutes(opens) &&
-                  minutes(booking.time) + 60 <= minutes(closes),
+                minutes(booking.time) >= minutes(hours.opens) &&
+                  minutes(booking.time) + 60 <= minutes(hours.closes),
                 'ساعت کاری جدید نباید رزروهای فعال را خارج از ساعت پذیرش قرار دهد.',
                 409,
               );
@@ -724,28 +946,69 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
               );
             }
             run(
-              'UPDATE cafes SET name=?,description=?,city=?,address=?,phone=?,image=?,amenities=?,latitude=?,longitude=?,opens=?,closes=?,capacity=?,delivery=?,pickup=?,delivery_fee=?,active=?,images=?,tables=?,invoice_discount_percent=? WHERE id=? AND owner_id=?',
+              'UPDATE cafes SET name=?,description=?,city=?,address=?,phone=?,image=?,amenities=?,latitude=?,longitude=?,opens=?,closes=?,capacity=?,delivery=?,pickup=?,delivery_fee=?,active=?,images=?,tables=?,invoice_discount_percent=?,logo=? WHERE id=? AND owner_id=?',
               ...values,
               cafeId,
               account.id,
             );
+            for (const previous of existing!.tables) {
+              if (
+                values[15] &&
+                tables.some((table) => table.id === previous.id && table.enabled !== false)
+              )
+                continue;
+              const now = new Date().toISOString();
+              run(
+                "UPDATE table_codes SET revoked_at=? WHERE cafe_id=? AND table_id=? AND revoked_at=''",
+                now,
+                cafeId,
+                previous.id,
+              );
+              run(
+                "UPDATE cashier_calls SET status='cancelled',updated_at=? WHERE cafe_id=? AND table_id=? AND status IN ('pending','accepted')",
+                now,
+                cafeId,
+                previous.id,
+              );
+            }
           } else
             run(
-              'INSERT INTO cafes (name,description,city,address,phone,image,amenities,latitude,longitude,opens,closes,capacity,delivery,pickup,delivery_fee,active,images,tables,invoice_discount_percent,id,owner_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+              'INSERT INTO cafes (name,description,city,address,phone,image,amenities,latitude,longitude,opens,closes,capacity,delivery,pickup,delivery_fee,active,images,tables,invoice_discount_percent,logo,id,owner_id,parent_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
               ...values,
               cafeId,
               account.id,
+              parentId || null,
             );
         });
         return json({ id: cafeId });
       }
+      if (id === 'products' && action && method === 'DELETE') {
+        const item = one<{ cafe_id: string }>('SELECT cafe_id FROM products WHERE id=?', action);
+        v.ensure(item, 'محصول پیدا نشد.', 404);
+        ownerCafe(account, item.cafe_id);
+        run('DELETE FROM products WHERE id=? AND cafe_id=?', action, item.cafe_id);
+        return json({ ok: true });
+      }
       if (id === 'products' && (method === 'POST' || method === 'PUT')) {
         const cafeId = v.text(input.cafe_id, 'کافه', 1, 100);
         ownerCafe(account, cafeId);
+        let beforeVip = false,
+          existingImages: string[] = [];
         if (method === 'PUT') {
-          const p = productById(v.text(input.id, 'محصول', 1, 100));
-          v.ensure(p.cafe_id === cafeId, 'محصول متعلق به این کافه نیست.', 403);
+          const p = one<{ cafe_id: string; vip_only: number; images: string }>(
+            'SELECT cafe_id,vip_only,images FROM products WHERE id=?',
+            v.text(input.id, 'محصول', 1, 100),
+          );
+          v.ensure(p?.cafe_id === cafeId, 'محصول متعلق به این کافه نیست.', 403);
+          beforeVip = Boolean(p.vip_only);
+          existingImages = JSON.parse(p.images);
         }
+        const vipOnly = input.vip_only === undefined ? beforeVip : v.flag(input.vip_only);
+        v.ensure(
+          !vipOnly || beforeVip || cafeFeatures(cafeId).vip_menu,
+          'منوی ویژه برای این شعبه فعال نیست.',
+          409,
+        );
         const sizes = options(input.sizes),
           addons = options(input.addons);
         v.ensure(
@@ -763,17 +1026,19 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
           JSON.stringify(sizes),
           JSON.stringify(addons),
           v.integer(input.max_addons ?? 2, 'حداکثر افزودنی', 0, 10),
+          Number(vipOnly),
+          galleryImages(input.images ?? existingImages),
         ];
         const productId = method === 'PUT' ? String(input.id) : randomUUID();
         if (method === 'PUT')
           run(
-            'UPDATE products SET name=?,description=?,category=?,price=?,image=?,available=?,sizes=?,addons=?,max_addons=? WHERE id=?',
+            'UPDATE products SET name=?,description=?,category=?,price=?,image=?,available=?,sizes=?,addons=?,max_addons=?,vip_only=?,images=? WHERE id=?',
             ...values,
             productId,
           );
         else
           run(
-            'INSERT INTO products (name,description,category,price,image,available,sizes,addons,max_addons,id,cafe_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+            'INSERT INTO products (name,description,category,price,image,available,sizes,addons,max_addons,vip_only,images,id,cafe_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
             ...values,
             productId,
             cafeId,
@@ -801,54 +1066,8 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
         );
         return json({ ok: true });
       }
-      if (id === 'events' && (method === 'POST' || method === 'PUT')) {
-        const cafeId = v.text(input.cafe_id, 'کافه', 1, 100);
-        ownerCafe(account, cafeId);
-        const endTime = input.end_time ? v.time(input.end_time) : '';
-        v.ensure(
-          !endTime || endTime > v.time(input.time),
-          'ساعت پایان رویداد باید پس از ساعت شروع باشد.',
-        );
-        const values = [
-          v.text(input.title, 'عنوان', 3, 120),
-          v.text(input.description, 'توضیحات', 5, 3000),
-          v.date(input.date),
-          v.time(input.time),
-          v.integer(input.capacity, 'ظرفیت', 1, 500),
-          v.imagePath(input.image),
-          endTime,
-        ];
-        v.ensure(
-          new Date(values[2] + 'T' + values[3] + ':00+03:30').getTime() > Date.now(),
-          'زمان رویداد باید در آینده باشد.',
-        );
-        if (method === 'PUT') {
-          v.ensure(
-            one('SELECT id FROM events WHERE id=? AND cafe_id=?', String(input.id), cafeId),
-            'رویداد پیدا نشد.',
-            404,
-          );
-          const registered = one<{ count: number }>(
-            'SELECT COUNT(*) count FROM event_registrations WHERE event_id=?',
-            String(input.id),
-          )!.count;
-          v.ensure(
-            Number(values[4]) >= registered,
-            'ظرفیت نمی‌تواند کمتر از تعداد ثبت‌نام‌های فعلی باشد.',
-            409,
-          );
-          run(
-            'UPDATE events SET title=?,description=?,date=?,time=?,capacity=?,image=?,end_time=? WHERE id=?',
-            ...values,
-            String(input.id),
-          );
-        } else
-          run(
-            'INSERT INTO events (title,description,date,time,capacity,image,end_time,id,cafe_id) VALUES (?,?,?,?,?,?,?,?,?)',
-            ...values,
-            randomUUID(),
-            cafeId,
-          );
+      if (id === 'events' && ['POST', 'PUT'].includes(method)) {
+        saveEvent(account, input, method === 'PUT' ? v.text(input.id, 'رویداد', 1, 100) : '');
         return json({ ok: true });
       }
     }

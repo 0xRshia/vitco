@@ -16,6 +16,7 @@ import './reservation-updates.css';
 import './payment-updates.css';
 import './browse-refresh.css';
 import './invoice-payment.css';
+import './cafe-services.css';
 import { Provider } from '@/lib/client';
 export const metadata: Metadata = {
   title: { default: 'ویتکو | قرارِ لحظه‌های خوب', template: '%s | ویتکو' },

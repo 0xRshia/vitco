@@ -35,6 +35,12 @@ import {
 } from 'lucide-react';
 import { api, useApp, useResource } from '@/lib/client';
 import { reservationDemoNotice } from '@/lib/reservation-demo';
+import { TableServicePanel } from './table-service';
+import { CafeMeetings } from './meetings';
+import { Testimonials } from './public-content';
+import type { CafeFeatures } from '@/lib/cafe-features';
+import type { MenuCategory, WorkingHour } from '@/lib/cafe-operations';
+import { onlinePaymentForCafe } from './payment-status';
 import { CafeExplorer } from './cafe-explorer';
 import { CafeCard, ProductCard, FavoriteButton } from './browse-cards';
 import { ReservationMenu } from './reservation-menu';
@@ -326,16 +332,32 @@ export function CafeView({ id }: { id: string }) {
   const { data, loading, error, reload } = useResource<{
     cafe: Cafe;
     products: Product[];
+    features: CafeFeatures;
+    branches: Pick<Cafe, 'id' | 'name' | 'address'>[];
+    hours: WorkingHour[];
+    menu_groups: MenuCategory[];
     reviews: Review[];
+    own_review: Review | null;
   }>('cafes/' + id);
   const [tab, setTab] = useState('menu'),
     [category, setCategory] = useState(''),
     [rating, setRating] = useState(5),
     [review, setReview] = useState(''),
+    [reviewEdit, setReviewEdit] = useState(false),
+    [reviewDelete, setReviewDelete] = useState(false),
     [busy, setBusy] = useState(false);
   if (loading) return <Loading />;
   if (error || !data) return <ErrorBox message={error || 'کافه پیدا نشد.'} />;
-  const { cafe, products, reviews } = data;
+  const {
+    cafe,
+    products,
+    features,
+    reviews,
+    own_review: ownReview,
+    branches,
+    hours,
+    menu_groups: menuGroups,
+  } = data;
   const photos = [...new Set([cafe.image, ...(cafe.images || [])].filter(Boolean))];
   return (
     <div className={'cafe-discovery-page' + (cart.length ? ' has-cart-dock' : '')}>
@@ -378,6 +400,10 @@ export function CafeView({ id }: { id: string }) {
         <div className="panel cafe-information">
           {cafe.city && <span className="eyebrow">یک قرار تازه در {cafe.city}</span>}
           <h2>{cafe.name}</h2>
+          {cafe.logo && (
+            <img src={cafe.logo} alt={'نشان ' + cafe.name} className="service-cafe-logo" />
+          )}
+          {features.vip_cafe && <span className="badge">کافه ویژه</span>}
           <p>
             <MapPin size={18} />
             {cafe.address}
@@ -387,6 +413,41 @@ export function CafeView({ id }: { id: string }) {
               <Clock3 size={18} />
               {digits(cafe.opens)} تا {digits(cafe.closes)}
             </p>
+          )}
+          {hours.length > 0 && (
+            <details>
+              <summary>ساعت کاری هفته</summary>
+              <dl className="service-hours">
+                {hours.map((hour) => (
+                  <div key={hour.weekday}>
+                    <dt>
+                      {
+                        ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه'][
+                          hour.weekday
+                        ]
+                      }
+                    </dt>
+                    <dd>
+                      {hour.opens ? digits(hour.opens) + ' تا ' + digits(hour.closes) : 'تعطیل'}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          )}
+          {branches.length > 1 && (
+            <div className="service-inline" aria-label="شعبه‌های کافه">
+              {branches.map((branch) => (
+                <Link
+                  className={branch.id === id ? 'badge' : 'text-link'}
+                  aria-current={branch.id === id ? 'page' : undefined}
+                  href={'/cafes/' + branch.id}
+                  key={branch.id}
+                >
+                  {branch.name}
+                </Link>
+              ))}
+            </div>
           )}
           {cafe.owner_id ? (
             <div className="button-row">
@@ -477,8 +538,9 @@ export function CafeView({ id }: { id: string }) {
       <div className="tabs">
         {[
           { id: 'menu', label: 'منوی کافه' },
+          { id: 'gallery', label: 'گالری' },
           { id: 'reviews', label: 'نظرهای کاربران' },
-          { id: 'events', label: 'رویدادهای کافه' },
+          { id: 'events', label: 'رویدادها و دورهمی‌ها' },
         ].map((t) => (
           <button
             key={t.id}
@@ -491,12 +553,53 @@ export function CafeView({ id }: { id: string }) {
         ))}
       </div>
       {tab === 'menu' && (
-        <ReservationMenu
-          cafeId={id}
-          variant="catalog"
-          category={category}
-          onCategoryChange={setCategory}
-        />
+        <>
+          <TableServicePanel cafeId={id} />
+          {menuGroups.some((group) => group.image) && (
+            <div className="service-category-gallery" aria-label="تصاویر دسته‌های منو">
+              {menuGroups
+                .filter((group) => group.image)
+                .map((group) => (
+                  <button
+                    type="button"
+                    key={group.id}
+                    aria-pressed={category === group.name}
+                    onClick={() => setCategory(group.name)}
+                  >
+                    <Media src={group.image} alt="" />
+                    <span>{group.name}</span>
+                  </button>
+                ))}
+            </div>
+          )}
+          <ReservationMenu
+            cafeId={id}
+            variant="catalog"
+            products={products}
+            category={category}
+            onCategoryChange={setCategory}
+          />
+        </>
+      )}
+      {tab === 'gallery' && (
+        <section className="panel stack" aria-label="گالری کافه">
+          {cafe.tour_url && (
+            <a className="button secondary" href={cafe.tour_url} target="_blank" rel="noreferrer">
+              باز کردن تور مجازی
+            </a>
+          )}
+          {photos.length ? (
+            <div className="service-gallery">
+              {photos.map((photo, index) => (
+                <a key={photo} href={photo} target="_blank" rel="noreferrer">
+                  <Media src={photo} alt={cafe.name + '، عکس ' + digits(index + 1)} />
+                </a>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">هنوز عکسی برای این کافه ثبت نشده است.</p>
+          )}
+        </section>
       )}
       {tab === 'reviews' && (
         <div className="two-columns">
@@ -512,6 +615,7 @@ export function CafeView({ id }: { id: string }) {
                     </span>
                   </div>
                   <p>{r.body}</p>
+                  {r.verified && <p className="muted">تجربه تأییدشده</p>}
                   <small>{dateLabel(r.created_at)}</small>
                 </article>
               ))
@@ -522,53 +626,113 @@ export function CafeView({ id }: { id: string }) {
               />
             )}
           </div>
-          <form
-            className="panel form"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (!app?.user) {
-                router.push('/login');
-                return;
-              }
-              setBusy(true);
-              try {
-                await api('reviews/' + id, 'POST', { rating, body: review });
-                setReview('');
-                reload();
-                toast('نظر شما ثبت شد.');
-              } catch (e) {
-                toast((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <h3>تجربه شما از این کافه</h3>
-            <div className="stars">
-              {[1, 2, 3, 4, 5].map((s) => (
+          {ownReview && !reviewEdit ? (
+            <section className="panel">
+              <h3>نظر شما</h3>
+              <p>{ownReview.body}</p>
+              {ownReview.visible === 0 && (
+                <p className="muted">این نظر از دید عموم پنهان شده است.</p>
+              )}
+              <div className="button-row">
                 <button
-                  key={s}
-                  type="button"
-                  aria-label={digits(s) + ' ستاره'}
-                  onClick={() => setRating(s)}
+                  className="button secondary"
+                  onClick={() => {
+                    setReview(ownReview.body);
+                    setRating(ownReview.rating);
+                    setReviewEdit(true);
+                  }}
                 >
-                  <Star fill={s <= rating ? 'currentColor' : 'none'} />
+                  ویرایش نظر
                 </button>
-              ))}
-            </div>
-            <Field label="نظر شما">
-              <textarea
-                value={review}
-                onChange={(e) => setReview(e.target.value)}
-                maxLength={1500}
-                placeholder="از فضا، کیفیت و تجربه‌ات بگو…"
-              />
-            </Field>
-            <Submit busy={busy}>ثبت نظر</Submit>
-          </form>
+                <button className="text-link" onClick={() => setReviewDelete(true)}>
+                  حذف نظر
+                </button>
+              </div>
+            </section>
+          ) : (
+            <form
+              className="panel form"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!app?.user) {
+                  router.push('/login');
+                  return;
+                }
+                setBusy(true);
+                try {
+                  await api('reviews/' + id, ownReview ? 'PATCH' : 'POST', {
+                    rating,
+                    body: review,
+                  });
+                  setReview('');
+                  setReviewEdit(false);
+                  reload();
+                  toast('نظر شما ثبت شد.');
+                } catch (e) {
+                  toast((e as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <h3>تجربه شما از این کافه</h3>
+              <div className="stars">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    aria-label={digits(s) + ' ستاره'}
+                    onClick={() => setRating(s)}
+                  >
+                    <Star fill={s <= rating ? 'currentColor' : 'none'} />
+                  </button>
+                ))}
+              </div>
+              <Field label="نظر شما">
+                <textarea
+                  value={review}
+                  onChange={(e) => setReview(e.target.value)}
+                  maxLength={1500}
+                  placeholder="از فضا، کیفیت و تجربه‌ات بگو…"
+                />
+              </Field>
+              <Submit busy={busy}>{ownReview ? 'ذخیره نظر' : 'ثبت نظر'}</Submit>
+              {ownReview && (
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => setReviewEdit(false)}
+                >
+                  انصراف
+                </button>
+              )}
+            </form>
+          )}
+          <Confirm
+            open={reviewDelete}
+            title="حذف نظر"
+            description="نظر شما از صفحه این کافه حذف می‌شود."
+            onClose={() => setReviewDelete(false)}
+            onConfirm={() => {
+              setReviewDelete(false);
+              void api('reviews/' + id, 'DELETE')
+                .then(() => {
+                  setRating(5);
+                  setReview('');
+                  reload();
+                  toast('نظر حذف شد.');
+                })
+                .catch((e) => toast(e.message));
+            }}
+          />
         </div>
       )}
-      {tab === 'events' && <EventList events={app?.events.filter((e) => e.cafe_id === id) || []} />}
+      {tab === 'events' && (
+        <>
+          <EventList events={app?.events.filter((e) => e.cafe_id === id) || []} />
+          {cafe.owner_id && !cafe.is_demo && <CafeMeetings cafeId={id} />}
+        </>
+      )}
       <CartDock />
     </div>
   );
@@ -607,14 +771,18 @@ export function MenuView() {
 }
 export function ProductView({ id }: { id: string }) {
   const { data, cart, addCart, setCart, toast } = useApp();
-  const p = data?.products.find((p) => p.id === id),
+  const publicProduct = data?.products.find((p) => p.id === id);
+  const menuItem = useResource<{ product: Product }>(publicProduct ? null : 'products/' + id);
+  const p = publicProduct || menuItem.data?.product,
     cafe = data?.cafes.find((c) => c.id === p?.cafe_id);
   const [size, setSize] = useState(p?.sizes[0]?.id || ''),
     [addons, setAddons] = useState<string[]>([]),
     [quantity, setQuantity] = useState(1),
     [note, setNote] = useState(''),
+    [photo, setPhoto] = useState(''),
     [replace, setReplace] = useState(false),
     [added, setAdded] = useState(false);
+  if (!publicProduct && menuItem.loading) return <Loading />;
   if (!p || !cafe)
     return (
       <Empty
@@ -629,6 +797,8 @@ export function ProductView({ id }: { id: string }) {
       p.price +
       (selectedSize?.price || 0) +
       p.addons.filter((a) => addons.includes(a.id)).reduce((s, a) => s + a.price, 0);
+  const photos = [...new Set([p.image, ...(p.images || [])].filter(Boolean))];
+  const selectedPhoto = photos.includes(photo) ? photo : photos[0] || '';
   const line = {
     key: crypto.randomUUID(),
     product_id: p.id,
@@ -663,7 +833,22 @@ export function ProductView({ id }: { id: string }) {
       />
       <div className="product-detail">
         <div>
-          <Media className="product-large" src={p.image} alt={p.name} />
+          <Media className="product-large" src={selectedPhoto} alt={p.name} />
+          {photos.length > 1 && (
+            <div className="service-category-gallery" aria-label="عکس‌های محصول">
+              {photos.map((src, index) => (
+                <button
+                  key={src}
+                  type="button"
+                  aria-label={'عکس ' + digits(index + 1)}
+                  aria-pressed={selectedPhoto === src}
+                  onClick={() => setPhoto(src)}
+                >
+                  <Media src={src} alt="" />
+                </button>
+              ))}
+            </div>
+          )}
           <p className="source-note">
             {p.source
               ? 'نام، توضیحات و قیمت از منوی منتشرشده ویترین کافه دریافت شده‌اند.'
@@ -890,6 +1075,13 @@ export function EventsView({ id }: { id?: string }) {
         <PageTitle
           title="رویدادهای کافه‌ها"
           description="دورهمی، موسیقی و تجربه‌های تازه؛ بهانه‌هایی برای دیدار."
+          action={
+            data?.user && (
+              <Link className="button secondary" href="/registrations">
+                ثبت‌نام‌های من
+              </Link>
+            )
+          }
         />
         <EventList events={data?.events || []} />
       </>
@@ -903,6 +1095,8 @@ export function EventsView({ id }: { id?: string }) {
         label="همه رویدادها"
       />
     );
+  const paying = event.registration_status === 'pending_payment' && event.registration_order_id;
+  const gateway = onlinePaymentForCafe(data?.onlinePayment, event.cafe_id);
   return (
     <>
       <PageTitle title={event.title} back="/events" description={event.cafe_name} />
@@ -929,24 +1123,45 @@ export function EventsView({ id }: { id?: string }) {
             <span>ظرفیت باقی‌مانده</span>
             <strong>{digits(Math.max(0, event.capacity - event.registered))} نفر</strong>
           </div>
+          <div className="list-row">
+            <span>بلیت</span>
+            <strong>{event.price ? money(event.price) : 'رایگان'}</strong>
+          </div>
+          {paying && (
+            <Link className="button primary" href={'/orders/' + event.registration_order_id}>
+              ادامه پرداخت بلیت
+            </Link>
+          )}
+          {Boolean(event.price) && !gateway && !event.joined && !paying && (
+            <p className="notice">پرداخت آنلاین این رویداد در دسترس نیست.</p>
+          )}
           <button
-            className="button primary"
+            className={paying ? 'button secondary' : 'button primary'}
             disabled={
               busy ||
               (!event.joined &&
+                !paying &&
                 (event.registered >= event.capacity ||
+                  Boolean(event.price && !gateway) ||
+                  event.status === 'completed' ||
                   !['upcoming', 'ongoing'].includes(eventPhase(event, now))))
             }
             onClick={async () => {
               if (!data?.user) {
-                router.push('/login');
+                router.push('/login?next=' + encodeURIComponent('/events/' + id));
                 return;
               }
               setBusy(true);
               try {
-                await api('events/' + id + (event.joined ? '/leave' : ''), 'POST', {});
+                const leaving = event.joined || paying;
+                const response = await api<{ order_id: string | null }>(
+                  'events/' + id + (leaving ? '/leave' : ''),
+                  'POST',
+                  {},
+                );
                 await refresh();
-                toast(event.joined ? 'ثبت‌نام لغو شد.' : 'ثبت‌نام شما انجام شد.');
+                if (response.order_id) router.push('/orders/' + response.order_id);
+                else toast(leaving ? 'ثبت‌نام لغو شد.' : 'ثبت‌نام شما انجام شد.');
               } catch (e) {
                 toast((e as Error).message);
               } finally {
@@ -954,7 +1169,11 @@ export function EventsView({ id }: { id?: string }) {
               }
             }}
           >
-            {event.joined ? 'لغو ثبت‌نام' : 'شرکت در رویداد'}
+            {event.joined || paying
+              ? 'لغو ثبت‌نام'
+              : event.price
+                ? 'دریافت و پرداخت بلیت'
+                : 'شرکت در رویداد'}
           </button>
         </div>
       </div>
@@ -987,42 +1206,12 @@ export function InfoView({ page }: { page: string }) {
       intro: 'برای یک تجربه روشن و خوشایند',
       paragraphs: [
         'قیمت‌ها به تومان هستند و هنگام ثبت سفارش از اطلاعات فعلی کافه محاسبه می‌شوند. ثبت درخواست سفارش یا رزرو به معنی تأیید فوری کافه نیست.',
-        'پرداخت سفارش هنگام تحویل یا در کافه انجام می‌شود. این برنامه اطلاعات کارت بانکی دریافت نمی‌کند و پرداخت اینترنتی ندارد.',
+        'پرداخت سفارش می‌تواند هنگام تحویل، در کافه یا از طریق درگاه فعال کافه انجام شود. اطلاعات کارت بانکی در ویتکو ثبت نمی‌شود.',
         'سفارش تا پیش از شروع آماده‌سازی قابل لغو است. رزروهای در انتظار تأیید یا تأییدشده از حساب شما قابل لغو هستند.',
         'صاحب کافه مسئول درستی اطلاعات، قیمت‌ها، ظرفیت و اجرای سفارش‌ها و رزروهاست. نظرات باید بر تجربه واقعی مبتنی باشند.',
       ],
     },
   };
-  if (page === 'contact')
-    return (
-      <>
-        <PageTitle
-          title="همراه شما هستیم"
-          description="سؤال، پیشنهاد یا مسئله‌ای داری؟ از اینجا شروع کن."
-        />
-        <div className="panel prose">
-          <HeadphonesIllustration />
-          <h2>گفت‌وگو با پشتیبانی ویتکو</h2>
-          <p>
-            برای پیگیری سفارش یا مطرح کردن سؤال، یک درخواست در حساب خود ثبت کنید. درخواست‌های مرتبط
-            با سفارش در پنل کافه نیز قابل مشاهده هستند.
-          </p>
-          <Link className="button primary" href="/support">
-            ثبت درخواست پشتیبانی
-            <ArrowLeft size={17} />
-          </Link>
-          <a
-            className="text-link"
-            href="https://vitrincafe.ir/contact"
-            target="_blank"
-            rel="noreferrer"
-          >
-            صفحه تماس ویترین کافه
-            <ArrowUpLeft size={16} />
-          </a>
-        </div>
-      </>
-    );
   const item = content[page] || content.about;
   return (
     <>
@@ -1039,73 +1228,90 @@ export function InfoView({ page }: { page: string }) {
           <ArrowLeft size={17} />
         </Link>
       </article>
+      {page === 'about' && <Testimonials />}
     </>
-  );
-}
-function HeadphonesIllustration() {
-  return (
-    <div className="empty-icon">
-      <Coffee size={34} />
-    </div>
   );
 }
 export function ScannerView() {
   const router = useRouter(),
     video = useRef<HTMLVideoElement>(null),
-    stream = useRef<MediaStream | null>(null);
+    stream = useRef<MediaStream | null>(null),
+    scanningRequest = useRef(0);
   const [value, setValue] = useState(''),
     [error, setError] = useState(''),
     [scanning, setScanning] = useState(false);
-  useEffect(() => () => stream.current?.getTracks().forEach((t) => t.stop()), []);
+  useEffect(
+    () => () => {
+      scanningRequest.current++;
+      stream.current?.getTracks().forEach((t) => t.stop());
+    },
+    [],
+  );
   function navigate(raw: string) {
     try {
       const url = new URL(raw, window.location.origin);
       if (
         url.origin !== window.location.origin ||
-        !/^\/(cafes|products)\/[a-zA-Z0-9-]+$/.test(url.pathname)
+        !/^\/(cafes|products|t)\/[a-zA-Z0-9_-]+$/.test(url.pathname)
       )
         throw new Error();
       router.push(url.pathname);
     } catch {
-      setError('پیوند باید مربوط به صفحه یک کافه یا محصول در همین سامانه باشد.');
+      setError('پیوند باید مربوط به میز، کافه یا محصول همین سامانه باشد.');
     }
   }
   async function scan() {
     setError('');
-    const Detector = (
-      window as unknown as {
-        BarcodeDetector?: new (options: { formats: string[] }) => {
-          detect: (source: HTMLVideoElement) => Promise<{ rawValue: string }[]>;
-        };
-      }
-    ).BarcodeDetector;
-    if (!Detector) {
-      setError('اسکن با دوربین در این مرورگر پشتیبانی نمی‌شود. پیوند کافه را وارد کنید.');
-      return;
-    }
+    const attempt = ++scanningRequest.current;
+    setScanning(true);
     try {
-      stream.current = await navigator.mediaDevices.getUserMedia({
+      const { default: decode } = await import('jsqr');
+      const media = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
       });
-      setScanning(true);
-      if (video.current) {
-        video.current.srcObject = stream.current;
-        await video.current.play();
-        const detector = new Detector({ formats: ['qr_code'] });
-        const tick = async () => {
-          if (!stream.current?.active || !video.current) return;
-          const codes = await detector.detect(video.current);
-          if (codes.length) {
-            stream.current.getTracks().forEach((t) => t.stop());
-            setScanning(false);
-            navigate(codes[0].rawValue);
-          } else requestAnimationFrame(tick);
-        };
-        void tick();
+      const element = video.current;
+      if (!element || attempt !== scanningRequest.current) {
+        media.getTracks().forEach((track) => track.stop());
+        return;
       }
+      stream.current = media;
+      element.srcObject = media;
+      await element.play();
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) throw new Error();
+      function tick() {
+        if (attempt !== scanningRequest.current || !media.active || !element) return;
+        if (element.videoWidth && element.videoHeight && context) {
+          const scale = Math.min(1, 700 / Math.max(element.videoWidth, element.videoHeight));
+          canvas.width = Math.max(1, Math.round(element.videoWidth * scale));
+          canvas.height = Math.max(1, Math.round(element.videoHeight * scale));
+          context.drawImage(element, 0, 0, canvas.width, canvas.height);
+          const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+          const code = decode(pixels.data, pixels.width, pixels.height, {
+            inversionAttempts: 'dontInvert',
+          });
+          if (code) {
+            stop();
+            navigate(code.data);
+            return;
+          }
+        }
+        window.setTimeout(tick, 160);
+      }
+      tick();
     } catch {
-      setError('دسترسی به دوربین ممکن نشد. اجازه دوربین را بررسی کنید.');
+      if (attempt === scanningRequest.current) {
+        stop();
+        setError('دوربین در دسترس نیست. اجازه دوربین را بررسی یا پیوند را وارد کنید.');
+      }
     }
+  }
+  function stop() {
+    scanningRequest.current++;
+    stream.current?.getTracks().forEach((track) => track.stop());
+    if (video.current) video.current.srcObject = null;
+    setScanning(false);
   }
   return (
     <>
@@ -1113,8 +1319,8 @@ export function ScannerView() {
       <div className="panel narrow form">
         <ScanLine size={44} />
         <video ref={video} playsInline muted className={scanning ? 'scanner-video' : 'hidden'} />
-        <button className="button primary" onClick={scan}>
-          باز کردن دوربین
+        <button className="button primary" onClick={scanning ? stop : scan}>
+          {scanning ? 'بستن دوربین' : 'باز کردن دوربین'}
         </button>
         <Field label="یا پیوند کافه را وارد کن">
           <input

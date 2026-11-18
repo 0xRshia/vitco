@@ -1,8 +1,9 @@
 'use client';
+import { EventRoster } from './event-registrations';
 import { LocationPicker } from './location-map';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import {
   Plus,
   Store,
@@ -33,15 +34,28 @@ import type {
   Option,
   Ticket,
 } from '@/lib/types';
-import { PageTitle, Empty, Loading, ErrorBox, Field, Modal, Form, LoginGate, Badge } from './ui';
+import {
+  PageTitle,
+  Empty,
+  Loading,
+  ErrorBox,
+  Field,
+  Modal,
+  Form,
+  LoginGate,
+  Badge,
+  Confirm,
+} from './ui';
 import { ImageUpload } from './account';
 import { PersianDateInput, PersianTimeInput } from './persian-date';
 import { paymentIsPending, paymentStatusLabels } from './payment-status';
 import { OwnerInsights, CategoryPricing } from './owner-insights';
 import { menuCategories, productCategory } from '@/lib/catalog';
+import type { CafeFeatures } from '@/lib/cafe-features';
 
 type Dashboard = {
   cafes: Cafe[];
+  cafe_features: Record<string, CafeFeatures>;
   products: Product[];
   orders: Order[];
   reservations: Reservation[];
@@ -49,6 +63,9 @@ type Dashboard = {
   events: CafeEvent[];
   tickets: (Ticket & { customer_name: string; reply?: string })[];
 };
+type GalleryImage = { id: string; url: string };
+const loadGallery = (urls: string[] = []): GalleryImage[] =>
+  urls.map((url, index) => ({ id: String(index), url }));
 export function DashboardView() {
   const { data: app, refresh, toast } = useApp(),
     query = useSearchParams();
@@ -56,6 +73,9 @@ export function DashboardView() {
   const [tab, setTab] = useState(query.get('tab') || 'cafes'),
     [modal, setModal] = useState<'cafe' | 'product' | 'coupon' | 'event' | null>(null),
     [editing, setEditing] = useState<Cafe | Product | CafeEvent | null>(null),
+    [removeProduct, setRemoveProduct] = useState<Product | null>(null),
+    [branchOf, setBranchOf] = useState(''),
+    [eventRoster, setEventRoster] = useState<CafeEvent | null>(null),
     [order, setOrder] = useState<Order | null>(null),
     [selectedCafe, setSelectedCafe] = useState(''),
     [productCafe, setProductCafe] = useState(''),
@@ -120,6 +140,7 @@ export function DashboardView() {
               className="button primary"
               onClick={() => {
                 setEditing(null);
+                setBranchOf('');
                 setModal('cafe');
               }}
             >
@@ -193,6 +214,11 @@ export function DashboardView() {
                       <div className="panel management-row" key={c.id}>
                         <div>
                           <h3>{c.name}</h3>
+                          {c.parent_id && (
+                            <p>
+                              شعبهٔ {data.cafes.find((parent) => parent.id === c.parent_id)?.name}
+                            </p>
+                          )}
                           <p>
                             {c.city}، {c.address}
                           </p>
@@ -201,6 +227,21 @@ export function DashboardView() {
                           </span>
                         </div>
                         <div className="button-row">
+                          <Link className="button secondary" href={'/operations/' + c.id}>
+                            فضای کار شعبه
+                          </Link>
+                          {!c.parent_id && (
+                            <button
+                              className="button secondary"
+                              onClick={() => {
+                                setBranchOf(c.id);
+                                setEditing(null);
+                                setModal('cafe');
+                              }}
+                            >
+                              افزودن شعبه
+                            </button>
+                          )}
                           <button
                             className="button primary"
                             onClick={() => {
@@ -230,6 +271,7 @@ export function DashboardView() {
                             className="button secondary"
                             onClick={() => {
                               setEditing(c);
+                              setBranchOf('');
                               setModal('cafe');
                             }}
                           >
@@ -319,6 +361,13 @@ export function DashboardView() {
                                   <Pencil size={15} />
                                   ویرایش
                                 </button>
+                                <button
+                                  className="icon-button"
+                                  aria-label={'حذف ' + p.name}
+                                  onClick={() => setRemoveProduct(p)}
+                                >
+                                  <Trash2 size={17} />
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -358,7 +407,9 @@ export function DashboardView() {
                         <p>
                           {o.kind === 'invoice'
                             ? 'فاکتور حضوری؛ بدون سفارش از منو'
-                            : o.items.map((i) => `${digits(i.quantity)} × ${i.name}`).join('، ')}
+                            : o.kind === 'event'
+                              ? 'بلیت رویداد · ' + o.note
+                              : o.items.map((i) => `${digits(i.quantity)} × ${i.name}`).join('، ')}
                         </p>
                         {o.payment_method === 'zarinpal' && (
                           <p className={'payment-status-label payment-status-' + o.payment_status}>
@@ -381,11 +432,13 @@ export function DashboardView() {
                           <span>
                             {o.kind === 'invoice'
                               ? 'پرداخت فاکتور حضوری'
-                              : o.mode === 'dine_in'
-                                ? 'سفارش میز'
-                                : o.mode === 'pickup'
-                                  ? 'تحویل از کافه'
-                                  : 'ارسال به آدرس'}{' '}
+                              : o.kind === 'event'
+                                ? 'بلیت رویداد'
+                                : o.mode === 'dine_in'
+                                  ? 'سفارش میز'
+                                  : o.mode === 'pickup'
+                                    ? 'تحویل از کافه'
+                                    : 'ارسال به آدرس'}{' '}
                             · {dateLabel(o.created_at, true)}
                           </span>
                           <strong>{money(o.total)}</strong>
@@ -402,7 +455,7 @@ export function DashboardView() {
                               بررسی پرداخت
                             </button>
                           )}
-                          {o.status === 'pending' && (
+                          {o.kind !== 'event' && o.status === 'pending' && (
                             <>
                               {o.kind !== 'invoice' && (
                                 <button
@@ -595,16 +648,62 @@ export function DashboardView() {
                               {digits(e.registered)} ثبت‌نام از {digits(e.capacity)} نفر
                             </span>
                           </div>
-                          <button
-                            className="button secondary"
-                            onClick={() => {
-                              setEditing(e);
-                              setModal('event');
-                            }}
-                          >
-                            <Pencil size={16} />
-                            ویرایش
-                          </button>
+                          <div className="button-row">
+                            <span className="badge">
+                              {
+                                {
+                                  draft: 'پیش‌نویس',
+                                  published: 'منتشر شده',
+                                  cancelled: 'لغو شده',
+                                  completed: 'برگزار شده',
+                                }[e.status || 'published']
+                              }
+                            </span>
+                            <button className="button secondary" onClick={() => setEventRoster(e)}>
+                              شرکت‌کننده‌ها
+                            </button>
+                            {['draft', 'published'].includes(e.status || 'published') && (
+                              <>
+                                <button
+                                  className="button secondary"
+                                  onClick={() => {
+                                    setEditing(e);
+                                    setModal('event');
+                                  }}
+                                >
+                                  <Pencil size={16} /> ویرایش
+                                </button>
+                                {e.status === 'draft' && (
+                                  <button
+                                    className="button primary"
+                                    onClick={() =>
+                                      void status('dashboard/events', e.id, 'published')
+                                    }
+                                  >
+                                    انتشار
+                                  </button>
+                                )}
+                                <button
+                                  className="button danger-outline"
+                                  onClick={() => void status('dashboard/events', e.id, 'cancelled')}
+                                >
+                                  لغو رویداد
+                                </button>
+                                {e.status === 'published' &&
+                                  Date.parse(e.date + 'T' + (e.end_time || e.time) + ':00+03:30') <=
+                                    Date.now() && (
+                                    <button
+                                      className="button secondary"
+                                      onClick={() =>
+                                        void status('dashboard/events', e.id, 'completed')
+                                      }
+                                    >
+                                      اتمام رویداد
+                                    </button>
+                                  )}
+                              </>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -660,13 +759,15 @@ export function DashboardView() {
                 ))}
               <Modal
                 open={modal === 'cafe'}
-                title={editing ? 'ویرایش کافه' : 'کافه‌تان را معرفی کنید'}
+                title={editing ? 'ویرایش کافه' : branchOf ? 'ثبت شعبه' : 'کافه‌تان را معرفی کنید'}
                 onClose={() => setModal(null)}
               >
                 {modal === 'cafe' && (
                   <CafeEditor
                     key={editing?.id || 'new'}
                     cafe={editing as Cafe | null}
+                    parentId={branchOf}
+                    vipTables={Boolean(editing && data.cafe_features[editing.id]?.vip_tables)}
                     onDone={updated}
                   />
                 )}
@@ -683,10 +784,25 @@ export function DashboardView() {
                     cafes={data.cafes}
                     initialCafe={selectedCafe}
                     categories={menuCategories(data.products)}
+                    features={data.cafe_features}
                     onDone={updated}
                   />
                 )}
               </Modal>
+              <Confirm
+                open={Boolean(removeProduct)}
+                title="حذف محصول"
+                description={removeProduct?.name || ''}
+                onClose={() => setRemoveProduct(null)}
+                onConfirm={() => {
+                  if (!removeProduct) return;
+                  const id = removeProduct.id;
+                  setRemoveProduct(null);
+                  void api('dashboard/products/' + id, 'DELETE')
+                    .then(updated)
+                    .catch((error) => toast(error.message));
+                }}
+              />
               <Modal
                 open={modal === 'event'}
                 title={editing ? 'ویرایش رویداد' : 'یک قرار تازه'}
@@ -727,6 +843,13 @@ export function DashboardView() {
                 )}
               </Modal>
               <Modal
+                open={Boolean(eventRoster)}
+                title="شرکت‌کننده‌های رویداد"
+                onClose={() => setEventRoster(null)}
+              >
+                {eventRoster && <EventRoster key={eventRoster.id} event={eventRoster} />}
+              </Modal>
+              <Modal
                 open={Boolean(order)}
                 title="جزئیات سفارش مشتری"
                 onClose={() => setOrder(null)}
@@ -758,8 +881,13 @@ export function DashboardView() {
                     {order.kind === 'invoice' && (
                       <p>فاکتور حضوری؛ مبلغ بر اساس صورت‌حساب کافه وارد شده است.</p>
                     )}
-                    {order.kind !== 'invoice' && order.mode === 'dine_in' && (
-                      <p>سفارش برای پذیرایی در کافه و متصل به رزرو میز است.</p>
+                    {order.kind === 'menu' && order.mode === 'dine_in' && (
+                      <p>
+                        {order.table_name ||
+                          (order.reservation_id
+                            ? 'سفارش همراه رزرو میز'
+                            : 'سفارش برای پذیرایی در کافه')}
+                      </p>
                     )}
                     <p>{order.note}</p>
                     <p>
@@ -791,10 +919,12 @@ function CafeSelect({
   cafes,
   value,
   initialValue,
+  onChange,
 }: {
   cafes: Cafe[];
   value?: string;
   initialValue?: string;
+  onChange?: (id: string) => void;
 }) {
   return (
     <Field label="کافه">
@@ -802,6 +932,7 @@ function CafeSelect({
         name="cafe_id"
         defaultValue={value || initialValue || cafes[0]?.id}
         disabled={Boolean(value)}
+        onChange={(event) => onChange?.(event.target.value)}
       >
         {cafes.map((c) => (
           <option key={c.id} value={c.id}>
@@ -813,11 +944,22 @@ function CafeSelect({
     </Field>
   );
 }
-function CafeEditor({ cafe, onDone }: { cafe: Cafe | null; onDone: () => Promise<void> }) {
+function CafeEditor({
+  cafe,
+  parentId,
+  vipTables,
+  onDone,
+}: {
+  cafe: Cafe | null;
+  parentId: string;
+  vipTables: boolean;
+  onDone: () => Promise<void>;
+}) {
   const [image, setImage] = useState(cafe?.image || ''),
+    [logo, setLogo] = useState(cafe?.logo || ''),
     [latitude, setLatitude] = useState(cafe?.latitude?.toString() || ''),
     [longitude, setLongitude] = useState(cafe?.longitude?.toString() || ''),
-    [images, setImages] = useState<string[]>(cafe?.images || []),
+    [images, setImages] = useState(() => loadGallery(cafe?.images)),
     [tables, setTables] = useState<Cafe['tables']>(cafe?.tables || []);
   const { toast } = useApp();
   return (
@@ -826,8 +968,10 @@ function CafeEditor({ cafe, onDone }: { cafe: Cafe | null; onDone: () => Promise
         await api('dashboard/cafes', cafe ? 'PUT' : 'POST', {
           ...Object.fromEntries(form),
           id: cafe?.id,
+          parent_id: parentId || undefined,
           image,
-          images: images.filter(Boolean),
+          logo,
+          images: images.map((item) => item.url).filter(Boolean),
           tables,
           latitude,
           longitude,
@@ -839,38 +983,14 @@ function CafeEditor({ cafe, onDone }: { cafe: Cafe | null; onDone: () => Promise
       }}
     >
       <ImageUpload value={image} onChange={setImage} label="کافه" />
-      <fieldset className="option-group">
-        <legend>عکس‌های بیشتر کافه</legend>
-        <div className="owner-gallery-editor">
-          {images.map((src, index) => (
-            <div key={index}>
-              <ImageUpload
-                value={src}
-                onChange={(value) =>
-                  setImages(images.map((item, i) => (i === index ? value : item)))
-                }
-                label={'کافه، عکس ' + digits(index + 1)}
-              />
-              <button
-                type="button"
-                className="text-link"
-                onClick={() => setImages(images.filter((_, i) => i !== index))}
-              >
-                حذف این عکس
-              </button>
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="text-link"
-          disabled={images.length >= 10}
-          onClick={() => setImages([...images, ''])}
-        >
-          <Plus size={16} />
-          افزودن عکس
-        </button>
-      </fieldset>
+      <ImageUpload value={logo} onChange={setLogo} label="نشان کافه" />
+      <GalleryEditor
+        label="کافه"
+        cover={image}
+        setCover={setImage}
+        images={images}
+        setImages={setImages}
+      />
       <Field label="نام کافه">
         <input name="name" defaultValue={cafe?.name} />
       </Field>
@@ -995,6 +1115,38 @@ function CafeEditor({ cafe, onDone }: { cafe: Cafe | null; onDone: () => Promise
             >
               <Trash2 size={17} />
             </button>
+            <div className="service-inline service-table-options">
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={table.enabled !== false}
+                  onChange={(event) =>
+                    setTables(
+                      tables.map((item) =>
+                        item.id === table.id ? { ...item, enabled: event.target.checked } : item,
+                      ),
+                    )
+                  }
+                />{' '}
+                میز فعال
+              </label>
+              {(vipTables || table.vip) && (
+                <label className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(table.vip)}
+                    onChange={(event) =>
+                      setTables(
+                        tables.map((item) =>
+                          item.id === table.id ? { ...item, vip: event.target.checked } : item,
+                        ),
+                      )
+                    }
+                  />{' '}
+                  میز ویژه
+                </label>
+              )}
+            </div>
           </div>
         ))}
         <button
@@ -1047,6 +1199,92 @@ function CafeEditor({ cafe, onDone }: { cafe: Cafe | null; onDone: () => Promise
         </label>
       </div>
     </Form>
+  );
+}
+function GalleryEditor({
+  label,
+  cover,
+  setCover,
+  images,
+  setImages,
+}: {
+  label: string;
+  cover: string;
+  setCover: (value: string) => void;
+  images: GalleryImage[];
+  setImages: Dispatch<SetStateAction<GalleryImage[]>>;
+}) {
+  function move(index: number) {
+    setImages((before) => {
+      const next = [...before];
+      [next[index - 1], next[index]] = [next[index], next[index - 1]];
+      return next;
+    });
+  }
+  return (
+    <fieldset className="option-group">
+      <legend>عکس‌های بیشتر {label}</legend>
+      <div className="owner-gallery-editor">
+        {images.map(({ id, url }, index) => (
+          <div key={id}>
+            <ImageUpload
+              value={url}
+              onChange={(value) =>
+                setImages((before) =>
+                  before.map((item) => (item.id === id ? { ...item, url: value } : item)),
+                )
+              }
+              label={label + '، عکس ' + digits(index + 1)}
+            />
+            <div className="service-inline">
+              {url && index > 0 && (
+                <button type="button" className="text-link" onClick={() => move(index)}>
+                  جابه‌جایی به قبل
+                </button>
+              )}
+              {url && url !== cover && (
+                <button
+                  type="button"
+                  className="text-link"
+                  onClick={() => {
+                    setCover(url);
+                    setImages((before) =>
+                      before.flatMap((item) =>
+                        item.id === id
+                          ? cover && !before.some((entry) => entry.url === cover)
+                            ? [{ id, url: cover }]
+                            : []
+                          : [item],
+                      ),
+                    );
+                  }}
+                >
+                  انتخاب به‌عنوان تصویر اصلی
+                </button>
+              )}
+              <button
+                type="button"
+                className="text-link"
+                onClick={() => setImages((before) => before.filter((item) => item.id !== id))}
+              >
+                حذف از گالری
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="text-link"
+        disabled={images.length >= 10}
+        onClick={() => {
+          const id = crypto.randomUUID();
+          setImages((before) => [...before, { id, url: '' }]);
+        }}
+      >
+        <Plus size={16} /> افزودن عکس
+      </button>
+    </fieldset>
   );
 }
 function OptionEditor({
@@ -1110,17 +1348,22 @@ function ProductEditor({
   cafes,
   initialCafe,
   categories,
+  features,
   onDone,
 }: {
   product: Product | null;
   cafes: Cafe[];
   initialCafe?: string;
   categories: string[];
+  features: Record<string, CafeFeatures>;
   onDone: () => Promise<void>;
 }) {
   const [image, setImage] = useState(product?.image || ''),
+    [images, setImages] = useState(() => loadGallery(product?.images)),
     [sizes, setSizes] = useState<Option[]>(product?.sizes || []),
-    [addons, setAddons] = useState<Option[]>(product?.addons || []);
+    [addons, setAddons] = useState<Option[]>(product?.addons || []),
+    [cafeId, setCafeId] = useState(product?.cafe_id || initialCafe || cafes[0]?.id || '');
+  const vipMenu = Boolean(features[cafeId]?.vip_menu || product?.vip_only);
   return (
     <Form
       onSubmit={async (form) => {
@@ -1128,15 +1371,29 @@ function ProductEditor({
           ...Object.fromEntries(form),
           id: product?.id,
           image,
+          images: images.map((item) => item.url).filter(Boolean),
           sizes,
           addons,
           available: form.get('available') === 'on',
+          vip_only: vipMenu && form.has('vip_only'),
         });
         await onDone();
       }}
     >
-      <CafeSelect cafes={cafes} value={product?.cafe_id} initialValue={initialCafe} />
+      <CafeSelect
+        cafes={cafes}
+        value={product?.cafe_id}
+        initialValue={initialCafe}
+        onChange={setCafeId}
+      />
       <ImageUpload value={image} onChange={setImage} label="محصول" />
+      <GalleryEditor
+        label="محصول"
+        cover={image}
+        setCover={setImage}
+        images={images}
+        setImages={setImages}
+      />
       <Field label="نام محصول">
         <input name="name" defaultValue={product?.name} />
       </Field>
@@ -1176,6 +1433,12 @@ function ProductEditor({
         <input type="checkbox" name="available" defaultChecked={product?.available ?? true} />
         محصول موجود است
       </label>
+      {vipMenu && (
+        <label className="check-row">
+          <input type="checkbox" name="vip_only" defaultChecked={Boolean(product?.vip_only)} /> فقط
+          برای میز ویژه
+        </label>
+      )}
     </Form>
   );
 }
@@ -1238,6 +1501,23 @@ function EventEditor({
       <Field label="ظرفیت مهمان‌ها">
         <input name="capacity" type="number" min={1} max={500} defaultValue={event?.capacity} />
       </Field>
+      <Field label="قیمت بلیت به تومان" hint="برای رویداد رایگان، صفر را وارد کنید.">
+        <input
+          name="price"
+          type="number"
+          min="0"
+          max="100000000"
+          defaultValue={event?.price || 0}
+        />
+      </Field>
+      {!event && (
+        <Field label="وضعیت انتشار">
+          <select name="status">
+            <option value="published">منتشر شود</option>
+            <option value="draft">پیش‌نویس</option>
+          </select>
+        </Field>
+      )}
     </Form>
   );
 }

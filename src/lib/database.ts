@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import source from './source-catalog.json';
 import { configureReservationDemo } from './reservation-demo';
+import { cafeServiceSchema } from './cafe-service-schema';
 
 const globalDatabase = globalThis as unknown as { vitrinDatabase?: DatabaseSync };
 export function database() {
@@ -43,6 +44,11 @@ export function database() {
     ['cafes', 'directory_source', "TEXT NOT NULL DEFAULT ''"],
     ['cafes', 'external_menu_url', "TEXT NOT NULL DEFAULT ''"],
     ['cafes', 'is_demo', 'INTEGER NOT NULL DEFAULT 0'],
+    ['cafes', 'parent_id', 'TEXT REFERENCES cafes(id)'],
+    ['cafes', 'tour_url', "TEXT NOT NULL DEFAULT ''"],
+    ['cafes', 'logo', "TEXT NOT NULL DEFAULT ''"],
+    ['products', 'vip_only', 'INTEGER NOT NULL DEFAULT 0'],
+    ['products', 'images', "TEXT NOT NULL DEFAULT '[]'"],
     [
       'cafes',
       'invoice_discount_percent',
@@ -56,6 +62,19 @@ export function database() {
     ['orders', 'payment_status', "TEXT NOT NULL DEFAULT 'unpaid'"],
     ['orders', 'payment_ref', "TEXT NOT NULL DEFAULT ''"],
     ['orders', 'kind', "TEXT NOT NULL DEFAULT 'menu'"],
+    ['orders', 'table_name', "TEXT NOT NULL DEFAULT ''"],
+    ['orders', 'preparation_minutes', 'INTEGER'],
+    ['orders', 'preparation_started_at', "TEXT NOT NULL DEFAULT ''"],
+    ['events', 'status', "TEXT NOT NULL DEFAULT 'published'"],
+    ['events', 'price', 'INTEGER NOT NULL DEFAULT 0'],
+    ['event_registrations', 'status', "TEXT NOT NULL DEFAULT 'registered'"],
+    ['event_registrations', 'order_id', 'TEXT REFERENCES orders(id)'],
+    ['event_registrations', 'hold_until', 'INTEGER NOT NULL DEFAULT 0'],
+    ['coupons', 'recipient_id', 'TEXT REFERENCES users(id)'],
+    ['tickets', 'priority', "TEXT NOT NULL DEFAULT 'normal'"],
+    ['reviews', 'visible', 'INTEGER NOT NULL DEFAULT 1'],
+    ['users', 'suspended', 'INTEGER NOT NULL DEFAULT 0'],
+    ['users', 'account_kind', "TEXT NOT NULL DEFAULT 'member'"],
   ]) {
     const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
     if (!columns.some((c) => c.name === column))
@@ -88,6 +107,7 @@ export function database() {
       request_signature TEXT NOT NULL
     );
   `);
+  db.exec(cafeServiceSchema);
   const cafe = source.cafe;
   db.prepare(
     `INSERT OR IGNORE INTO cafes (id,owner_id,name,description,city,address,phone,amenities,capacity,pickup,active,source) VALUES (?,NULL,?,?,?,?,?,?,0,0,0,?)`,
@@ -160,6 +180,7 @@ const booleanColumns = new Set([
   'read',
   'joined',
   'is_demo',
+  'vip_only',
 ]);
 export function hydrate<T>(row: unknown): T {
   const record = row as Record<string, unknown>;

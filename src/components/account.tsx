@@ -1,4 +1,7 @@
 'use client';
+import { LoyaltyPrograms } from './finance-workspace';
+import { TicketFiles, TicketPriority, TicketThread, ticketStatus } from './tickets';
+import { CustomerSettings, googleIssues } from './customer-settings';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
@@ -56,7 +59,7 @@ export function AuthView({ page }: { page: string }) {
   const router = useRouter(),
     query = useSearchParams();
   const { data, refresh } = useApp();
-  const [method, setMethod] = useState('email'),
+  const [chosenMethod, setMethod] = useState(''),
     [email, setEmail] = useState(query.get('email') || ''),
     [phone, setPhone] = useState(query.get('phone') || ''),
     [password, setPassword] = useState(''),
@@ -66,13 +69,18 @@ export function AuthView({ page }: { page: string }) {
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [accepted, setAccepted] = useState(false);
+  const method = chosenMethod || (data?.smsAvailable ? 'phone' : 'email');
   const register = page === 'register',
     verify = page === 'verify',
     forgot = page === 'forgot-password',
     reset = page === 'reset-password';
   const requestedNext = query.get('next') || '';
   const returnTo =
-    requestedNext === '/cart' || /^\/reserve(?:\?[^#]*)?$/.test(requestedNext) ? requestedNext : '';
+    /^\/(?:cart|reserve|cafes\/[A-Za-z0-9_-]+|events\/[A-Za-z0-9_-]+|meetings\/[A-Za-z0-9_-]+)(?:\?[^#\\]*)?$/.test(
+      requestedNext,
+    )
+      ? requestedNext
+      : '';
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
@@ -132,6 +140,17 @@ export function AuthView({ page }: { page: string }) {
         )}
       </span>
       <h1>{title}</h1>
+      {query.get('google') && (
+        <ErrorBox message={googleIssues[query.get('google') || ''] || googleIssues.failed} />
+      )}
+      {!verify && !forgot && !reset && data?.googleAvailable && (
+        <a
+          className="button secondary"
+          href={'/api/auth/google' + (returnTo ? '?next=' + encodeURIComponent(returnTo) : '')}
+        >
+          ادامه با حساب گوگل
+        </a>
+      )}
       <p>
         {register
           ? 'حس خوب کافه‌گردی، از همین‌جا شروع می‌شود.'
@@ -448,6 +467,18 @@ export function ProfileView() {
                     desc: 'مدیریت نشانی‌های تحویل',
                   },
                   {
+                    href: '/registrations',
+                    icon: CalendarCheck,
+                    label: 'ثبت‌نام‌های رویداد',
+                    desc: 'بلیت‌ها و وضعیت حضور',
+                  },
+                  {
+                    href: '/meetings',
+                    icon: CalendarCheck,
+                    label: 'دورهمی‌ها',
+                    desc: 'ساخت دورهمی و گفت‌وگو',
+                  },
+                  {
                     href: '/favorites',
                     icon: Heart,
                     label: 'علاقه‌مندی‌ها',
@@ -639,6 +670,7 @@ export function SettingsView() {
           )}
         </section>
       </div>
+      {data?.user && <CustomerSettings />}
     </>
   );
 }
@@ -942,8 +974,8 @@ export function RewardsView() {
         <div className="panel prose">
           <h2>امتیازها چطور کار می‌کنند؟</h2>
           <p>
-            به ازای هر ده هزار تومان از مبلغ نهایی سفارش تکمیل‌شده، یک امتیاز به حساب شما اضافه
-            می‌شود؛ فاکتور حضوری تسویه‌شده هم امتیاز دارد.
+            نرخ دریافت امتیاز را در باشگاه هر کافه ببینید. کافه‌های بدون تنظیم اختصاصی به ازای هر ده
+            هزار تومان از مبلغ نهایی خرید یک امتیاز می‌دهند.
           </p>
           <p>
             هر امتیاز، هزار تومان از قیمت محصولات سفارش بعدی در همان کافه کم می‌کند و هنگام ثبت
@@ -961,6 +993,7 @@ export function RewardsView() {
             <ArrowLeft size={17} />
           </Link>
         </div>
+        <LoyaltyPrograms />
       </LoginGate>
     </>
   );
@@ -998,6 +1031,12 @@ export function NotificationsView() {
               <Link
                 key={n.id}
                 href={n.href}
+                onClick={() => {
+                  if (!n.read)
+                    void api('notifications/' + n.id, 'PATCH', {})
+                      .then(refresh)
+                      .catch(() => {});
+                }}
                 className={'notification-row ' + (!n.read ? 'unread' : '')}
               >
                 <span className="action-icon peach">
@@ -1022,11 +1061,12 @@ export function NotificationsView() {
     </>
   );
 }
-export function SupportView() {
+export function SupportView({ id }: { id?: string }) {
   const { data: app, toast } = useApp(),
     query = useSearchParams();
-  const resource = useResource<{ tickets: Ticket[] }>(app?.user ? 'tickets' : null);
+  const resource = useResource<{ tickets: Ticket[] }>(app?.user && !id ? 'tickets' : null);
   const [tab, setTab] = useState('new');
+  if (id) return <TicketThread id={id} />;
   return (
     <>
       <PageTitle
@@ -1047,11 +1087,8 @@ export function SupportView() {
             <section className="panel">
               <Form
                 onSubmit={async (form) => {
-                  await api('tickets', 'POST', {
-                    subject: form.get('subject'),
-                    body: form.get('body'),
-                    order_id: query.get('order') || '',
-                  });
+                  form.set('order_id', query.get('order') || '');
+                  await api('tickets', 'POST', form);
                   resource.reload();
                   setTab('history');
                   toast('درخواست شما ثبت شد.');
@@ -1068,6 +1105,8 @@ export function SupportView() {
                     maxLength={3000}
                   />
                 </Field>
+                <TicketPriority />
+                <TicketFiles />
                 {query.get('order') && (
                   <div className="notice">این درخواست به سفارش انتخاب‌شده پیوند می‌خورد.</div>
                 )}
@@ -1099,13 +1138,18 @@ export function SupportView() {
             {resource.data.tickets.map((t) => (
               <article key={t.id} className="panel">
                 <div className="card-heading">
-                  <h3>{t.subject}</h3>
-                  <span className="badge">
-                    {t.status === 'answered' ? 'پاسخ داده شده' : 'ثبت شده'}
-                  </span>
+                  <h3>
+                    <Link className="text-link" href={'/support/' + t.id}>
+                      {t.subject}
+                    </Link>
+                  </h3>
+                  <span className="badge">{t.unread ? 'پاسخ تازه' : ticketStatus[t.status]}</span>
                 </div>
                 <p>{t.body}</p>
                 <small className="muted">{dateLabel(t.created_at, true)}</small>
+                <Link className="button secondary" href={'/support/' + t.id}>
+                  دیدن گفتگو
+                </Link>
                 {t.replies.map((reply) => (
                   <div className="ticket-reply" key={reply.id}>
                     <strong>{reply.name}</strong>

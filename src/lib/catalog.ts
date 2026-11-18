@@ -10,6 +10,22 @@ export const MENU_CATEGORIES = [
   'ساندویچ',
 ] as const;
 
+export const categoryKinds = {
+  food: 'غذا',
+  drink: 'نوشیدنی',
+  dessert: 'دسر',
+  other: 'سایر',
+} as const;
+export type CategoryKind = keyof typeof categoryKinds;
+export function defaultCategoryKind(category: string): CategoryKind {
+  const name = productCategory(category);
+  if (['قهوه', 'نوشیدنی گرم', 'نوشیدنی سرد'].includes(name)) return 'drink';
+  if (['غذا', 'پیتزا', 'برگر', 'ساندویچ', 'صبحانه', 'پاستا', 'سالاد', 'پیش غذا'].includes(name))
+    return 'food';
+  if (['کیک', 'دسر', 'کیک و دسر', 'بستنی', 'شیرینی'].includes(name)) return 'dessert';
+  return 'other';
+}
+
 const aliases: Record<string, string> = {
   'نوشیدنی های گرم': 'نوشیدنی گرم',
   'نوشیدنیهای گرم': 'نوشیدنی گرم',

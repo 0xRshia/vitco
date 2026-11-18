@@ -29,7 +29,7 @@ export function ownerAnalytics(
     .map(hydrate<Order>)
     .filter(
       (order) =>
-        order.kind !== 'invoice' ||
+        order.kind === 'menu' ||
         (order.status === 'completed' &&
           ['paid', 'refund_required'].includes(order.payment_status)),
     );

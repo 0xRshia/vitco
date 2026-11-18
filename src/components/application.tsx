@@ -52,6 +52,12 @@ import {
 import { CartView, OrdersView, ReserveView, ReservationsView } from './orders';
 import { DashboardView } from './dashboard';
 import { InvoicePaymentView } from './invoice-payment';
+import { TableLanding } from './table-service';
+import { MeetingsView } from './meetings';
+import { OperationsView } from './cafe-operations';
+import { EventRegistrations } from './event-registrations';
+import { BlogView, ContactView, FaqView } from './public-content';
+import { PlatformAdminView } from './platform-admin';
 
 const navigation = [
   { href: '/', label: 'خانه', icon: Home },
@@ -108,12 +114,13 @@ export function Application() {
       view = <ReserveView />;
       break;
     case 'reservations':
-      view = <ReservationsView />;
+      view = <ReservationsView id={id} />;
       break;
     case 'profile':
       view = <ProfileView />;
       break;
     case 'settings':
+    case 'telegram-settings':
       view = <SettingsView />;
       break;
     case 'addresses':
@@ -129,7 +136,8 @@ export function Application() {
       view = <NotificationsView />;
       break;
     case 'support':
-      view = <SupportView />;
+    case 'tickets':
+      view = <SupportView key={id || 'list'} id={id} />;
       break;
     case 'dashboard':
       view = <DashboardView />;
@@ -137,8 +145,34 @@ export function Application() {
     case 'events':
       view = <EventsView id={id} />;
       break;
+    case 'registrations':
+      view = <EventRegistrations />;
+      break;
     case 'scan':
+    case 'scanner':
       view = <ScannerView />;
+      break;
+    case 't':
+      view = <TableLanding code={id} />;
+      break;
+    case 'meetings':
+      view = <MeetingsView key={id || 'list'} id={id} />;
+      break;
+    case 'operations':
+      view = <OperationsView key={id || 'list'} id={id} />;
+      break;
+    case 'blog':
+      view = <BlogView key={id || 'list'} id={id} />;
+      break;
+    case 'faq':
+      view = <FaqView />;
+      break;
+    case 'contact':
+    case 'partnership':
+      view = <ContactView key={page} partnership={page === 'partnership'} />;
+      break;
+    case 'admin':
+      view = <PlatformAdminView section={id} />;
       break;
     default:
       view = auth ? <AuthView key={page} page={page} /> : <InfoView page={page} />;
@@ -213,6 +247,12 @@ export function Application() {
               {n.href === '/orders' && <span className="nav-dot" />}
             </Link>
           ))}
+          {page !== 'home' && (
+            <Link className={'nav-item ' + (page === 'meetings' ? 'active' : '')} href="/meetings">
+              <CalendarDays size={20} />
+              دورهمی‌ها
+            </Link>
+          )}
         </nav>
         <div className="sidebar-separator" />
         <span className="nav-label">همراه شما</span>
@@ -229,6 +269,18 @@ export function Application() {
             <Settings size={20} />
             تنظیمات
           </Link>
+          {data?.user && page !== 'home' && (
+            <Link className="nav-item" href="/operations">
+              <LayoutDashboard size={20} />
+              فضای کار کافه
+            </Link>
+          )}
+          {data?.platformAdmin && page !== 'home' && (
+            <Link className="nav-item" href="/admin">
+              <LayoutDashboard size={20} />
+              مدیریت ویتکو
+            </Link>
+          )}
         </nav>
         <div className="owner-invite">
           <span className="invite-icon">
@@ -337,9 +389,16 @@ export function Application() {
         </main>
         <footer className="footer">
           <span>ویتکو؛ جایی برای قرارهای خوب.</span>
-          <div>
+          <div className={page !== 'home' ? 'service-footer-links' : undefined}>
             <Link href="/about">درباره ما</Link>
             <Link href="/contact">تماس با ما</Link>
+            {page !== 'home' && (
+              <>
+                <Link href="/partnership">همکاری</Link>
+                <Link href="/faq">پرسش‌های متداول</Link>
+                <Link href="/blog">مجله</Link>
+              </>
+            )}
             <Link href="/privacy">حریم خصوصی</Link>
           </div>
         </footer>

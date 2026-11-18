@@ -6,7 +6,13 @@ export type User = {
   points: number;
   avatar: string;
 };
-export type CafeTable = { id: string; name: string; seats: number };
+export type CafeTable = {
+  id: string;
+  name: string;
+  seats: number;
+  vip?: boolean;
+  enabled?: boolean;
+};
 export type Cafe = {
   id: string;
   owner_id: string | null;
@@ -33,6 +39,9 @@ export type Cafe = {
   directory_source?: string;
   external_menu_url?: string;
   is_demo?: boolean;
+  parent_id?: string | null;
+  tour_url?: string;
+  logo?: string;
   rating: number | null;
   review_count: number;
 };
@@ -46,10 +55,12 @@ export type Product = {
   category: string;
   price: number;
   image: string;
+  images?: string[];
   available: boolean;
   sizes: Option[];
   addons: Option[];
   max_addons: number;
+  vip_only?: boolean;
   source: string;
 };
 export type Address = {
@@ -91,7 +102,7 @@ export type Order = {
   cafe_id: string;
   cafe_name: string;
   customer_name?: string;
-  kind: 'menu' | 'invoice';
+  kind: 'menu' | 'invoice' | 'event';
   mode: 'delivery' | 'pickup' | 'dine_in';
   reservation_id: string;
   status: string;
@@ -109,6 +120,9 @@ export type Order = {
   note: string;
   created_at: string;
   updated_at: string;
+  table_name?: string;
+  preparation_minutes?: number | null;
+  preparation_started_at?: string;
 };
 export type InvoiceQuote = {
   cafe_id: string;
@@ -151,6 +165,10 @@ export type CafeEvent = {
   image: string;
   registered: number;
   joined: boolean;
+  status?: 'draft' | 'published' | 'cancelled' | 'completed';
+  price?: number;
+  registration_status?: string | null;
+  registration_order_id?: string | null;
 };
 export type OwnerAnalytics = {
   from: string;
@@ -191,7 +209,15 @@ export type OwnerAnalytics = {
     last_order_at: string;
   }[];
 };
-export type Review = { id: string; name: string; rating: number; body: string; created_at: string };
+export type Review = {
+  id: string;
+  name: string;
+  rating: number;
+  body: string;
+  created_at: string;
+  verified?: number;
+  visible?: number;
+};
 export type Coupon = {
   id: string;
   cafe_id: string;
@@ -211,14 +237,27 @@ export type Notice = {
 };
 export type Ticket = {
   id: string;
+  user_id: string;
   subject: string;
   body: string;
   order_id: string;
   status: string;
   created_at: string;
-  replies: { id: string; body: string; created_at: string; name: string }[];
+  priority?: string;
+  unread?: boolean;
+  attachments?: TicketAttachment[];
+  replies: {
+    id: string;
+    body: string;
+    created_at: string;
+    name: string;
+    attachments?: TicketAttachment[];
+  }[];
 };
+export type TicketAttachment = { id: string; name: string; size: number };
 export type Bootstrap = {
+  platformAdmin?: boolean;
+  googleAvailable?: boolean;
   directory?: {
     configured: boolean;
     status: 'disabled' | 'ready' | 'stale' | 'unavailable';

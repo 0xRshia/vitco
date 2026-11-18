@@ -9,7 +9,7 @@ import {
 import type { NextRequest, NextResponse } from 'next/server';
 import { one, run } from './database';
 import type { User } from './types';
-import { AppError, ensure } from './validation';
+import { AppError, email, ensure, phone, text } from './validation';
 
 export const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 export function passwordHash(password: string) {
@@ -28,10 +28,18 @@ export function currentUser(request: NextRequest): User | null {
   if (!token) return null;
   return (
     one<User>(
-      "SELECT u.id,u.name,COALESCE(u.email,'') email,COALESCE(u.phone,'') phone,u.points,u.avatar FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.token=? AND s.expires>?",
+      "SELECT u.id,u.name,COALESCE(u.email,'') email,COALESCE(u.phone,'') phone,u.points,u.avatar FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.token=? AND s.expires>? AND u.suspended=0",
       hash(token),
       Date.now(),
     ) || null
+  );
+}
+export function findMemberByContact(input: unknown) {
+  const contact = text(input, 'ایمیل یا شماره همراه', 3, 254);
+  const field = contact.includes('@') ? 'email' : 'phone';
+  return one<{ id: string }>(
+    `SELECT id FROM users WHERE ${field}=? AND suspended=0 AND account_kind='member'`,
+    field === 'email' ? email(contact) : phone(contact),
   );
 }
 export function requireUser(request: NextRequest) {
@@ -76,21 +84,31 @@ export function checkOrigin(request: NextRequest) {
   ensure(request.headers.get('sec-fetch-site') !== 'cross-site', 'درخواست مجاز نیست.', 403);
 }
 export function notify(userId: string, title: string, body: string, href: string) {
+  const id = randomUUID();
   run(
     'INSERT INTO notifications (id,user_id,title,body,href,created_at) VALUES (?,?,?,?,?,?)',
-    randomUUID(),
+    id,
     userId,
     title,
     body,
     href,
     new Date().toISOString(),
   );
+  if (process.env.TELEGRAM_BOT_TOKEN)
+    run(
+      `INSERT INTO telegram_outbox(notification_id,user_id,created_at)
+      SELECT ?,p.user_id,? FROM notification_preferences p JOIN telegram_links l ON l.user_id=p.user_id
+      WHERE p.user_id=? AND p.telegram=1`,
+      id,
+      Date.now(),
+      userId,
+    );
 }
 export const smsAvailable = () =>
   Boolean(process.env.KAVENEGAR_API_KEY?.trim() && process.env.KAVENEGAR_TEMPLATE?.trim());
 export const mailAvailable = () =>
   Boolean(process.env.RESEND_API_KEY?.trim() && process.env.MAIL_FROM?.trim());
-export async function sendCode(target: string, purpose: 'phone' | 'reset') {
+export async function sendCode(target: string, purpose: 'phone' | 'reset', ownerId = '') {
   ensure(
     purpose === 'phone' ? smsAvailable() : mailAvailable(),
     purpose === 'phone'
@@ -141,7 +159,7 @@ export async function sendCode(target: string, purpose: 'phone' | 'reset') {
     run(
       'INSERT INTO auth_codes (target,purpose,hash,expires,attempts) VALUES (?,?,?,?,0) ON CONFLICT(target,purpose) DO UPDATE SET hash=excluded.hash,expires=excluded.expires,attempts=0',
       target,
-      purpose,
+      ownerId ? purpose + ':' + ownerId : purpose,
       hash(target + code),
       Date.now() + 600000,
     );

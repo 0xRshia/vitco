@@ -4,7 +4,7 @@ import { hash, notify } from './auth';
 import { one, run, transaction } from './database';
 import { today } from './format';
 import { ensure, integer, text } from './validation';
-import { isCafeOnlinePayable } from './zarinpal';
+import { cafeAcceptsPayments } from './payment-intake';
 import type { Coupon, InvoiceQuote, Order, User } from './types';
 
 /** The larger of the café's automatic discount and its supplied coupon applies. */
@@ -14,7 +14,11 @@ export function quoteInvoice(input: Record<string, unknown>): InvoiceQuote {
   const code = text(input.coupon ?? '', 'کد تخفیف', 0, 40).toUpperCase();
   let coupon: Coupon | undefined;
   if (code) {
-    coupon = one<Coupon>('SELECT * FROM coupons WHERE cafe_id=? AND code=?', cafe.id, code);
+    coupon = one<Coupon>(
+      'SELECT * FROM coupons WHERE cafe_id=? AND code=? AND recipient_id IS NULL',
+      cafe.id,
+      code,
+    );
     ensure(
       cafe.active &&
         cafe.owner_id &&
@@ -67,7 +71,7 @@ export function createInvoice(user: User, input: Record<string, unknown>) {
     }
     const cafe = cafeById(cafeId);
     ensure(cafe.owner_id && cafe.active, 'پرداخت حضوری این کافه هنوز فعال نیست.', 409);
-    ensure(isCafeOnlinePayable(cafe.id), 'درگاه پرداخت آنلاین این کافه هنوز فعال نیست.', 409);
+    ensure(cafeAcceptsPayments(cafe.id), 'درگاه پرداخت آنلاین این کافه هنوز فعال نیست.', 409);
     const quote = quoteInvoice({ cafe_id: cafeId, amount, coupon: code });
     ensure(
       quote.total === expected,

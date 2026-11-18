@@ -15,12 +15,14 @@ export function ReservationMenu({
   variant = 'reservation',
   initialCategory = '',
   category: controlledCategory,
+  products: cafeProducts,
   onCategoryChange,
 }: {
   cafeId: string;
   variant?: 'reservation' | 'catalog';
   initialCategory?: string;
   category?: string;
+  products?: Product[];
   onCategoryChange?: (value: string) => void;
 }) {
   const { data, cart, addCart, setCart, toast } = useApp();
@@ -39,7 +41,7 @@ export function ReservationMenu({
   useEffect(() => {
     if (!open) opener.current?.focus({ preventScroll: true });
   }, [open]);
-  const products = data?.products.filter((p) => p.cafe_id === cafeId) || [];
+  const products = cafeProducts ?? data?.products.filter((p) => p.cafe_id === cafeId) ?? [];
   const filtered = products.filter(
     (p) =>
       (!category || productCategory(p.category) === category) &&

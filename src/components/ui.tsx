@@ -128,7 +128,7 @@ export function Empty({
   icon = 'coffee',
 }: {
   title: string;
-  description: string;
+  description?: string;
   href?: string;
   label?: string;
   icon?: string;
@@ -139,7 +139,7 @@ export function Empty({
         {icon === 'store' ? <Store size={32} /> : <Coffee size={32} />}
       </div>
       <h3>{title}</h3>
-      <p>{description}</p>
+      {description && <p>{description}</p>}
       {href && (
         <Link className="button primary" href={href}>
           {label || 'مشاهده کافه‌ها'}
@@ -336,7 +336,7 @@ export function Modal({
     >
       <div className="modal-header">
         <h2>{title}</h2>
-        <button className="icon-button" aria-label="بستن" onClick={onClose}>
+        <button type="button" className="icon-button" aria-label="بستن" onClick={onClose}>
           <X size={22} />
         </button>
       </div>
@@ -413,10 +413,10 @@ export function Confirm({
     <Modal open={open} onClose={onClose} title={title}>
       <p className="muted">{description}</p>
       <div className="button-row">
-        <button className="button danger" onClick={onConfirm}>
+        <button type="button" className="button danger" onClick={onConfirm}>
           بله، ادامه بده
         </button>
-        <button className="button secondary" onClick={onClose}>
+        <button type="button" className="button secondary" onClick={onClose}>
           انصراف
         </button>
       </div>

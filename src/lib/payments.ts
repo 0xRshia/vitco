@@ -2,6 +2,8 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { one, run, transaction } from './database';
 import { hash, notify } from './auth';
 import { awardOrderPoints, cafeById } from './commerce';
+import { cafeAcceptsPayments } from './payment-intake';
+import { eventTicketPayable, settleEventTicket } from './event-registration';
 import { AppError, ensure, text } from './validation';
 import type { Order, PaymentStatus, Reservation, User } from './types';
 import {
@@ -59,6 +61,12 @@ function payableOrder(order: Order) {
   ensure(order.payment_method === 'zarinpal', 'روش پرداخت این سفارش آنلاین نیست.', 409);
   ensure(order.status === 'pending', 'این سفارش دیگر قابل پرداخت نیست.', 409);
   ensure(!reservationExpired(order), 'زمان رزرو این سفارش گذشته یا رزرو لغو شده است.', 409);
+  if (order.kind === 'event')
+    ensure(
+      eventTicketPayable(order.id),
+      'مهلت نگهداری بلیت گذشته است. دوباره در رویداد ثبت‌نام کنید.',
+      409,
+    );
   ensure(
     order.payment_status !== 'refund_required',
     'این پرداخت نیازمند پیگیری بازگشت وجه است.',
@@ -124,6 +132,7 @@ function finalize(paymentId: string, refId: string): Resolution {
       order.status === 'cancelled' ||
       order.payment_status === 'refund_required' ||
       reservationExpired(order) ||
+      (order.kind === 'event' && !eventTicketPayable(order.id)) ||
       !Number.isSafeInteger(order.total * 10) ||
       payment.amount_rial !== order.total * 10,
     );
@@ -142,6 +151,7 @@ function finalize(paymentId: string, refId: string): Resolution {
       order.id,
     );
     if (refundRequired) {
+      if (order.kind === 'event' && !previousPaid) settleEventTicket(order.id, true);
       const cafe = cafeById(order.cafe_id);
       if (cafe.owner_id)
         notify(
@@ -156,6 +166,9 @@ function finalize(paymentId: string, refId: string): Resolution {
         'وجه پرداختی ثبت شد، اما سفارش قابل پذیرش نیست. برای بررسی بازگشت وجه با کافه یا پشتیبانی تماس بگیرید.',
         '/orders/' + order.id,
       );
+    } else if (order.kind === 'event') {
+      settleEventTicket(order.id, false);
+      notify(order.user_id, 'ثبت‌نام رویداد تأیید شد', order.note, '/registrations');
     } else if (order.kind === 'invoice') {
       run("UPDATE orders SET status='completed' WHERE id=?", order.id);
       awardOrderPoints(order);
@@ -280,7 +293,7 @@ export async function startPayment(
   }
   const config = getZarinpalConfig();
   ensure(
-    config && (config.cafeIds === '*' || config.cafeIds.includes(initial.cafe_id)),
+    config && cafeAcceptsPayments(initial.cafe_id),
     'پرداخت آنلاین این کافه هنوز فعال نیست.',
     503,
   );
@@ -289,6 +302,7 @@ export async function startPayment(
     const order = orderById(orderId);
     if (order.payment_status === 'paid') return null;
     payableOrder(order);
+    ensure(cafeAcceptsPayments(order.cafe_id), 'پرداخت آنلاین این کافه هنوز فعال نیست.', 503);
     ensure(!one(activeSql, order.id), 'درخواست پرداخت دیگری در حال بررسی است.', 409);
     const cafe = cafeById(order.cafe_id);
     ensure(cafe.active && cafe.owner_id, 'پذیرش سفارش این کافه فعال نیست.', 409);

@@ -20,15 +20,18 @@
   },
   "dependencies": {
     "@fontsource/vazirmatn": "^5.2.5",
+    "jsqr": "1.4.0",
     "lucide-react": "^0.468.0",
     "maplibre-gl": "6.18.0",
     "next": "^16.4.3",
+    "qrcode": "1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.0",
     "@types/node": "^22.19.0",
+    "@types/qrcode": "1.5.6",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "prettier": "^3.9.9",

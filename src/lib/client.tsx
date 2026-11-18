@@ -7,10 +7,11 @@ export async function api<T = Record<string, unknown>>(
   method = 'GET',
   body?: unknown,
 ): Promise<T> {
+  const form = body instanceof FormData;
   const response = await fetch('/api/' + path, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
+    headers: body && !form ? { 'Content-Type': 'application/json' } : undefined,
+    body: form ? body : body ? JSON.stringify(body) : undefined,
     cache: 'no-store',
   }).catch(() => {
     throw new Error('ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی و دوباره تلاش کنید.');
@@ -195,4 +196,44 @@ export function useResource<T>(path: string | null) {
     };
   }, [path, revision, nonce]);
   return { data, error, loading, reload: () => setNonce((n) => n + 1) };
+}
+
+export function useLiveResource<T>(path: string | null, interval = 5000) {
+  const { revision } = useApp();
+  const [result, setResult] = useState<{ path: string; data: T | null; error: string } | null>(
+    null,
+  );
+  const [nonce, refresh] = useState(0);
+  useEffect(() => {
+    if (!path) return;
+    let active = true,
+      pending = false;
+    async function load() {
+      if (!path || pending) return;
+      pending = true;
+      try {
+        const data = await api<T>(path);
+        if (active) setResult({ path, data, error: '' });
+      } catch (error) {
+        if (active) setResult({ path, data: null, error: (error as Error).message });
+      } finally {
+        pending = false;
+      }
+    }
+    void load();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load();
+    }, interval);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [path, interval, nonce, revision]);
+  const current = result?.path === path ? result : null;
+  return {
+    data: current?.data ?? null,
+    error: current?.error ?? '',
+    loading: Boolean(path && !current),
+    reload: () => refresh((n) => n + 1),
+  };
 }

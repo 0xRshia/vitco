@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, useEffect, useRef } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   Check,
@@ -27,13 +27,15 @@ import {
   Printer,
   RotateCcw,
 } from 'lucide-react';
-import { api, useApp, useResource } from '@/lib/client';
+import { api, useApp, useLiveResource, useResource } from '@/lib/client';
+import type { TableContext } from '@/lib/table-service';
 import { reservationDemoNotice } from '@/lib/reservation-demo';
 import { PersianDateInput, PersianTimeInput } from './persian-date';
 import { LocationMap, hasPosition } from './location-map';
 import { money, digits, dateLabel, daysAhead, today, statusLabels, amenities } from '@/lib/format';
-import type { Order, Reservation, CafeTable, CartLine } from '@/lib/types';
+import type { Order, Reservation, CafeTable, CartLine, Product } from '@/lib/types';
 import { ReservationMenu } from './reservation-menu';
+import { ProductCard } from './browse-cards';
 import {
   PaymentMethodPicker,
   PaymentStatus,
@@ -75,7 +77,13 @@ export function CartView() {
   const { data, cart, setCart, refresh, toast } = useApp(),
     router = useRouter(),
     query = useSearchParams();
-  const mode = 'pickup';
+  const tableResource = useResource<{ table: TableContext | null }>(cart.length ? 'table' : null);
+  const table =
+    tableResource.data?.table?.cafe_id === cart[0]?.cafe_id ? tableResource.data?.table : null;
+  const [takeaway, setTakeaway] = useState(false);
+  const mode = table && !takeaway ? 'dine_in' : 'pickup';
+  const canCheckout = Boolean(data?.user || mode === 'dine_in');
+  const checkoutEndpoint = mode === 'dine_in' ? 'table-checkout' : 'orders';
   const [couponInput, setCouponInput] = useState(''),
     [coupon, setCoupon] = useState(''),
     [usePoints, setUsePoints] = useState(false),
@@ -95,6 +103,17 @@ export function CartView() {
     );
   const requestKey = useRef({ signature: '', key: '' });
   const cafe = data?.cafes.find((c) => c.id === cart[0]?.cafe_id);
+  const selectedProducts = [...new Set(cart.map((item) => item.product_id))].sort().join(',');
+  const suggested = useResource<{ products: Product[] }>(
+    cafe && selectedProducts
+      ? 'recommendations?' + new URLSearchParams({ cafe: cafe.id, items: selectedProducts })
+      : null,
+  );
+  const complementary =
+    suggested.data?.products.filter(
+      (product) =>
+        product.cafe_id === cafe?.id && !cart.some((item) => item.product_id === product.id),
+    ) ?? [];
   const onlineAvailable = onlinePaymentForCafe(data?.onlinePayment, cafe?.id);
   const selectedPaymentMethod = onlineAvailable ? paymentMethod : 'offline';
   const removing = cart.find((item) => item.key === removeKey);
@@ -103,12 +122,16 @@ export function CartView() {
   const points = usePoints ? Math.min(cafePoints, Math.floor(estimated / 1000)) : 0;
   const quotePayload = JSON.stringify({ items: cart, mode, coupon, points });
   useEffect(() => {
-    if (!data?.user || !cart.length) return;
+    if (!canCheckout || !cart.length) return;
     let active = true;
     setQuoting(true);
     setQuote(null);
     setError('');
-    api<Quote>('quote', 'POST', JSON.parse(quotePayload))
+    api<Quote>(
+      mode === 'dine_in' ? 'table-checkout/quote' : 'quote',
+      'POST',
+      JSON.parse(quotePayload),
+    )
       .then((q) => {
         if (active) setQuote(q);
       })
@@ -121,7 +144,7 @@ export function CartView() {
     return () => {
       active = false;
     };
-  }, [quotePayload, data?.user?.id]);
+  }, [quotePayload, canCheckout, data?.user?.id]);
   async function checkout() {
     setBusy(true);
     setError('');
@@ -129,13 +152,14 @@ export function CartView() {
       const payload = {
         ...JSON.parse(quotePayload),
         note,
-        pickup_at: pickup ? pickup + 'T' + pickupTime + ':00+03:30' : '',
+        pickup_at: mode === 'pickup' && pickup ? pickup + 'T' + pickupTime + ':00+03:30' : '',
+        expected_total: quote?.total,
         payment_method: selectedPaymentMethod,
       };
       const signature = JSON.stringify(payload);
       if (requestKey.current.signature !== signature)
         requestKey.current = { signature, key: crypto.randomUUID() };
-      const result = await api<{ id: string }>('orders', 'POST', {
+      const result = await api<{ id: string }>(checkoutEndpoint, 'POST', {
         ...payload,
         request_key: requestKey.current.key,
       });
@@ -177,7 +201,7 @@ export function CartView() {
         <div className="stack">
           <p className="pickup-service-label">
             <Store size={18} />
-            تحویل از کافه
+            {mode === 'dine_in' ? 'سرویس ' + table?.table_name : 'تحویل از کافه'}
           </p>
           <section>
             <SectionTitle title="انتخاب‌های خوش‌طعم تو" href="/menu" label="افزودن محصول" />
@@ -212,22 +236,46 @@ export function CartView() {
               ))}
             </div>
           </section>
+          {complementary.length > 0 && (
+            <section>
+              <SectionTitle title="پیشنهاد کنار سفارش" />
+              <div className="stack">
+                {complementary.map((product) => (
+                  <ProductCard product={product} key={product.id} />
+                ))}
+              </div>
+            </section>
+          )}
           <section className="panel form">
-            <h2>دریافت از کافه</h2>
+            <h2>{mode === 'dine_in' ? table?.table_name : 'دریافت از کافه'}</h2>
+            {table && cafe?.pickup && (
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={takeaway}
+                  onChange={(event) => setTakeaway(event.target.checked)}
+                />{' '}
+                سفارش بیرون‌بر
+              </label>
+            )}
             <p className="icon-text">
               <MapPin size={18} />
               {cafe?.city}، {cafe?.address}
             </p>
-            <button className="checkout-choice" onClick={() => setPickupOpen(true)}>
-              <Clock3 size={20} />
-              <span>
-                <strong>زمان دریافت</strong>
-                <small>
-                  {pickup ? dateLabel(pickup) + '، ساعت ' + digits(pickupTime) : 'اولین زمان ممکن'}
-                </small>
-              </span>
-              <ChevronLeft size={18} />
-            </button>
+            {mode === 'pickup' && (
+              <button className="checkout-choice" onClick={() => setPickupOpen(true)}>
+                <Clock3 size={20} />
+                <span>
+                  <strong>زمان دریافت</strong>
+                  <small>
+                    {pickup
+                      ? dateLabel(pickup) + '، ساعت ' + digits(pickupTime)
+                      : 'اولین زمان ممکن'}
+                  </small>
+                </span>
+                <ChevronLeft size={18} />
+              </button>
+            )}
             <Field label="یادداشت برای کافه (اختیاری)">
               <textarea
                 maxLength={500}
@@ -241,11 +289,11 @@ export function CartView() {
         <aside className="order-summary panel">
           <h2>خلاصه سفارش</h2>
           <div className="list-row">
-            <span>{data?.user ? 'قیمت محصولات' : 'قیمت تقریبی محصولات'}</span>
+            <span>{canCheckout ? 'قیمت محصولات' : 'قیمت تقریبی محصولات'}</span>
             <strong>
               {quote
                 ? money(quote.subtotal)
-                : !data?.user
+                : !canCheckout
                   ? money(estimated)
                   : quoting
                     ? 'در حال محاسبه…'
@@ -266,7 +314,7 @@ export function CartView() {
           )}
           <button
             className="checkout-choice coupon-trigger"
-            disabled={!data?.user}
+            disabled={!canCheckout}
             onClick={() => {
               setCouponInput(coupon);
               setCouponOpen(true);
@@ -276,7 +324,7 @@ export function CartView() {
             <span>
               <strong>{coupon || 'کد تخفیف داری؟'}</strong>
               <small>
-                {!data?.user
+                {!canCheckout
                   ? 'پس از ورود می‌توانی کد تخفیف اعمال کنی'
                   : coupon && quote?.discount
                     ? 'کد تخفیف اعمال شد'
@@ -303,9 +351,9 @@ export function CartView() {
             </label>
           )}
           <div className="summary-total" aria-live="polite">
-            <span>{data?.user ? 'مبلغ قابل پرداخت' : 'جمع تقریبی'}</span>
+            <span>{canCheckout ? 'مبلغ قابل پرداخت' : 'جمع تقریبی'}</span>
             <strong>
-              {!data?.user
+              {!canCheckout
                 ? money(estimated)
                 : quoting
                   ? 'در حال محاسبه…'
@@ -314,7 +362,7 @@ export function CartView() {
                     : '—'}
             </strong>
           </div>
-          {!data?.user && <p className="guest-quote-note">مبلغ نهایی پس از ورود محاسبه می‌شود.</p>}
+          {!canCheckout && <p className="guest-quote-note">مبلغ نهایی پس از ورود محاسبه می‌شود.</p>}
           <PaymentMethodPicker
             available={onlineAvailable}
             sandbox={Boolean(data?.onlinePayment?.sandbox)}
@@ -325,9 +373,9 @@ export function CartView() {
           {error && <ErrorBox message={error} />}
           <button
             className="button primary full"
-            disabled={busy || (Boolean(data?.user) && (!quote || quoting))}
+            disabled={busy || (canCheckout && (!quote || quoting))}
             onClick={() =>
-              data?.user
+              canCheckout
                 ? void checkout()
                 : router.push(
                     '/login?next=' +
@@ -339,7 +387,7 @@ export function CartView() {
           >
             {busy
               ? 'در حال ثبت سفارش…'
-              : data?.user
+              : canCheckout
                 ? selectedPaymentMethod === 'zarinpal'
                   ? 'ثبت سفارش و ادامه پرداخت'
                   : 'ثبت سفارش'
@@ -449,23 +497,26 @@ export function OrdersView({ id }: { id?: string }) {
   const { data: app, setCart, toast, refresh } = useApp(),
     query = useSearchParams(),
     router = useRouter();
-  const resource = useResource<{ orders?: Order[]; order?: Order }>(
-    app?.user ? 'orders' + (id ? '/' + id : '') : null,
-  );
+  const tracking = useLiveResource<{ order?: Order }>(id ? 'orders/' + id : null);
+  const history = useResource<{ orders?: Order[] }>(!id && app?.user ? 'orders' : null);
+  const resource = id ? tracking : history;
+  const Gate = id ? Fragment : LoginGate;
   const [tab, setTab] = useState('active'),
     [mode, setMode] = useState('all'),
     [cancel, setCancel] = useState(false),
     [reorder, setReorder] = useState<Order | null>(null),
     [busy, setBusy] = useState(false);
-  const orders = (resource.data?.orders || []).filter(
+  const orders = (history.data?.orders || []).filter(
     (o) =>
       (tab === 'active'
-        ? !['completed', 'cancelled'].includes(o.status)
-        : ['completed', 'cancelled'].includes(o.status)) &&
+        ? !['completed', 'cancelled', 'rejected'].includes(o.status)
+        : ['completed', 'cancelled', 'rejected'].includes(o.status)) &&
       (mode === 'all' ||
-        (mode === 'invoice' ? o.kind === 'invoice' : o.kind !== 'invoice' && o.mode === mode)),
+        (mode === 'invoice' || mode === 'event'
+          ? o.kind === mode
+          : o.kind === 'menu' && o.mode === mode)),
   );
-  const order = resource.data?.order;
+  const order = tracking.data?.order;
   const steps =
     order?.mode === 'delivery'
       ? ['pending', 'preparing', 'delivering', 'completed']
@@ -477,19 +528,23 @@ export function OrdersView({ id }: { id?: string }) {
           id
             ? order?.kind === 'invoice'
               ? 'رسید فاکتور حضوری'
-              : 'جزئیات سفارش'
+              : order?.kind === 'event'
+                ? 'رسید بلیت رویداد'
+                : 'جزئیات سفارش'
             : 'سفارش‌ها و پرداخت‌های من'
         }
         description={
           id
             ? order?.kind === 'invoice'
               ? 'مبلغ، تخفیف و وضعیت تسویه فاکتور.'
-              : 'از ثبت تا تحویل، همراه سفارش شما.'
-            : 'پیگیری سفارش‌ها و فاکتورهای حضوری.'
+              : order?.kind === 'event'
+                ? order.note
+                : 'از ثبت تا تحویل، همراه سفارش شما.'
+            : 'پیگیری سفارش‌ها، صورت‌حساب‌ها و بلیت رویدادها.'
         }
         back={id ? '/orders' : undefined}
       />
-      <LoginGate>
+      <Gate>
         {resource.loading ? (
           <Loading />
         ) : resource.error ? (
@@ -529,10 +584,25 @@ export function OrdersView({ id }: { id?: string }) {
                     <Badge status={order.status} />
                   </div>
                   <p className="muted">{dateLabel(order.created_at, true)}</p>
+                  {order.table_name && <p>{order.table_name}</p>}
+                  {order.status === 'preparing' &&
+                    order.preparation_minutes &&
+                    order.preparation_started_at && (
+                      <p>
+                        زمان تقریبی آماده شدن:{' '}
+                        {dateLabel(
+                          new Date(
+                            Date.parse(order.preparation_started_at) +
+                              order.preparation_minutes * 60000,
+                          ).toISOString(),
+                          true,
+                        )}
+                      </p>
+                    )}
                   <p className="order-reference">
                     شناسه سفارش <bdi>{order.id.slice(0, 8)}</bdi>
                   </p>
-                  {order.kind !== 'invoice' && order.status !== 'cancelled' && (
+                  {order.kind === 'menu' && !['cancelled', 'rejected'].includes(order.status) && (
                     <ol className="order-timeline" aria-label="مراحل آماده‌سازی سفارش">
                       {steps.map((s, i) => (
                         <li
@@ -556,13 +626,24 @@ export function OrdersView({ id }: { id?: string }) {
                       ))}
                     </ol>
                   )}
-                  <button className="text-link" onClick={() => void refresh()}>
+                  <button className="text-link" onClick={resource.reload}>
                     <RotateCcw size={15} />
                     به‌روزرسانی وضعیت
                   </button>
                 </section>
                 <section className="panel">
-                  <h2>{order.kind === 'invoice' ? 'فاکتور حضوری کافه' : 'اقلام سفارش'}</h2>
+                  <h2>
+                    {order.kind === 'invoice'
+                      ? 'فاکتور حضوری کافه'
+                      : order.kind === 'event'
+                        ? 'ثبت‌نام رویداد'
+                        : 'اقلام سفارش'}
+                  </h2>
+                  {order.kind === 'event' && (
+                    <Link href="/registrations" className="text-link">
+                      مشاهده ثبت‌نام‌های من
+                    </Link>
+                  )}
                   {order.kind === 'invoice' && (
                     <p className="muted">
                       مبلغ این فاکتور بر اساس صورت‌حساب کافه وارد شده است؛ اقلام از منوی ویتکو
@@ -583,37 +664,45 @@ export function OrdersView({ id }: { id?: string }) {
                     </div>
                   ))}
                 </section>
-                <section className="panel">
-                  <h2>
-                    {order.kind === 'invoice'
-                      ? 'پرداخت در محل کافه'
-                      : order.mode === 'delivery'
-                        ? 'نشانی تحویل'
-                        : orderModeLabels[order.mode]}
-                  </h2>
-                  <p>
-                    {order.address
-                      ? `${order.address.city}، ${order.address.street}`
-                      : order.cafe_name}
-                  </p>
-                  {order.address && (
+                {order.kind !== 'event' && (
+                  <section className="panel">
+                    <h2>
+                      {order.kind === 'invoice'
+                        ? 'پرداخت در محل کافه'
+                        : order.mode === 'delivery'
+                          ? 'نشانی تحویل'
+                          : orderModeLabels[order.mode]}
+                    </h2>
                     <p>
-                      {order.address.receiver} · {digits(order.address.phone)}
+                      {order.address
+                        ? `${order.address.city}، ${order.address.street}`
+                        : order.cafe_name}
                     </p>
-                  )}
-                  {order.pickup_at && <p>زمان دریافت: {dateLabel(order.pickup_at, true)}</p>}
-                  {order.reservation_id && (
-                    <Link href="/reservations" className="text-link">
-                      مشاهده رزرو میز این سفارش
-                    </Link>
-                  )}
-                  {order.note && <p>یادداشت: {order.note}</p>}
-                </section>
+                    {order.address && (
+                      <p>
+                        {order.address.receiver} · {digits(order.address.phone)}
+                      </p>
+                    )}
+                    {order.pickup_at && <p>زمان دریافت: {dateLabel(order.pickup_at, true)}</p>}
+                    {order.reservation_id && (
+                      <Link href={'/reservations/' + order.reservation_id} className="text-link">
+                        مشاهده رزرو میز این سفارش
+                      </Link>
+                    )}
+                    {order.note && <p>یادداشت: {order.note}</p>}
+                  </section>
+                )}
               </div>
               <aside className="order-summary panel">
-                <h2>رسید سفارش</h2>
+                <h2>{order.kind === 'event' ? 'رسید بلیت' : 'رسید سفارش'}</h2>
                 <div className="list-row">
-                  <span>{order.kind === 'invoice' ? 'مبلغ فاکتور' : 'محصولات'}</span>
+                  <span>
+                    {order.kind === 'invoice'
+                      ? 'مبلغ فاکتور'
+                      : order.kind === 'event'
+                        ? 'قیمت بلیت'
+                        : 'محصولات'}
+                  </span>
                   <strong>{money(order.subtotal)}</strong>
                 </div>
                 {order.mode === 'delivery' && (
@@ -632,21 +721,25 @@ export function OrdersView({ id }: { id?: string }) {
                 </div>
                 <PaymentStatus order={order} onUpdated={resource.reload} />
                 <div className="stack">
-                  <Link href={'/support?order=' + order.id} className="button secondary">
-                    <Headphones size={18} />
-                    پشتیبانی سفارش
-                  </Link>
+                  {app?.user && (
+                    <Link href={'/support?order=' + order.id} className="button secondary">
+                      <Headphones size={18} />
+                      پشتیبانی سفارش
+                    </Link>
+                  )}
                   <button className="button secondary" onClick={() => window.print()}>
                     <Printer size={18} />
                     چاپ رسید
                   </button>
-                  {order.status === 'pending' && !paymentIsPending(order) && (
-                    <button className="button danger-outline" onClick={() => setCancel(true)}>
-                      لغو سفارش
-                    </button>
-                  )}
-                  {order.kind !== 'invoice' &&
-                    ['completed', 'cancelled'].includes(order.status) && (
+                  {order.kind !== 'event' &&
+                    order.status === 'pending' &&
+                    !paymentIsPending(order) && (
+                      <button className="button danger-outline" onClick={() => setCancel(true)}>
+                        لغو سفارش
+                      </button>
+                    )}
+                  {order.kind === 'menu' &&
+                    ['completed', 'cancelled', 'rejected'].includes(order.status) && (
                       <button className="button primary" onClick={() => setReorder(order)}>
                         <RotateCcw size={17} />
                         سفارش دوباره
@@ -706,12 +799,13 @@ export function OrdersView({ id }: { id?: string }) {
               </div>
               <select value={mode} aria-label="نوع سفارش" onChange={(e) => setMode(e.target.value)}>
                 <option value="all">همه سفارش‌ها</option>
-                {(resource.data?.orders || []).some((order) => order.mode === 'delivery') && (
+                {(history.data?.orders || []).some((order) => order.mode === 'delivery') && (
                   <option value="delivery">سفارش‌های ارسالی گذشته</option>
                 )}
                 <option value="pickup">تحویل از کافه</option>
                 <option value="dine_in">مصرف در کافه</option>
                 <option value="invoice">فاکتور حضوری</option>
+                <option value="event">بلیت رویداد</option>
               </select>
             </div>
             {orders.length ? (
@@ -719,7 +813,9 @@ export function OrdersView({ id }: { id?: string }) {
                 {orders.map((o) => (
                   <Link className="order-card panel" key={o.id} href={'/orders/' + o.id}>
                     <span className="action-icon peach">
-                      {o.kind === 'invoice' ? (
+                      {o.kind === 'event' ? (
+                        <CalendarDays size={25} />
+                      ) : o.kind === 'invoice' ? (
                         <ReceiptText size={25} />
                       ) : o.mode === 'delivery' ? (
                         <Bike size={25} />
@@ -732,11 +828,17 @@ export function OrdersView({ id }: { id?: string }) {
                       <p>
                         {o.kind === 'invoice'
                           ? 'پرداخت فاکتور حضوری'
-                          : o.items.map((i) => i.name).join('، ')}
+                          : o.kind === 'event'
+                            ? o.note
+                            : o.items.map((i) => i.name).join('، ')}
                       </p>
                       <small>
-                        {o.kind === 'invoice' ? 'تسویه در کافه' : orderModeLabels[o.mode]} ·{' '}
-                        {dateLabel(o.created_at, true)}
+                        {o.kind === 'invoice'
+                          ? 'تسویه در کافه'
+                          : o.kind === 'event'
+                            ? 'بلیت رویداد'
+                            : orderModeLabels[o.mode]}{' '}
+                        · {dateLabel(o.created_at, true)}
                       </small>
                       {o.payment_method === 'zarinpal' && (
                         <small>{paymentStatusLabels[o.payment_status]}</small>
@@ -762,7 +864,7 @@ export function OrdersView({ id }: { id?: string }) {
             )}
           </>
         )}
-      </LoginGate>
+      </Gate>
       <Confirm
         open={Boolean(reorder)}
         title="این سفارش را دوباره می‌خواهی؟"
@@ -1455,21 +1557,25 @@ export function ReserveView() {
     </div>
   );
 }
-export function ReservationsView() {
+export function ReservationsView({ id }: { id?: string }) {
   const { data: app, toast } = useApp();
-  const resource = useResource<{ reservations: Reservation[] }>(app?.user ? 'reservations' : null);
+  const resource = useLiveResource<{ reservations?: Reservation[]; reservation?: Reservation }>(
+    app?.user ? 'reservations' + (id ? '/' + id : '') : null,
+  );
   const [tab, setTab] = useState('active'),
     [cancel, setCancel] = useState<Reservation | null>(null);
-  const reservations =
-    resource.data?.reservations.filter((r) =>
-      tab === 'active'
-        ? ['pending', 'confirmed'].includes(r.status) && r.date >= today()
-        : !['pending', 'confirmed'].includes(r.status) || r.date < today(),
-    ) || [];
+  const reservations = resource.data?.reservation
+    ? [resource.data.reservation]
+    : resource.data?.reservations?.filter((r) =>
+        tab === 'active'
+          ? ['pending', 'confirmed'].includes(r.status) && r.date >= today()
+          : !['pending', 'confirmed'].includes(r.status) || r.date < today(),
+      ) || [];
   return (
     <div className="reservations-page">
       <PageTitle
-        title="قرارهای من"
+        title={id ? 'جزئیات رزرو' : 'قرارهای من'}
+        back={id ? '/reservations' : undefined}
         description="برای وقت‌هایی که از قبل برای خودت کنار گذاشته‌ای."
         action={
           <Link className="button primary" href="/reserve">
@@ -1479,22 +1585,24 @@ export function ReservationsView() {
         }
       />
       <LoginGate>
-        <div className="tabs">
-          <button
-            aria-pressed={tab === 'active'}
-            className={tab === 'active' ? 'active' : ''}
-            onClick={() => setTab('active')}
-          >
-            قرارهای پیش رو
-          </button>
-          <button
-            aria-pressed={tab === 'history'}
-            className={tab === 'history' ? 'active' : ''}
-            onClick={() => setTab('history')}
-          >
-            قرارهای گذشته
-          </button>
-        </div>
+        {!id && (
+          <div className="tabs">
+            <button
+              aria-pressed={tab === 'active'}
+              className={tab === 'active' ? 'active' : ''}
+              onClick={() => setTab('active')}
+            >
+              قرارهای پیش رو
+            </button>
+            <button
+              aria-pressed={tab === 'history'}
+              className={tab === 'history' ? 'active' : ''}
+              onClick={() => setTab('history')}
+            >
+              قرارهای گذشته
+            </button>
+          </div>
+        )}
         <button
           type="button"
           className="button secondary reservation-refresh"
@@ -1518,7 +1626,7 @@ export function ReservationsView() {
                   </span>
                   <Badge status={r.status} />
                 </div>
-                <Link href={'/cafes/' + r.cafe_id}>
+                <Link href={id ? '/cafes/' + r.cafe_id : '/reservations/' + r.id}>
                   <h2>{r.cafe_name}</h2>
                 </Link>
                 {app?.cafes.find((c) => c.id === r.cafe_id)?.is_demo && (

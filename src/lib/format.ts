@@ -30,6 +30,9 @@ export function daysAhead(count = 14) {
 export const statusLabels: Record<string, string> = {
   pending: 'در انتظار تأیید',
   confirmed: 'تأیید شده',
+  approved: 'پذیرفته شده',
+  rejected: 'رد شده',
+  no_show: 'عدم حضور',
   preparing: 'در حال آماده‌سازی',
   ready: 'آماده تحویل',
   delivering: 'در مسیر شما',
