@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import {
   ArrowLeft,
   ChevronDown,
-  Home,
   List,
   LocateFixed,
   Map,
@@ -29,7 +28,7 @@ import type { Cafe } from '@/lib/types';
 import { CafeCard } from './browse-cards';
 import { MapCanvas, type MapBounds as Bounds } from './map-canvas';
 import { Empty, Field, LoginGate, Modal, PageTitle } from './ui';
-import { useVitrinCafeFilter } from './vitrin-layout';
+import { MapMenuButton } from './vitrin-layout';
 
 type Camera = { points: GeoPoint[]; zoom?: number; revision: number };
 type MappedCafe = Cafe & GeoPoint;
@@ -121,7 +120,6 @@ export function CafeExplorer({
     setDraft(filters);
     setFilterOpen(true);
   };
-  useVitrinCafeFilter(openFilters, !favorites && !listOnly);
   const headerClearance = height <= 500 ? 64 : 132;
   const maximumDrawer = Math.max(80, height - headerClearance - 16);
   const snaps = {
@@ -498,7 +496,7 @@ export function CafeExplorer({
       <MapCanvas
         className="cafe-explorer-canvas"
         fullscreen
-        label="نقشه کافه‌های اطراف"
+        label="نقشه کافه‌های اطراف من"
         points={mapped}
         selected={selected}
         onSelect={select}
@@ -508,10 +506,8 @@ export function CafeExplorer({
       />
       <header className="explorer-floating-header">
         <div className="explorer-heading">
-          <Link href="/" className="icon-button" aria-label="خانه">
-            <Home size={21} />
-          </Link>
-          <h1>کافه‌های اطراف</h1>
+          <MapMenuButton />
+          <h1>کافه‌های اطراف من</h1>
           <button
             className="icon-button"
             onClick={() => update({}, 'list')}

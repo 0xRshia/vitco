@@ -108,8 +108,14 @@ export function HomeView() {
   const { data } = useApp();
   const router = useRouter();
   const [search, setSearch] = useState('');
-  const cafes = data?.cafes || [];
-  const products = data?.products.filter((p) => p.available) || [];
+  const home = useResource<{ products: Product[]; cafes: Cafe[] }>('home');
+  const feedStatus = home.error ? (
+    <ErrorBox message={home.error} retry={home.reload} />
+  ) : home.loading ? (
+    <Loading />
+  ) : null;
+  const cafes = home.data?.cafes ?? [];
+  const products = home.data?.products ?? [];
   return (
     <div className="vitco-home">
       <header className="home-greeting">
@@ -119,7 +125,7 @@ export function HomeView() {
           <p>امروز، کجا قرار بگذاریم؟</p>
         </div>
         <Link href="/cafes" className="home-location">
-          <MapPin size={16} aria-hidden="true" /> کافه‌های ایران
+          <MapPin size={16} aria-hidden="true" /> کافه‌های اطراف من
           <ChevronLeft size={14} aria-hidden="true" />
         </Link>
       </header>
@@ -194,8 +200,8 @@ export function HomeView() {
       {data?.user && <MemberHome />}
       <section className="home-menu-section">
         <SectionTitle
-          title="از منوی کافه‌ها"
-          description="طعم بعدی‌ات را اینجا پیدا کن"
+          title="بیشترین سفارش‌ها در ویتکو"
+          description="بر اساس تعداد هر آیتم در سفارش‌های تکمیل‌شده"
           href="/menu"
           label="همه منوها"
         />
@@ -206,25 +212,25 @@ export function HomeView() {
             </Link>
           ))}
         </nav>
-        {products.length ? (
-          <div className="product-grid">
-            {products.slice(0, 4).map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </div>
-        ) : (
-          <Empty
-            title="منوها در راه‌اند"
-            description="محصولات کافه‌ها پس از ثبت و فعال‌شدن، اینجا نمایش داده می‌شوند."
-            href="/cafes"
-            label="دیدن کافه‌ها"
-          />
-        )}
+        {feedStatus ??
+          (products.length ? (
+            <div className="product-grid">
+              {products.map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
+            </div>
+          ) : (
+            <Empty
+              title="هنوز آیتمی برای نمایش در این رتبه‌بندی نیست"
+              href="/menu"
+              label="دیدن منوها"
+            />
+          ))}
       </section>
       <section className="home-cafes-section">
         <SectionTitle
-          title="قرار بعدی، کدام کافه؟"
-          description="فضاها و منوها را بشناس، بعد انتخاب کن"
+          title="برترین کافه‌های ویتکو"
+          description="معرفی کافه‌ها با حمایت مالی"
           href="/cafes"
           label="همه کافه‌ها"
         />
@@ -252,21 +258,21 @@ export function HomeView() {
             </Link>
           ))}
         </nav>
-        {cafes.length ? (
-          <div className="home-cafe-grid">
-            {cafes.slice(0, 3).map((c) => (
-              <CafeCard key={c.id} cafe={c} />
-            ))}
-          </div>
-        ) : (
-          <Empty
-            title="اولین کافه، اولین قرار"
-            description="هنوز کافه‌ای برای نمایش ثبت نشده است."
-            href="/dashboard"
-            label="ثبت کافه"
-            icon="store"
-          />
-        )}
+        {feedStatus ??
+          (cafes.length ? (
+            <div className="home-cafe-grid">
+              {cafes.map((c) => (
+                <CafeCard key={c.id} cafe={c} />
+              ))}
+            </div>
+          ) : (
+            <Empty
+              title="فعلاً کافه‌ای در این بخش معرفی نشده است"
+              href="/partnership"
+              label="درخواست معرفی کافه"
+              icon="store"
+            />
+          ))}
       </section>
       <Link href="/dashboard" className="home-owner-link">
         <span className="home-owner-icon">

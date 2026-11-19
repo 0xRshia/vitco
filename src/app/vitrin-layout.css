@@ -1,4 +1,4 @@
-/* Public, account and workspaces use the palette and geometry from the archived Vitrin Cafe UI. */
+/* Vitrin page layouts share Vitco’s global light and dark palettes. */
 @font-face {
   font-family: 'Vitrin Heading';
   src: url('@fontsource/vazirmatn/files/vazirmatn-arabic-900-normal.woff2') format('woff2');
@@ -8,48 +8,14 @@
 }
 
 .vitrin {
-  --bg: #fffff5;
-  --surface: #fffff5;
-  --surface-alt: #f8f1ea;
-  --text: #241909;
-  --muted: #44413e;
-  --line: #1917151a;
-  --accent: #b87331;
-  --accent-hover: #a7692d;
-  --primary: #b87331;
-  --primary-hover: #a7692d;
-  --on-primary: #fffff5;
-  --green: #5b8266;
-  --sage: #eff3f0;
-  --peach: #f8f1ea;
-  --peach-strong: #debfa0;
-  --danger: #bd3434;
-  --focus: #b87331;
   --text-base: 14px;
   --text-title: clamp(24px, 3vw, 30px);
   --control-height: 44px;
-  --shadow: 0 1px 3px #19171512;
   --header-height: 112px;
-  --vitrin-nav-offset: calc(76px + env(safe-area-inset-bottom, 0px));
+  --vitrin-nav-offset: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
   min-height: 100dvh;
   background: var(--bg);
   color: var(--text);
-}
-
-[data-theme='dark'] .vitrin {
-  --bg: #201e1d;
-  --surface: #292725;
-  --surface-alt: #353230;
-  --text: #fffff5;
-  --muted: #c7c6c5;
-  --line: #fff3;
-  --primary: #cfa175;
-  --accent: #cfa175;
-  --primary-hover: #debfa0;
-  --on-primary: #24160a;
-  --peach: #4d3015;
-  --sage: #26372b;
-  --green: #b4c6b9;
 }
 
 .vitrin h1,
@@ -229,8 +195,8 @@
   height: 100dvh;
   max-width: none;
   max-height: none;
-  background: #17211a;
-  color: #fff;
+  background: var(--surface);
+  color: var(--text);
 }
 
 .vitrin-menu-overlay[open] {
@@ -246,7 +212,7 @@
 }
 
 .vitrin-menu-top button {
-  color: #fffc;
+  color: var(--muted);
   font-size: 14px;
   font-weight: 500;
 }
@@ -257,6 +223,8 @@
   justify-content: center;
   gap: clamp(10px, 3vh, 32px);
   min-height: 0;
+  overflow-y: auto;
+  justify-content: safe center;
   flex: 1;
   align-self: end;
   width: min(100%, 544px);
@@ -273,7 +241,7 @@
 
 .vitrin-menu-overlay nav a:hover,
 .vitrin-menu-overlay nav a[aria-current='page'] {
-  color: #b87331;
+  color: var(--accent);
 }
 
 .vitrin-content {
@@ -331,13 +299,24 @@
 
 .vitrin-footer-legal {
   margin-block-start: 32px;
-  border-block-start: 1px solid #debfa066;
+  border-block-start: 1px solid var(--line);
   padding-block-start: 24px;
   color: var(--muted);
 }
 
-.vitrin-bottom {
-  display: none;
+.vitrin-cart-link {
+  position: relative;
+}
+
+.vitrin-cart-link > span {
+  position: absolute;
+  inset-block-start: -3px;
+  inset-inline-end: -3px;
+  border-radius: 20px;
+  padding-inline: 5px;
+  color: var(--accent);
+  background: var(--peach);
+  font-size: 10px;
 }
 
 .vitrin-account-layout {
@@ -349,12 +328,12 @@
 
 .vitrin-account-sidebar,
 .vitrin-account-drawer {
-  border: 1px solid #debfa099;
+  border: 1px solid var(--line);
   border-radius: 32px;
   padding: 24px;
-  background: color-mix(in srgb, var(--surface) 80%, white 20%);
+  background: var(--surface);
   color: var(--text);
-  box-shadow: 0 28px 80px -30px #462d182e;
+  box-shadow: 0 28px 80px -30px #22222b24;
 }
 
 .vitrin-account-sidebar {
@@ -487,7 +466,7 @@
   padding-block-end: 32px;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 761px) {
   .vitrin-dashboard-page .vitrin-header {
     display: none;
   }
@@ -495,9 +474,8 @@
 
 .vitrin-auth {
   background:
-    radial-gradient(circle at 12% 18%, #b8733129, transparent 32%),
-    radial-gradient(circle at 88% 78%, #5b82661f, transparent 30%),
-    linear-gradient(180deg, #fffff5 0%, #f8f1ea 100%);
+    radial-gradient(circle at 12% 18%, var(--peach), transparent 32%),
+    radial-gradient(circle at 88% 78%, var(--sage), transparent 30%), var(--bg);
 }
 
 .vitrin-auth-grid {
@@ -517,19 +495,11 @@
 .vitrin-auth-card {
   width: min(100%, 34rem);
   padding: 36px;
-  border: 1px solid #debfa099;
+  border: 1px solid var(--line);
   border-radius: 32px;
-  background: #fffc;
-  box-shadow: 0 28px 80px -30px #462d182e;
-  backdrop-filter: blur(24px);
-}
-
-[data-theme='dark'] .vitrin-auth {
-  background: #201e1d;
-}
-
-[data-theme='dark'] .vitrin-auth-card {
   background: var(--surface);
+  box-shadow: 0 28px 80px -30px #22222b24;
+  backdrop-filter: blur(24px);
 }
 
 .vitrin-auth .vitrin-wordmark {
@@ -578,20 +548,20 @@
   padding: 48px;
   background:
     url('/vitrin/auth-decoration.svg') center / cover no-repeat,
-    linear-gradient(145deg, #f8f1ea, #e9d4bf);
-  color: #241909;
+    linear-gradient(145deg, var(--surface), var(--peach));
+  color: var(--text);
 }
 
 .vitrin-auth-introduction > p {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #653f1b;
+  color: var(--accent);
 }
 
 .vitrin-auth-introduction > p:last-child {
   font-size: 12px;
-  color: #44413e;
+  color: var(--muted);
 }
 
 .vitrin-auth-introduction > div {
@@ -608,7 +578,7 @@
   max-width: 448px;
   font-size: 16px;
   line-height: 32px;
-  color: #44413e;
+  color: var(--muted);
 }
 
 .vitrin-auth-cup {
@@ -617,9 +587,9 @@
   width: 96px;
   height: 96px;
   border-radius: 32px;
-  border: 1px solid #debfa0b3;
-  background: #ffffffb3;
-  color: #b87331;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--accent);
   margin-block-end: 32px;
 }
 
@@ -648,20 +618,19 @@
     width: 100%;
     object-fit: contain;
     height: 96px;
-    background: linear-gradient(145deg, #f8f1ea, #e9d4bf);
-    border: 1px solid #debfa080;
+    background: linear-gradient(145deg, var(--surface), var(--peach));
+    border: 1px solid var(--line);
     border-radius: 16px;
     margin-block-end: 20px;
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 760px) {
   .vitrin-public {
     padding-block-end: var(--vitrin-nav-offset);
   }
 
-  .vitrin-header-actions,
-  .vitrin-directory-page .vitrin-header,
+  .vitrin-map-page .vitrin-header,
   .vitrin-workspace-sidebar {
     display: none;
   }
@@ -674,63 +643,34 @@
     padding: 24px 16px 0;
   }
 
-  .vitrin-bottom {
-    display: grid;
-    position: fixed;
-    inset: auto 16px max(12px, env(safe-area-inset-bottom, 0px));
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    place-items: center;
-    background: var(--surface);
+  .vitrin-map-page > .bottom-nav {
     z-index: 110;
-    height: 64px;
-    padding-inline: 6px;
-    border-radius: 16px;
-    box-shadow: 0 25px 50px -12px #0008;
   }
 
-  .vitrin-bottom > :is(a, button) {
-    position: relative;
-    display: grid;
-    place-items: center;
+  .vitrin-header {
+    --header-height: 76px;
+    padding: 16px;
+  }
+
+  .vitrin-cafe-page {
+    --header-height: 76px;
+  }
+
+  .vitrin-header-actions {
+    gap: 8px;
+  }
+
+  .vitrin-header-actions > :is(.vitrin-login, .vitrin-user-menu) {
+    display: none;
+  }
+
+  .vitrin-header .vitrin-wordmark img {
+    height: 36px;
+  }
+
+  .vitrin-header .vitrin-menu-button {
     width: 44px;
     height: 44px;
-    border-radius: 12px;
-    color: color-mix(in srgb, var(--text) 70%, transparent);
-  }
-
-  .vitrin-bottom > :is(a, button) svg {
-    stroke-width: 2.5;
-  }
-
-  .vitrin-bottom > [aria-current='page'] {
-    background: var(--primary);
-    color: var(--on-primary);
-  }
-
-  .vitrin-bottom > a.vitrin-bottom-qr {
-    align-self: start;
-    margin-block-start: -8px;
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: #5b8266;
-    color: #fffff5;
-    box-shadow: 0 10px 15px -3px #5b826680;
-  }
-
-  .vitrin-bottom > a.vitrin-bottom-qr[aria-current='page'] {
-    outline: 2px solid #91ab98;
-    outline-offset: 2px;
-  }
-
-  .vitrin-bottom > a > span {
-    position: absolute;
-    inset: -2px auto auto -2px;
-    border-radius: 20px;
-    background: var(--primary);
-    color: var(--on-primary);
-    font-size: 10px;
-    padding-inline: 4px;
   }
 
   .vitrin-footer {
@@ -774,7 +714,6 @@
 @media print {
   .vitrin-header,
   .vitrin-footer,
-  .vitrin-bottom,
   .vitrin-account-sidebar {
     display: none !important;
   }

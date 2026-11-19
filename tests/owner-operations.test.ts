@@ -13,6 +13,7 @@ import {
   transitionReservation,
 } from '../src/lib/commerce';
 import { ownerAnalytics } from '../src/lib/owner-analytics';
+import { topOrderedProducts } from '../src/lib/home-ranking';
 import { adjustCategoryPrices } from '../src/lib/pricing';
 import type { CartLine, Order, User } from '../src/lib/types';
 
@@ -110,6 +111,47 @@ before(() => {
 after(() => {
   database().close();
   rmSync(directory, { recursive: true, force: true });
+});
+
+test('home ranks current public products across cafés by quantities in completed menu orders', (t) => {
+  database().exec('BEGIN');
+  t.after(() => database().exec('ROLLBACK'));
+  assert.deepEqual(topOrderedProducts(), []);
+  run(`INSERT INTO products (id,cafe_id,name,description,category,price)
+       VALUES ('cake','cafe','کیک','','دسر',100)`);
+  const now = new Date().toISOString();
+  const item = (product_id: string, quantity: number) => ({ ...line(quantity), product_id });
+  order(buyer, now, 'completed', [item('coffee', 3), item('coffee', 2)]);
+  order(second, now, 'completed', [item('food', 4), item('cake', 2), item('hot', 1)]);
+  order(buyer, now, 'completed', [item('foreign-product', 7)], 'foreign-cafe');
+  order(buyer, now, 'completed', [item('coffee', 10)], 'foreign-cafe');
+  for (const status of ['pending', 'cancelled', 'rejected'])
+    order(buyer, now, status, [item('hot', 20)]);
+  const invoice = order(buyer, now, 'completed', [item('hot', 20)]);
+  run("UPDATE orders SET kind='invoice' WHERE id=?", invoice);
+  const ranked = topOrderedProducts();
+  assert.deepEqual(
+    ranked.map((product) => product.id),
+    ['foreign-product', 'coffee', 'food', 'cake'],
+  );
+  assert.equal(ranked[0].cafe_name, 'کافه آزمون');
+  assert.deepEqual(ranked[0].sizes, []);
+  assert.equal(ranked[0].available, true);
+
+  run("UPDATE products SET available=0 WHERE id='coffee'");
+  run("UPDATE products SET vip_only=1 WHERE id='food'");
+  run(`INSERT INTO menu_categories (id,cafe_id,name,position,visible)
+       VALUES ('hidden','cafe','نوشیدنی گرم',0,0)`);
+  run("UPDATE cafes SET active=0 WHERE id='foreign-cafe'");
+  assert.deepEqual(
+    topOrderedProducts().map((product) => product.id),
+    ['cake'],
+  );
+  run("UPDATE cafes SET active=1,is_demo=1 WHERE id='foreign-cafe'");
+  assert.deepEqual(
+    topOrderedProducts().map((product) => product.id),
+    ['cake'],
+  );
 });
 
 test('analytics uses inclusive Tehran dates, real first orders, historical prices and owner isolation', () => {

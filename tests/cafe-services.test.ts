@@ -56,7 +56,7 @@ import {
 } from '../src/lib/meetings';
 import { paymentCallback, startPayment } from '../src/lib/payments';
 import { paymentActivity } from '../src/lib/payment-activity';
-import { adminApi, publicArticles, submitContact } from '../src/lib/platform';
+import { adminApi, paidHomeCafes, publicArticles, submitContact } from '../src/lib/platform';
 import { qrScanHistory } from '../src/lib/qr-activity';
 import { resolveQr, saveQrMapping } from '../src/lib/qr-mappings';
 import { tableStatusList, updateTableState } from '../src/lib/table-states';
@@ -592,6 +592,37 @@ test('admin contents, messages, and suspension are persisted and inaccessible to
     one<{ suspended: number }>('SELECT suspended FROM users WHERE id=?', buyer.id)?.suspended,
     1,
   );
+});
+
+test('paid home placements require administrator selection, preserve priority and exclude demo cafés', () => {
+  const placement = (id: string) => ['admin', 'placements', id];
+  const placedIds = () => paidHomeCafes().map((cafe) => cafe.id);
+  assert.deepEqual(placedIds(), []);
+  assert.throws(() => adminApi(owner, placement('branch'), 'PUT', { position: 1 }, params), {
+    status: 403,
+  });
+  assert.throws(() => adminApi(admin, placement('missing'), 'PUT', { position: 1 }, params), {
+    status: 404,
+  });
+  assert.throws(() => adminApi(admin, placement('branch'), 'PUT', { position: 0 }, params), {
+    status: 400,
+  });
+  adminApi(admin, placement('branch'), 'PUT', { position: 2 }, params);
+  // Imported cafés can advertise even when they do not take online orders.
+  adminApi(admin, placement('vitrin-aala'), 'PUT', { position: 1 }, params);
+  assert.deepEqual(placedIds(), ['vitrin-aala', 'branch']);
+  adminApi(admin, placement('vitrin-aala'), 'PUT', { position: 3 }, params);
+  assert.deepEqual(placedIds(), ['branch', 'vitrin-aala']);
+  run(
+    "INSERT INTO cafes(id,name,description,city,address,phone,is_demo) VALUES ('ad-demo','آزمایشی','','','','',1)",
+  );
+  assert.throws(() => adminApi(admin, placement('ad-demo'), 'PUT', { position: 1 }, params), {
+    status: 404,
+  });
+  adminApi(admin, placement('branch'), 'DELETE', {}, params);
+  adminApi(admin, placement('branch'), 'DELETE', {}, params);
+  assert.deepEqual(placedIds(), ['vitrin-aala']);
+  adminApi(admin, placement('vitrin-aala'), 'DELETE', {}, params);
 });
 
 test('printed QR mappings resolve only registered destinations and a menu scan detaches the table without losing guest receipts', () => {

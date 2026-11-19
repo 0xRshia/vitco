@@ -23,6 +23,7 @@ import * as v from '@/lib/validation';
 import { latin, today } from '@/lib/format';
 import {
   cafeById,
+  cafeSql,
   ownerCafe,
   productById,
   quote,
@@ -34,6 +35,7 @@ import {
   transitionReservation,
 } from '@/lib/commerce';
 import { ownerAnalytics } from '@/lib/owner-analytics';
+import { topOrderedProducts } from '@/lib/home-ranking';
 import { adjustCategoryPrices } from '@/lib/pricing';
 import { productCategory } from '@/lib/catalog';
 import { publicPaymentAvailability } from '@/lib/payment-intake';
@@ -85,7 +87,13 @@ import {
 } from '@/lib/customer-settings';
 import { linkTelegram, telegramStatus, telegramWebhook, unlinkTelegram } from '@/lib/telegram';
 import { cafeFeatures, complementaryItems } from '@/lib/cafe-features';
-import { adminApi, publicArticles, publicTestimonials, submitContact } from '@/lib/platform';
+import {
+  adminApi,
+  paidHomeCafes,
+  publicArticles,
+  publicTestimonials,
+  submitContact,
+} from '@/lib/platform';
 import type { Cafe, CafeTable, Product, Order, Reservation, User } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -102,8 +110,6 @@ function storeTableVisit(response: NextResponse, token: string, origin: string) 
   });
   return response;
 }
-const cafeSql =
-  'SELECT c.*,(SELECT AVG(rating) FROM reviews WHERE cafe_id=c.id AND visible=1) rating,(SELECT COUNT(*) FROM reviews WHERE cafe_id=c.id AND visible=1) review_count FROM cafes c';
 const visibleProducts =
   'NOT EXISTS(SELECT 1 FROM menu_categories m WHERE m.cafe_id=p.cafe_id AND m.name=p.category AND visible=0)';
 const orderSql =
@@ -232,6 +238,8 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
     }
     if (resource === 'testimonials' && method === 'GET')
       return json({ testimonials: publicTestimonials() });
+    if (resource === 'home' && path.length === 1 && method === 'GET')
+      return json({ products: topOrderedProducts(), cafes: paidHomeCafes() });
     if (resource === 'contact-messages' && method === 'POST') {
       limit('contact:' + (user?.id || request.headers.get('x-real-ip') || 'public'), 12, 3600);
       return json(submitContact(id, input), 201);

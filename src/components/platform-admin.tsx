@@ -8,6 +8,7 @@ import type {
   Article,
   ArticleBlock,
   ContactMessage,
+  HomeCafePlacement,
   ManagedCafe,
   PlatformReview,
   PlatformUser,
@@ -23,6 +24,7 @@ const sections = [
   ['dashboard', 'خلاصه'],
   ['users', 'حساب‌ها'],
   ['cafes', 'کافه‌ها و امکانات'],
+  ['placements', 'جایگاه‌های صفحه اول'],
   ['orders', 'سفارش‌ها'],
   ['payments', 'پرداخت'],
   ['articles', 'مجله'],
@@ -50,6 +52,7 @@ type PanelData = {
       >[];
   reservations?: Pick<Reservation, 'id' | 'cafe_name' | 'date' | 'time' | 'status' | 'guests'>[];
   cafes?: ManagedCafe[] | number;
+  placements?: HomeCafePlacement[];
   articles?: Article[];
   categories?: string[];
   testimonials?: Testimonial[];
@@ -239,6 +242,14 @@ function PlatformPanel({
           <Empty title="کافه‌ای برای مدیریت وجود ندارد." />
         )}
       </div>
+    );
+  } else if (section === 'placements') {
+    panel = (
+      <HomePlacements
+        placements={data?.placements || []}
+        save={save}
+        remove={(path, label) => setDeletion({ path, label })}
+      />
     );
   } else if (section === 'payments') {
     const gateway = data?.gateway;
@@ -554,6 +565,88 @@ function CafeEntitlements({
 
 type Save = (path: string, method: string, input: unknown) => Promise<void>;
 type Remove = (path: string, label: string) => void;
+
+function HomePlacements({
+  placements,
+  save,
+  remove,
+}: {
+  placements: HomeCafePlacement[];
+  save: Save;
+  remove: Remove;
+}) {
+  const { data } = useApp();
+  const [cafeId, setCafeId] = useState('');
+  const current = placements.find((placement) => placement.cafe_id === cafeId);
+  return (
+    <div className="service-card-grid">
+      <section className="panel">
+        <h2>ثبت جایگاه تبلیغاتی</h2>
+        <p>پس از تأیید پرداخت، کافه را برای نمایش در «برترین کافه‌های ویتکو» انتخاب کنید.</p>
+        <Form
+          onSubmit={async (form) => {
+            if (!cafeId) throw new Error('کافه را انتخاب کنید.');
+            await save('admin/placements/' + encodeURIComponent(cafeId), 'PUT', {
+              position: form.get('position'),
+            });
+          }}
+        >
+          <Field label="کافه">
+            <select value={cafeId} onChange={(event) => setCafeId(event.target.value)}>
+              <option value="">انتخاب کافه</option>
+              {data?.cafes
+                .filter((cafe) => !cafe.is_demo)
+                .map((cafe) => (
+                  <option key={cafe.id} value={cafe.id}>
+                    {cafe.name}
+                    {cafe.city && ' · ' + cafe.city}
+                  </option>
+                ))}
+            </select>
+          </Field>
+          <Field label="اولویت نمایش" hint="عدد کوچک‌تر زودتر نمایش داده می‌شود.">
+            <input
+              key={cafeId}
+              name="position"
+              type="number"
+              min={1}
+              step={1}
+              defaultValue={current?.position ?? (placements.at(-1)?.position ?? 0) + 1}
+            />
+          </Field>
+        </Form>
+      </section>
+      <section className="panel">
+        <h2>کافه‌های دارای جایگاه</h2>
+        {placements.map((placement) => (
+          <div key={placement.cafe_id} className="list-row">
+            <strong>
+              {digits(placement.position)} · {placement.name}
+              {placement.city && ' · ' + placement.city}
+            </strong>
+            <div className="service-inline">
+              <button className="text-link" onClick={() => setCafeId(placement.cafe_id)}>
+                ویرایش
+              </button>
+              <button
+                className="text-link"
+                onClick={() =>
+                  remove(
+                    'admin/placements/' + encodeURIComponent(placement.cafe_id),
+                    'کافه «' + placement.name + '» از جایگاه صفحه اول حذف شود؟',
+                  )
+                }
+              >
+                حذف جایگاه
+              </button>
+            </div>
+          </div>
+        ))}
+        {!placements.length && <p>هنوز جایگاهی ثبت نشده است.</p>}
+      </section>
+    </div>
+  );
+}
 
 function ContentEditor({
   articles,

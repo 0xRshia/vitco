@@ -3,9 +3,9 @@ import { all, hydrate, one, run, transaction } from './database';
 import { platformAdmin } from './cafe-access';
 import { cafeFeatures, setFeatures } from './cafe-features';
 import { operatorTickets } from './tickets';
-import { transitionOrder } from './commerce';
+import { cafeSql, transitionOrder } from './commerce';
 import { paymentIntakeSettings, updatePaymentIntake } from './payment-intake';
-import type { Order, User } from './types';
+import type { Cafe, Order, User } from './types';
 import * as v from './validation';
 
 export type ArticleBlock =
@@ -59,6 +59,17 @@ export type ManagedCafe = {
   owner_name: string;
   features: ReturnType<typeof cafeFeatures>;
 };
+export type HomeCafePlacement = { cafe_id: string; name: string; city: string; position: number };
+const placementJoin = ` JOIN home_cafe_placements p ON p.cafe_id=c.id
+  WHERE c.is_demo=0 ORDER BY p.position,c.id`;
+function homeCafePlacements() {
+  return all<HomeCafePlacement>(
+    'SELECT p.cafe_id,c.name,c.city,p.position FROM cafes c' + placementJoin,
+  );
+}
+export function paidHomeCafes() {
+  return all(cafeSql + placementJoin).map(hydrate<Cafe>);
+}
 export type PlatformReview = {
   id: string;
   cafe_name: string;
@@ -350,6 +361,7 @@ export function adminApi(
           'SELECT c.id,c.name,c.city,c.active,u.name owner_name FROM cafes c JOIN users u ON u.id=c.owner_id WHERE c.is_demo=0 AND c.parent_id IS NULL ORDER BY c.name',
         ).map((cafe) => ({ ...cafe, features: cafeFeatures(cafe.id) })),
       };
+    if (section === 'placements') return { placements: homeCafePlacements() };
     if (section === 'articles')
       return {
         articles: all('SELECT * FROM articles ORDER BY updated_at DESC').map(hydrate<Article>),
@@ -426,6 +438,24 @@ export function adminApi(
   }
   if (section === 'cafes' && id && method === 'PATCH') {
     setFeatures(user, id, input);
+    return { ok: true };
+  }
+  if (section === 'placements' && id && method === 'PUT') {
+    const position = v.integer(input.position, 'اولویت نمایش', 1);
+    v.ensure(
+      run(
+        `INSERT INTO home_cafe_placements(cafe_id,position) SELECT id,? FROM cafes WHERE id=? AND is_demo=0
+         ON CONFLICT(cafe_id) DO UPDATE SET position=excluded.position`,
+        position,
+        id,
+      ).changes,
+      'کافه‌ای برای نمایش پیدا نشد.',
+      404,
+    );
+    return { ok: true };
+  }
+  if (section === 'placements' && id && method === 'DELETE') {
+    run('DELETE FROM home_cafe_placements WHERE cafe_id=?', id);
     return { ok: true };
   }
   if (section === 'payments' && !id && method === 'PATCH') {

@@ -8,7 +8,7 @@
 }
 
 .vitrin-cafe-hero {
-  --cafe-color: #1e3a5f;
+  --cafe-color: #333336;
   position: relative;
   padding: 16px;
   margin-block-start: calc(-1 * var(--header-height));
@@ -28,7 +28,7 @@
   padding-block: 160px 192px;
   border-radius: 16px 16px 12px 12px;
   color: #fff;
-  background: #343b49;
+  background: var(--cafe-color);
 }
 
 .vitrin-cafe-hero-cover::before {
@@ -297,9 +297,9 @@
   display: grid;
   gap: 10px;
   border-radius: 16px;
-  background: #24160ae6;
+  background: color-mix(in srgb, var(--primary) 92%, transparent);
   backdrop-filter: blur(8px);
-  color: #fffff5;
+  color: var(--on-primary);
 }
 
 .vitrin-menu-card-details h3 {
@@ -313,7 +313,7 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
   line-height: 24px;
-  color: #fffff5cc;
+  color: color-mix(in srgb, var(--on-primary) 85%, transparent);
 }
 
 .vitrin-menu-card-details > div {
@@ -326,12 +326,12 @@
 }
 
 .vitrin-menu-card-details .quantity {
-  color: #fffff5;
-  background: #ffffff1a;
+  color: var(--on-primary);
+  background: color-mix(in srgb, var(--on-primary) 12%, transparent);
 }
 
 .vitrin-menu-card-details .quantity button {
-  color: #fffff5;
+  color: var(--on-primary);
 }
 
 @media (max-width: 1279px) {
@@ -418,8 +418,8 @@
   margin-block-end: 12px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: #17211ad9;
-  color: #fff;
+  background: var(--primary);
+  color: var(--on-primary);
 }
 
 .vitrin-scanner textarea {
@@ -449,11 +449,11 @@
   display: grid;
   align-items: stretch;
   gap: 16px;
-  border: 1px solid #debfa099;
+  border: 1px solid var(--line);
   border-radius: 32px;
   padding: 20px;
-  background: color-mix(in srgb, var(--surface) 80%, white 20%);
-  box-shadow: 0 28px 80px -30px #462d182e;
+  background: var(--surface);
+  box-shadow: 0 28px 80px -30px #22222b24;
 }
 
 .vitrin-list-filters-blog {
@@ -595,7 +595,7 @@
   flex: 1;
   border: 0;
   height: 1px;
-  background: #e9d4bf;
+  background: var(--line);
 }
 
 .vitrin-marketing-heading > p {
@@ -645,7 +645,7 @@
   border-radius: 50%;
   padding: 9px;
   color: var(--accent);
-  background: #e9d4bf;
+  background: var(--line);
 }
 
 .vitrin-marketing-feature h3 {
@@ -676,7 +676,7 @@
 
 .vitrin-contact-grid .panel {
   border-radius: 24px;
-  border-color: #e9d4bf;
+  border-color: var(--line);
   padding: 24px;
 }
 
@@ -731,7 +731,7 @@
 .vitrin-basket .cart-item.panel,
 .vitrin-basket .order-summary.panel,
 .vitrin-basket .checkout-layout > .stack > .panel {
-  border-color: #debfa099;
+  border-color: var(--line);
   border-radius: 24px;
 }
 
@@ -746,10 +746,10 @@
 
 .vitrin-profile-editor.panel {
   padding: clamp(20px, 3.5vw, 32px);
-  border: 1px solid #debfa099;
+  border: 1px solid var(--line);
   border-radius: 32px;
-  box-shadow: 0 28px 80px -30px #462d182e;
-  background: color-mix(in srgb, var(--surface) 80%, white 20%);
+  box-shadow: 0 28px 80px -30px #22222b24;
+  background: var(--surface);
 }
 
 .vitrin-profile-editor .image-upload img {
@@ -773,7 +773,7 @@
   align-items: start;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 761px) {
   .vitrin-map-page .cafe-explorer {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -827,7 +827,7 @@
     box-shadow: none;
   }
 
-  .vitrin-map-page .explorer-heading a {
+  .vitrin-map-page .explorer-map-menu {
     display: none;
   }
 
@@ -905,7 +905,7 @@
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 760px) {
   .vitrin-marketing-heading hr {
     display: none;
   }
@@ -964,10 +964,6 @@
 
   .vitrin-map-page .explorer-drawer-handle > span {
     background: var(--text);
-  }
-
-  .vitrin-directory-page .explorer-filter-trigger {
-    display: none;
   }
 
   .vitrin-directory-page .vitrin-content.page-cafes:not(:has(.cafe-explorer)) {

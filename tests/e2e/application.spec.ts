@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('public views are Persian, RTL, responsive, navigable and free of browser errors', async ({
   page,
+  isMobile,
 }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -40,6 +41,22 @@ test('public views are Persian, RTL, responsive, navigable and free of browser e
     await expect(page.locator('h1:visible').first()).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'fa');
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    if (isMobile && ['/', '/cafes', '/orders', '/profile'].includes(route)) {
+      const nav = page.getByRole('navigation', { name: 'پیمایش موبایل' });
+      await expect(nav.getByRole('link')).toHaveText(['خانه', 'کافه‌ها', 'سفارش‌ها', 'حساب من']);
+      await expect(nav.locator('[aria-current="page"]')).toHaveAttribute('href', route);
+      await expect(nav).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+      if (route === '/cafes') {
+        await expect(page.getByRole('heading', { name: 'کافه‌های اطراف من' })).toBeVisible();
+        await page.getByRole('button', { name: 'باز کردن منو' }).click();
+        const menu = page.getByRole('dialog', { name: 'منوی اصلی ویترین کافه' });
+        await expect(menu.getByRole('link', { name: 'اسکن منوی کافه' })).toHaveAttribute(
+          'href',
+          '/scanner',
+        );
+        await menu.getByRole('button', { name: 'بستن' }).click();
+      }
+    }
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
       route + ' horizontal overflow',
@@ -53,6 +70,12 @@ test('public views are Persian, RTL, responsive, navigable and free of browser e
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  if (isMobile) {
+    await expect(page.getByRole('navigation', { name: 'پیمایش موبایل' })).toHaveCSS(
+      'background-color',
+      'rgb(35, 35, 38)',
+    );
+  }
   expect(errors).toEqual([]);
 });
 

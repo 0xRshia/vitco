@@ -10,9 +10,7 @@ import {
   ChevronDown,
   Coffee,
   CreditCard,
-  Filter,
   Headphones,
-  Home,
   Landmark,
   LayoutDashboard,
   LogIn,
@@ -20,8 +18,6 @@ import {
   Menu,
   MessageCircleMore,
   NotebookText,
-  QrCode,
-  Search,
   Settings,
   ShieldCheck,
   ShoppingBag,
@@ -34,6 +30,7 @@ import {
 } from 'lucide-react';
 import { api, useApp, useResource } from '@/lib/client';
 import { digits } from '@/lib/format';
+import { MobileNavigation } from './mobile-navigation';
 
 const accountLinks = [
   { href: '/profile', label: 'پروفایل کاربری', icon: UserRound },
@@ -70,16 +67,21 @@ const footerLinks = [
   { href: '/faq', label: 'سوالات متداول' },
 ];
 
-const CafeFilterAction = createContext<{ current: (() => void) | null } | null>(null);
-export function useVitrinCafeFilter(open: () => void, enabled: boolean) {
-  const action = useContext(CafeFilterAction);
-  useEffect(() => {
-    if (!action || !enabled) return;
-    action.current = open;
-    return () => {
-      action.current = null;
-    };
-  }, [action, enabled, open]);
+const MainMenuDialog = createContext<React.RefObject<HTMLDialogElement | null> | null>(null);
+
+export function MapMenuButton() {
+  const menu = useContext(MainMenuDialog);
+  return (
+    <button
+      type="button"
+      className="icon-button explorer-map-menu"
+      aria-label="باز کردن منو"
+      aria-controls="vitrin-menu"
+      onClick={() => menu?.current?.showModal()}
+    >
+      <Menu size={21} />
+    </button>
+  );
 }
 
 function Wordmark() {
@@ -138,7 +140,6 @@ export function VitrinLayout({
   const router = useRouter();
   const { data, cart, setCart, refresh, toast } = useApp();
   const menu = useRef<HTMLDialogElement>(null);
-  const filterAction = useRef<(() => void) | null>(null);
   const user = data?.user;
   const directory = page === 'cafes' && !id;
   const map = directory && query.get('view') !== 'list';
@@ -169,6 +170,7 @@ export function VitrinLayout({
         : '';
   const links = [
     ...publicLinks,
+    { href: '/scanner', label: 'اسکن منوی کافه' },
     ...(user
       ? [
           { href: '/profile', label: 'حساب کاربری' },
@@ -179,9 +181,6 @@ export function VitrinLayout({
     footerLinks[2],
     footerLinks[3],
   ];
-  const profileActive = accountPages.has(page);
-  const qrActive = page === 'scan' || page === 'scanner';
-  const listingSearch = !id && (page === 'blog' || page === 'events');
   const active = (href: string) => path === href || path.startsWith(href + '/');
   const closeMenu = () => menu.current?.close();
   useEffect(() => {
@@ -238,6 +237,17 @@ export function VitrinLayout({
       <header className="vitrin-header">
         <Wordmark />
         <div className="vitrin-header-actions">
+          {cartVisible && (
+            <Link
+              className="vitrin-menu-button vitrin-cart-link"
+              href={'/cart' + (cafeId ? '?cafe=' + encodeURIComponent(cafeId) : '')}
+              aria-label="سبد خرید"
+              aria-current={page === 'cart' ? 'page' : undefined}
+            >
+              <ShoppingCart size={20} />
+              {cartCount > 0 && <span>{digits(cartCount)}</span>}
+            </Link>
+          )}
           {user ? (
             <details className="vitrin-user-menu" key={path}>
               <summary aria-label="منوی کاربر">
@@ -313,73 +323,17 @@ export function VitrinLayout({
               </span>
             </nav>
           )}
-          <CafeFilterAction.Provider value={filterAction}>
+          <MainMenuDialog.Provider value={menu}>
             {account ? (
               <AccountLayout onLogout={() => void logout()}>{children}</AccountLayout>
             ) : (
               children
             )}
-          </CafeFilterAction.Provider>
+          </MainMenuDialog.Provider>
         </main>
       </div>
       {!dashboard && <VitrinFooter />}
-      <nav className="vitrin-bottom" aria-label="پیمایش موبایل">
-        <Link href="/" aria-label="خانه">
-          <Home size={24} />
-        </Link>
-        {listingSearch ? (
-          <button
-            type="button"
-            aria-label="جستجو"
-            aria-controls="vitrin-list-search"
-            onClick={() => document.getElementById('vitrin-list-search')?.focus()}
-          >
-            <Search size={24} />
-          </button>
-        ) : (
-          <Link href="/cafes" aria-label="جستجو" aria-current={directory ? 'page' : undefined}>
-            <Search size={24} />
-          </Link>
-        )}
-        <Link
-          className="vitrin-bottom-qr"
-          href="/scanner"
-          aria-label="اسکنر QR"
-          aria-current={qrActive ? 'page' : undefined}
-        >
-          <QrCode size={28} />
-        </Link>
-        {directory ? (
-          <button type="button" aria-label="فیلترها" onClick={() => filterAction.current?.()}>
-            <Filter size={24} />
-          </button>
-        ) : cartVisible ? (
-          <Link
-            href={'/cart' + (cafeId ? '?cafe=' + encodeURIComponent(cafeId) : '')}
-            aria-label="سبد خرید"
-            aria-current={page === 'cart' ? 'page' : undefined}
-          >
-            <ShoppingCart size={24} />
-            {cartCount > 0 && <span>{digits(cartCount)}</span>}
-          </Link>
-        ) : (
-          <Link
-            href={user ? '/profile' : '/login'}
-            aria-label="حساب کاربری"
-            aria-current={profileActive ? 'page' : undefined}
-          >
-            <UserRound size={24} />
-          </Link>
-        )}
-        <button
-          type="button"
-          aria-label="باز کردن منو"
-          aria-controls="vitrin-menu"
-          onClick={() => menu.current?.showModal()}
-        >
-          <Menu size={24} />
-        </button>
-      </nav>
+      <MobileNavigation page={page} />
     </div>
   );
 }
@@ -520,6 +474,7 @@ function WorkspaceNav({ admin, cafe, owner }: { admin: boolean; cafe?: string; o
     {
       label: 'محتوا',
       links: [
+        { href: '/admin/placements', label: 'جایگاه‌های صفحه اول', icon: Sparkles },
         { href: '/admin/articles', label: 'مقالات', icon: NotebookText },
         { href: '/admin/testimonials', label: 'نظرات کافه‌ها', icon: MessageCircleMore },
       ],

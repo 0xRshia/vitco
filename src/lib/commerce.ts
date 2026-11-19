@@ -21,11 +21,12 @@ import type {
   Reservation,
 } from './types';
 
+export const cafeSql = `SELECT c.*,
+  (SELECT AVG(rating) FROM reviews WHERE cafe_id=c.id AND visible=1) rating,
+  (SELECT COUNT(*) FROM reviews WHERE cafe_id=c.id AND visible=1) review_count FROM cafes c`;
+
 export function cafeById(id: string) {
-  const row = one(
-    'SELECT c.*, (SELECT AVG(rating) FROM reviews WHERE cafe_id=c.id AND visible=1) rating,(SELECT COUNT(*) FROM reviews WHERE cafe_id=c.id AND visible=1) review_count FROM cafes c WHERE c.id=?',
-    id,
-  );
+  const row = one(cafeSql + ' WHERE c.id=?', id);
   ensure(row, 'کافه پیدا نشد.', 404);
   return hydrate<Cafe>(row);
 }

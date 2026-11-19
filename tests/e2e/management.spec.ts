@@ -125,6 +125,17 @@ test('separate customer and owner accounts enforce prices, capacity, privacy and
   for (const status of ['preparing', 'ready', 'completed']) {
     expect((await owner.patch('/api/orders/' + orderId, { data: { status } })).status()).toBe(200);
   }
+  await page.goto('/');
+  const popular = page.locator('.home-menu-section');
+  await expect(popular.getByRole('heading', { name: 'بیشترین سفارش‌ها در ویتکو' })).toBeVisible();
+  await expect(popular.locator(`a[href="/products/${productId}"] h3`)).toHaveText(productData.name);
+  const placements = page.locator('.home-cafes-section');
+  await expect(placements.getByRole('heading', { name: 'برترین کافه‌های ویتکو' })).toBeVisible();
+  await expect(placements.locator(`a[href="/cafes/${cafeId}"]`)).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'کافه‌های اطراف من' })).toHaveAttribute(
+    'href',
+    '/cafes',
+  );
   const bootstrap = await (await customer.get('/api/bootstrap')).json();
   expect(bootstrap.rewards.find((r: { cafe_id: string }) => r.cafe_id === cafeId).points).toBe(20);
   expect(

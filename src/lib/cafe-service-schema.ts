@@ -12,6 +12,10 @@ export const cafeServiceSchema = `
     vip_menu INTEGER NOT NULL DEFAULT 0, tour INTEGER NOT NULL DEFAULT 0,
     recommendations INTEGER NOT NULL DEFAULT 0
   );
+  CREATE TABLE IF NOT EXISTS home_cafe_placements (
+    cafe_id TEXT PRIMARY KEY REFERENCES cafes(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL CHECK(position>0)
+  );
   CREATE TABLE IF NOT EXISTS payment_intake (
     id INTEGER PRIMARY KEY CHECK(id=1), enabled INTEGER NOT NULL CHECK(enabled IN (0,1))
   );

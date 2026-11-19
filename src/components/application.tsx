@@ -57,6 +57,7 @@ import { EventRegistrations } from './event-registrations';
 import { AboutView, BlogView, ContactView, FaqView } from './public-content';
 import { PlatformAdminView } from './platform-admin';
 import { VitrinAuthLayout, VitrinLayout } from './vitrin-layout';
+import { MobileNavigation } from './mobile-navigation';
 
 const navigation = [
   { href: '/', label: 'خانه', icon: Home },
@@ -369,34 +370,7 @@ export function Application() {
           </div>
         </footer>
       </div>
-      <nav className="bottom-nav" aria-label="پیمایش موبایل">
-        {[
-          { href: '/', icon: Home, label: 'خانه' },
-          { href: '/cafes', icon: Store, label: 'کافه‌ها' },
-          { href: '/orders', icon: ReceiptText, label: 'سفارش‌ها' },
-          { href: '/profile', icon: UserRound, label: 'حساب من' },
-        ].map((n) => {
-          const active =
-            n.href === '/cafes'
-              ? ['cafes', 'menu', 'products', 'favorites', 'bill'].includes(page)
-              : n.href === '/profile'
-                ? ['profile', 'settings', 'addresses', 'payment', 'rewards'].includes(page)
-                : path === n.href || (n.href !== '/' && path.startsWith(n.href + '/'));
-          return (
-            <Link
-              key={n.href}
-              href={n.href}
-              className={active ? 'active' : ''}
-              aria-current={active ? 'page' : undefined}
-            >
-              <span className="bottom-nav-icon" aria-hidden="true">
-                <n.icon size={22} strokeWidth={active ? 2 : 1.7} />
-              </span>
-              <span>{n.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
+      <MobileNavigation page={page} />
     </div>
   );
 }
