@@ -22,6 +22,7 @@ type Runtime = {
 const emptyPoints: MapPoint[] = [];
 const styles = {
   light: 'https://tiles.openfreemap.org/styles/positron',
+  streets: 'https://tiles.openfreemap.org/styles/liberty',
   dark: 'https://tiles.openfreemap.org/styles/dark',
 };
 const credits = [
@@ -78,6 +79,7 @@ export function MapCanvas({
   className?: string;
 }) {
   const { theme } = useApp();
+  const lightStyle = fullscreen ? styles.streets : styles.light;
   const host = useRef<HTMLDivElement>(null);
   const callbacks = useRef({ onSelect, onMove, onChange });
   callbacks.current = { onSelect, onMove, onChange };
@@ -101,12 +103,12 @@ export function MapCanvas({
     void import('@/lib/maplibre-client')
       .then(({ default: sdk }) => {
         if (!active || !host.current) return;
-        const style = dark.current ? styles.dark : styles.light;
+        const style = dark.current ? styles.dark : lightStyle;
         const map = new sdk.Map({
           container: host.current,
           style,
-          center: [53.7, 32.4],
-          zoom: 4,
+          center: fullscreen ? [51.389, 35.6892] : [53.7, 32.4],
+          zoom: fullscreen ? 14 : 4,
           maxZoom: 18,
           attributionControl: false,
           dragRotate: false,
@@ -142,9 +144,9 @@ export function MapCanvas({
           }
         });
         map.on('style.load', () => {
-          // Reuse Ham-Ghadam's minimal base, without hiding street or place names.
           for (const layer of map.getStyle().layers) {
             if (
+              !fullscreen &&
               layer.type === 'symbol' &&
               (/shield/i.test(layer.id) || layer.id === 'highway_name_motorway')
             )
@@ -207,14 +209,14 @@ export function MapCanvas({
         instance.map.remove();
       }
     };
-  }, [attempt, editable, label]);
+  }, [attempt, editable, label, fullscreen, lightStyle]);
   useEffect(() => {
-    const next = theme === 'dark' ? styles.dark : styles.light;
+    const next = theme === 'dark' ? styles.dark : lightStyle;
     if (runtime?.active && next !== appliedStyle.current) {
       appliedStyle.current = next;
       runtime.map.setStyle(next);
     }
-  }, [runtime, theme]);
+  }, [runtime, theme, lightStyle]);
   useEffect(() => {
     if (!runtime?.active) return;
     const { map, sdk } = runtime;
@@ -341,12 +343,13 @@ export function MapCanvas({
       focus.forEach((point) => bounds.extend([point.longitude, point.latitude]));
       const width = host.current!.clientWidth,
         height = host.current!.clientHeight;
-      const pad = fullscreen
+      const mobileSheet = fullscreen && window.matchMedia('(max-width: 760px)').matches;
+      const pad = mobileSheet
         ? {
-            top: height <= 500 ? 64 : 132,
-            bottom: width <= 900 ? Math.min(365, height * 0.43) + 24 : 50,
+            top: 76,
+            bottom: height * 0.2 + 100,
             left: 30,
-            right: width > 900 ? 460 : 30,
+            right: 30,
           }
         : { top: 30, bottom: 30, left: 30, right: 30 };
       const x = Math.min(1, Math.max(0, width - 120) / Math.max(1, pad.left + pad.right));

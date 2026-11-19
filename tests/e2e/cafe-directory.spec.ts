@@ -9,6 +9,10 @@ test('source cafés appear on the uncluttered map with real coordinates, attribu
   await context.setGeolocation({ latitude: fixture[1].latitude, longitude: fixture[1].longitude });
   await page.goto('/cafes?q=1453');
   const map = page.getByRole('region', { name: 'نقشه کافه‌های اطراف' });
+  if (testInfo.project.name === 'mobile') {
+    await page.getByRole('button', { name: /^(جمع کردن|گسترش) فهرست کافه‌ها$/ }).press('Escape');
+    await expect(page.locator('.cafe-explorer')).toHaveAttribute('data-drawer', 'collapsed');
+  }
   const pin = map.getByRole('button', { name: fixture[1].name, exact: true });
   await expect(pin).toBeVisible();
   const data = await (await context.request.get('/api/bootstrap')).json();
@@ -50,6 +54,8 @@ test('source cafés appear on the uncluttered map with real coordinates, attribu
   await expect(filters.getByRole('checkbox', { name: 'فضای باز', exact: true })).toBeChecked();
   await filters.getByRole('button', { name: 'حذف همه', exact: true }).click();
   await filters.getByRole('button', { name: 'اعمال فیلترها' }).click();
+  if (testInfo.project.name === 'mobile')
+    await page.getByRole('button', { name: /^فیلترها/ }).click();
   await page.getByRole('button', { name: 'فهرست کافه‌ها', exact: true }).click();
   await expect(page).toHaveURL(/view=list/);
   await page.getByRole('link', { name: /1453 cafe/ }).click();
@@ -64,6 +70,69 @@ test('source cafés appear on the uncluttered map with real coordinates, attribu
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
     true,
   );
+});
+
+test('café search opens matching cards outside the map area and without a location', async ({
+  page,
+  context,
+  isMobile,
+}, testInfo) => {
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 29.59, longitude: 52.58 });
+  await page.goto('/cafes');
+  const map = page.getByRole('region', { name: 'نقشه کافه‌های اطراف' });
+  await expect(map.getByLabel('موقعیت شما')).toHaveCount(1);
+  const search = page.getByRole('textbox', { name: 'جستجوی کافه‌ها' });
+  const results = page.locator('#cafe-map-results');
+  await search.fill(fixture[1].name);
+  await expect(results.getByRole('link', { name: /1453 cafe/ })).toHaveAttribute(
+    'href',
+    '/cafes/invara-' + fixture[1].place_id,
+  );
+  if (isMobile)
+    await expect(page.locator('.cafe-explorer')).toHaveAttribute('data-drawer', 'expanded');
+  await search.fill('کافه‌ای با نام ناموجود');
+  await expect(results.locator('.explorer-cafe-card')).toHaveCount(0);
+  await expect(results.locator('.explorer-empty')).toBeVisible();
+  await page.getByRole('button', { name: 'پاک کردن جستجو' }).click();
+  await expect(search).toHaveValue('');
+  await expect(results.locator('.explorer-empty')).toHaveCount(0);
+  await search.fill('کافه اعلا');
+  const aala = results.getByRole('link', { name: /کافه اعلا/ });
+  await expect(aala).toHaveAttribute('href', '/cafes/vitrin-aala');
+  await expect(aala).toContainText('کافه رستورانی برای خانواده ها');
+  await expect(map.getByRole('button', { name: 'کافه اعلا', exact: true })).toHaveCount(0);
+  if (isMobile) {
+    const searchBar = (await page.locator('.explorer-search').boundingBox())!;
+    expect(Math.abs(searchBar.height - 44)).toBeLessThanOrEqual(2);
+    const drawer = page.getByRole('region', { name: 'کافه‌های این محدوده' });
+    const card = (await aala.boundingBox())!;
+    await expect
+      .poll(async () =>
+        Math.abs((await drawer.boundingBox())!.y - (searchBar.y + searchBar.height)),
+      )
+      .toBeLessThan(16);
+    expect(Math.abs(card.width - searchBar.width)).toBeLessThan(4);
+    expect(card.width / card.height).toBeCloseTo(4 / 3, 1);
+    const noPhoto = (await aala.getByText('بدون تصویر').boundingBox())!;
+    const caption = (await aala.locator('.explorer-cafe-caption').boundingBox())!;
+    expect(noPhoto.y + noPhoto.height).toBeLessThanOrEqual(caption.y + 1);
+    const contact = results.getByRole('link', { name: 'تماس با ما', exact: true });
+    await expect(contact).toHaveAttribute('href', '/contact');
+    await contact.scrollIntoViewIfNeeded();
+    await expect(contact).toBeInViewport();
+    await expect(search).toBeInViewport();
+    const nav = page.getByRole('navigation', { name: 'پیمایش موبایل' });
+    await expect(nav.getByRole('link')).toHaveText(['خانه', 'کافه‌ها', 'سفارش‌ها', 'حساب من']);
+    await expect(nav).toBeInViewport();
+    await aala.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath('expanded-search.png') });
+  }
+  await aala.click();
+  await expect(page).toHaveURL('/cafes/vitrin-aala');
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'کافه اعلا', exact: true }),
+  ).toBeVisible();
 });
 
 test('explicit test café runs the normal table booking, history and cancellation flow with visible demo notices', async ({

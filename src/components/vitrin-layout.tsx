@@ -69,17 +69,30 @@ const footerLinks = [
 
 const MainMenuDialog = createContext<React.RefObject<HTMLDialogElement | null> | null>(null);
 
-export function MapMenuButton() {
+export function MapMenuButton({ onBeforeOpen }: { onBeforeOpen?: () => void }) {
   const menu = useContext(MainMenuDialog);
   return (
     <button
       type="button"
-      className="icon-button explorer-map-menu"
-      aria-label="باز کردن منو"
+      className={
+        onBeforeOpen ? 'button secondary explorer-map-menu' : 'icon-button explorer-map-menu'
+      }
+      aria-label={onBeforeOpen ? 'باز کردن منوی اصلی' : 'باز کردن منو'}
       aria-controls="vitrin-menu"
-      onClick={() => menu?.current?.showModal()}
+      onClick={(event) => {
+        const showMenu = () => menu?.current?.showModal();
+        const sheet = event.currentTarget.closest('dialog');
+        if (onBeforeOpen && sheet?.open) {
+          sheet.addEventListener('close', showMenu, { once: true });
+          onBeforeOpen();
+        } else {
+          onBeforeOpen?.();
+          showMenu();
+        }
+      }}
     >
       <Menu size={21} />
+      {onBeforeOpen && 'منوی اصلی'}
     </button>
   );
 }
@@ -514,7 +527,7 @@ function WorkspaceNav({ admin, cafe, owner }: { admin: boolean; cafe?: string; o
   );
 }
 
-function VitrinFooter() {
+export function VitrinFooter() {
   const year = new Intl.DateTimeFormat('fa-IR', {
     year: 'numeric',
     timeZone: 'Asia/Tehran',

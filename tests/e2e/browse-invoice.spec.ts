@@ -84,26 +84,26 @@ test('responsive map selects café details, supports drawer and filters, and ope
   await page.goto('/cafes?q=' + encodeURIComponent(unique));
   await worker;
   const map = page.getByRole('region', { name: 'نقشه کافه‌های اطراف' });
+  const explorer = page.locator('.cafe-explorer');
+  const handle = explorer.getByRole('button', { name: /^(جمع کردن|گسترش) فهرست کافه‌ها$/ });
   await expect(map).toBeVisible();
   const box = await map.boundingBox();
   if (testInfo.project.name === 'mobile') {
     expect(box!.height).toBeGreaterThan(testInfo.project.use.viewport!.height - 5);
+    await handle.press('Escape');
+    await expect(explorer).toHaveAttribute('data-drawer', 'collapsed');
   } else {
     expect(box!.width).toBeLessThan(testInfo.project.use.viewport!.width / 2);
     expect(box!.height).toBeGreaterThan(400);
   }
   await map.getByRole('button', { name: cafe.name, exact: true }).click();
   const drawer = page.getByRole('region', { name: 'کافه‌های این محدوده' });
-  await expect(
-    drawer.locator('.cafe-row.selected').getByRole('heading', { name: cafe.name, exact: true }),
-  ).toBeVisible();
-  await expect(drawer.getByRole('link', { name: 'صفحه کافه' })).toHaveAttribute(
-    'href',
-    '/cafes/' + cafe.id,
-  );
-  await expect(drawer.getByRole('link', { name: 'صفحه کافه' })).toBeInViewport();
+  const selected = drawer.locator('.explorer-cafe-card[data-selected="true"]');
+  await expect(selected.getByRole('heading', { name: cafe.name, exact: true })).toBeVisible();
+  const selectedLink = drawer.getByRole('link', { name: new RegExp(cafe.name) });
+  await expect(selectedLink).toHaveAttribute('href', '/cafes/' + cafe.id);
+  await expect(selectedLink).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath('fullscreen-map.png') });
-  const handle = drawer.getByRole('button', { name: 'گسترش فهرست کافه‌ها' });
   await handle.focus();
   await handle.press('ArrowUp');
   await expect(page.locator('.cafe-explorer')).toHaveAttribute('data-drawer', 'expanded');
@@ -117,6 +117,8 @@ test('responsive map selects café details, supports drawer and filters, and ope
   await expect(
     map.getByRole('button', { name: `کافه فضای باز ${unique}`, exact: true }),
   ).toBeVisible();
+  if (testInfo.project.name === 'mobile')
+    await page.getByRole('button', { name: /^فیلترها/ }).click();
   await page.getByRole('button', { name: 'فهرست کافه‌ها', exact: true }).click();
   await expect(page).toHaveURL(/view=list/);
   await expect(

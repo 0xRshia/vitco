@@ -261,6 +261,12 @@
   padding: 0 32px 32px;
 }
 
+@media (min-width: 761px) {
+  .explorer-results-scroll .vitrin-footer {
+    display: none;
+  }
+}
+
 .vitrin-footer-inner {
   border-radius: 32px;
   padding: 48px;
@@ -676,6 +682,15 @@
   .vitrin-footer {
     margin-block-start: 40px;
     padding-inline: 16px;
+  }
+
+  .vitrin-map-page > .vitrin-footer {
+    display: none;
+  }
+
+  .explorer-results-scroll .vitrin-footer {
+    margin-block: 24px 0;
+    padding: 0;
   }
 
   .vitrin-footer-inner {

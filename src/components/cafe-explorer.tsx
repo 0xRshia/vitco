@@ -1,10 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import {
   ArrowLeft,
-  ChevronDown,
   List,
   LocateFixed,
   Map,
@@ -26,9 +25,10 @@ import {
 } from '@/lib/cafe-discovery';
 import type { Cafe } from '@/lib/types';
 import { CafeCard } from './browse-cards';
+import { ExplorerCafeCard } from './explorer-cafe-card';
 import { MapCanvas, type MapBounds as Bounds } from './map-canvas';
 import { Empty, Field, LoginGate, Modal, PageTitle } from './ui';
-import { MapMenuButton } from './vitrin-layout';
+import { MapMenuButton, VitrinFooter } from './vitrin-layout';
 
 type Camera = { points: GeoPoint[]; zoom?: number; revision: number };
 type MappedCafe = Cafe & GeoPoint;
@@ -41,8 +41,7 @@ export function CafeExplorer({
   listOnly?: boolean;
 }) {
   const { data } = useApp(),
-    query = useSearchParams(),
-    router = useRouter();
+    query = useSearchParams();
   const readFilters = (): CafeFilters => ({
     search: query.get('q') || '',
     city: query.get('city') || '',
@@ -65,7 +64,9 @@ export function CafeExplorer({
     [locationError, setLocationError] = useState('');
   const [camera, setCamera] = useState<Camera | null>(null),
     [selected, setSelected] = useState('');
-  const [snap, setSnap] = useState<'collapsed' | 'preview' | 'expanded'>('preview');
+  const [snap, setSnap] = useState<'collapsed' | 'preview' | 'expanded'>(() =>
+    query.get('q')?.trim() ? 'expanded' : 'preview',
+  );
   const [dragHeight, setDragHeight] = useState<number | null>(null),
     [height, setHeight] = useState(800);
   const page = useRef<HTMLDivElement>(null),
@@ -84,21 +85,20 @@ export function CafeExplorer({
     [source, data?.products, filters, origin],
   );
   const mapped = useMemo(() => cafes.filter((c): c is MappedCafe => hasCoordinates(c)), [cafes]);
-  const unmappedCount = cafes.filter((c) => !c.is_demo && !hasCoordinates(c)).length;
   const active = cafes.find((c) => c.id === selected);
-  const within = mapped.filter(
+  const searching = Boolean(filters.search.trim());
+  const matches = cafes.filter(
     (c) =>
-      !bounds ||
-      (c.latitude >= bounds.south &&
-        c.latitude <= bounds.north &&
-        c.longitude >= bounds.west &&
-        c.longitude <= bounds.east),
+      !c.is_demo &&
+      (searching ||
+        !bounds ||
+        !hasCoordinates(c) ||
+        (c.latitude >= bounds.south &&
+          c.latitude <= bounds.north &&
+          c.longitude >= bounds.west &&
+          c.longitude <= bounds.east)),
   );
-  const results = active
-    ? [active, ...within.filter((c) => c.id !== active.id)]
-    : mapped.length
-      ? within
-      : cafes;
+  const results = active ? [active, ...matches.filter((cafe) => cafe.id !== active.id)] : matches;
   const cities = [...new Set(source.map((c) => c.city).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b, 'fa'),
   );
@@ -120,11 +120,10 @@ export function CafeExplorer({
     setDraft(filters);
     setFilterOpen(true);
   };
-  const headerClearance = height <= 500 ? 64 : 132;
-  const maximumDrawer = Math.max(80, height - headerClearance - 16);
+  const maximumDrawer = Math.max(80, height - 54);
   const snaps = {
-    collapsed: Math.min(92, maximumDrawer),
-    preview: Math.max(Math.min(92, maximumDrawer), Math.min(365, height * 0.43, maximumDrawer)),
+    collapsed: Math.min(116, maximumDrawer),
+    preview: Math.min(active ? height * 0.5 : height * 0.2 + 76, maximumDrawer),
     expanded: maximumDrawer,
   };
   useEffect(() => {
@@ -167,7 +166,7 @@ export function CafeExplorer({
     });
     for (const [key, value] of [...params])
       if (!value || (listOnly && key === 'view')) params.delete(key);
-    router.replace(path + (params.size ? '?' + params : ''), { scroll: false });
+    window.history.replaceState(null, '', path + (params.size ? '?' + params : ''));
     if ('city' in patch) {
       const points = discoverCafes(source, data?.products || [], next, origin).filter(
         (c): c is MappedCafe => hasCoordinates(c),
@@ -208,6 +207,13 @@ export function CafeExplorer({
   function select(id: string) {
     setSelected(id);
     setSnap('preview');
+  }
+  function searchFor(value: string) {
+    update({ search: value });
+    if (mapView && value.trim()) {
+      setSnap('expanded');
+      list.current?.scrollTo({ top: 0 });
+    }
   }
   function startDrag(event: PointerEvent<HTMLButtonElement>) {
     if (!event.isPrimary || event.button !== 0) return;
@@ -251,16 +257,16 @@ export function CafeExplorer({
         onSubmit={(event) => {
           event.preventDefault();
           update({ search: filters.search });
+          event.currentTarget.querySelector('input')?.blur();
         }}
       >
         <Search size={20} />
         <input
           aria-label="جستجوی کافه‌ها"
-          placeholder="جستجوی کافه یا محله"
+          enterKeyHint="search"
+          placeholder={mapView ? 'جستجوی کافه‌ها…' : 'جستجوی کافه یا محله'}
           value={filters.search}
-          onChange={(event) =>
-            setFilters((current) => ({ ...current, search: event.target.value }))
-          }
+          onChange={(event) => searchFor(event.target.value)}
         />
         {filters.search && (
           <button type="button" aria-label="پاک کردن جستجو" onClick={() => update({ search: '' })}>
@@ -376,6 +382,21 @@ export function CafeExplorer({
               onChange={(event) => setDraft({ ...draft, discount: event.target.checked })}
             />
           </label>
+          {mapView && (
+            <div className="explorer-mobile-tools">
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => {
+                  setFilterOpen(false);
+                  update({}, 'list');
+                }}
+              >
+                <List size={18} /> فهرست کافه‌ها
+              </button>
+              <MapMenuButton onBeforeOpen={() => setFilterOpen(false)} />
+            </div>
+          )}
           {mapView && (
             <button
               className="button secondary"
@@ -506,7 +527,6 @@ export function CafeExplorer({
       />
       <header className="explorer-floating-header">
         <div className="explorer-heading">
-          <MapMenuButton />
           <h1>کافه‌های اطراف من</h1>
           <button
             className="icon-button"
@@ -574,10 +594,9 @@ export function CafeExplorer({
           }}
         >
           <span />
-          <ChevronDown size={17} />
         </button>
         <div className="explorer-results-heading">
-          <h2>{active ? 'کافه انتخاب‌شده' : 'کافه‌های این محدوده'}</h2>
+          <h2>{active ? 'کافه انتخاب‌شده' : searching ? 'نتایج جستجو' : 'کافه‌ها'}</h2>
           <span role="status">{digits(results.length)} کافه</span>
           {active && (
             <button
@@ -594,34 +613,25 @@ export function CafeExplorer({
           className="explorer-results-scroll"
           ref={list}
           hidden={snap === 'collapsed'}
+          onScroll={(event) => {
+            if (snap === 'preview' && event.currentTarget.scrollTop > 0) setSnap('expanded');
+          }}
         >
           {directoryNotice && (
             <p className="explorer-unmapped" role="status">
               {directoryNotice}
             </p>
           )}
-          {demo && !active && (
-            <Link className="text-link explorer-demo-link" href={'/reserve?cafe=' + demo.id}>
-              آزمایش رزرو میز
-            </Link>
-          )}
-          {!active && unmappedCount > 0 && (
-            <p className="explorer-unmapped">
-              {digits(unmappedCount)} کافه هنوز موقعیت ثبت‌شده ندارند.{' '}
-              <button className="text-link" onClick={() => update({}, 'list')}>
-                دیدن فهرست
-              </button>
-            </p>
-          )}
-          {results.slice(0, visibleCount).map((cafe) => (
-            <CafeCard
-              key={cafe.id}
-              cafe={cafe}
-              origin={origin || bounds?.center}
-              selected={active?.id === cafe.id}
-              onSelect={() => select(cafe.id)}
-            />
-          ))}
+          <div className="explorer-result-cards">
+            {results.slice(0, visibleCount).map((cafe) => (
+              <ExplorerCafeCard
+                key={cafe.id}
+                cafe={cafe}
+                origin={origin}
+                selected={active?.id === cafe.id}
+              />
+            ))}
+          </div>
           {results.length > visibleCount && (
             <button
               className="button secondary full"
@@ -633,13 +643,25 @@ export function CafeExplorer({
           {!results.length && (
             <div className="explorer-empty">
               <MapPin size={25} />
-              <h3>کافه‌ای در این محدوده پیدا نشد</h3>
-              <p>نقشه را حرکت بده یا فیلترها را تغییر بده.</p>
+              <h3>
+                {searching ? 'کافه‌ای با این مشخصات پیدا نشد' : 'کافه‌ای در این محدوده پیدا نشد'}
+              </h3>
+              <p>
+                {searching
+                  ? 'نام کافه یا محله دیگری را جستجو کن.'
+                  : 'نقشه را حرکت بده یا فیلترها را تغییر بده.'}
+              </p>
               <button className="text-link" onClick={() => update({}, 'list')}>
                 دیدن فهرست کافه‌ها <ArrowLeft size={16} />
               </button>
             </div>
           )}
+          {demo && !searching && !active && (
+            <Link className="text-link explorer-demo-link" href={'/reserve?cafe=' + demo.id}>
+              آزمایش رزرو میز
+            </Link>
+          )}
+          <VitrinFooter />
         </div>
       </section>
       {sheets}

@@ -48,7 +48,11 @@ test('public views are Persian, RTL, responsive, navigable and free of browser e
       await expect(nav).toHaveCSS('background-color', 'rgb(255, 255, 255)');
       if (route === '/cafes') {
         await expect(page.getByRole('heading', { name: 'کافه‌های اطراف من' })).toBeVisible();
-        await page.getByRole('button', { name: 'باز کردن منو' }).click();
+        await page.getByRole('button', { name: /^فیلترها/ }).click();
+        await page
+          .getByRole('dialog', { name: 'فیلتر کافه‌ها' })
+          .getByRole('button', { name: 'باز کردن منوی اصلی', exact: true })
+          .click();
         const menu = page.getByRole('dialog', { name: 'منوی اصلی ویترین کافه' });
         await expect(menu.getByRole('link', { name: 'اسکن منوی کافه' })).toHaveAttribute(
           'href',
