@@ -261,9 +261,10 @@ export type Bootstrap = {
   googleAvailable?: boolean;
   directory?: {
     configured: boolean;
-    status: 'disabled' | 'ready' | 'stale' | 'unavailable';
+    status: 'disabled' | 'ready' | 'refreshing' | 'stale' | 'unavailable';
     synced_at: string | null;
     cafe_count: number;
+    refresh_after_ms: number;
   };
   onlinePayment: OnlinePaymentConfig;
   user: User | null;

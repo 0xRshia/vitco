@@ -6,6 +6,7 @@ export async function api<T = Record<string, unknown>>(
   path: string,
   method = 'GET',
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   const form = body instanceof FormData;
   const response = await fetch('/api/' + path, {
@@ -13,6 +14,7 @@ export async function api<T = Record<string, unknown>>(
     headers: body && !form ? { 'Content-Type': 'application/json' } : undefined,
     body: form ? body : body ? JSON.stringify(body) : undefined,
     cache: 'no-store',
+    signal,
   }).catch(() => {
     throw new Error('ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی و دوباره تلاش کنید.');
   });
@@ -25,8 +27,16 @@ export async function api<T = Record<string, unknown>>(
     });
   return data;
 }
+type Directory = NonNullable<Bootstrap['directory']>;
+type ClientDirectory = Directory & { checkAt: number };
+type ClientBootstrap = Omit<Bootstrap, 'directory'> & { directory?: ClientDirectory };
+type DirectoryUpdate = { directory: Directory; cafes?: Bootstrap['cafes'] };
+function receivedDirectory(directory: Directory): ClientDirectory {
+  return { ...directory, checkAt: Date.now() + directory.refresh_after_ms };
+}
 type Context = {
-  data: Bootstrap | null;
+  data: ClientBootstrap | null;
+  updateDirectory: (previous: ClientDirectory, update: DirectoryUpdate) => void;
   loading: boolean;
   error: string;
   refresh: () => Promise<void>;
@@ -40,7 +50,7 @@ type Context = {
 };
 const AppContext = createContext<Context | null>(null);
 export function Provider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<Bootstrap | null>(null),
+  const [data, setData] = useState<ClientBootstrap | null>(null),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(''),
     [cart, setCartState] = useState<CartLine[]>([]),
@@ -50,7 +60,16 @@ export function Provider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     try {
       const next = await api<Bootstrap>('bootstrap');
-      setData(next);
+      const directory = next.directory && receivedDirectory(next.directory);
+      setData((current) => {
+        // A slower bootstrap must not replace a directory that finished syncing meanwhile.
+        if (
+          current?.directory?.synced_at &&
+          current.directory.synced_at > (directory?.synced_at ?? '')
+        )
+          return { ...next, directory: current.directory, cafes: current.cafes };
+        return { ...next, directory };
+      });
       setError('');
       setRevision((v) => v + 1);
     } catch (e) {
@@ -58,6 +77,14 @@ export function Provider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
+  }, []);
+  const updateDirectory = useCallback((previous: ClientDirectory, update: DirectoryUpdate) => {
+    const directory = receivedDirectory(update.directory);
+    setData((current) =>
+      current?.directory === previous
+        ? { ...current, directory, cafes: update.cafes ?? current.cafes }
+        : current,
+    );
   }, []);
   useEffect(() => {
     void refresh();
@@ -140,6 +167,7 @@ export function Provider({ children }: { children: ReactNode }) {
     <AppContext.Provider
       value={{
         data,
+        updateDirectory,
         loading,
         error,
         refresh,
@@ -165,6 +193,54 @@ export function useApp() {
   const value = useContext(AppContext);
   if (!value) throw new Error('Provider required');
   return value;
+}
+export function useCafeDirectory() {
+  const { data, updateDirectory } = useApp();
+  const directory = data?.directory;
+  useEffect(() => {
+    if (!directory?.configured) return;
+    const controller = new AbortController();
+    let timer: number;
+    let pending = false;
+    async function check(previous: ClientDirectory) {
+      pending = true;
+      const query = new URLSearchParams({ since: previous.synced_at ?? '' });
+      try {
+        const update = await api<DirectoryUpdate>(
+          'cafe-directory?' + query,
+          'GET',
+          undefined,
+          controller.signal,
+        );
+        if (!controller.signal.aborted) updateDirectory(previous, update);
+      } catch {
+        if (!controller.signal.aborted)
+          updateDirectory(previous, {
+            directory: {
+              ...previous,
+              status: previous.synced_at ? 'stale' : 'unavailable',
+              refresh_after_ms: 60_000,
+            },
+          });
+      }
+    }
+    function schedule() {
+      window.clearTimeout(timer);
+      if (!document.hidden && !pending && directory)
+        timer = window.setTimeout(
+          () => void check(directory),
+          Math.max(0, directory.checkAt - Date.now()),
+        );
+    }
+    schedule();
+    document.addEventListener('visibilitychange', schedule);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+      document.removeEventListener('visibilitychange', schedule);
+    };
+  }, [directory, updateDirectory]);
+  return data;
 }
 export function useResource<T>(path: string | null) {
   const { revision } = useApp();

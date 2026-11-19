@@ -1,5 +1,50 @@
 import { test, expect } from '@playwright/test';
 import fixture from '../fixtures/hmghadam-cafes.json';
+import type { Bootstrap } from '../../src/lib/types';
+
+test('an open café search replaces its saved catalogue after sync without a page reload', async ({
+  page,
+  request,
+}) => {
+  // Replay an older browser snapshot, then let the real directory endpoint reconcile it.
+  const snapshot: Bootstrap = await (await request.get('/api/bootstrap')).json();
+  const directory = snapshot.directory!;
+  const previous = new Date(Date.parse(directory.synced_at!) - 16 * 60_000).toISOString();
+  const importedId = 'invara-' + fixture[1].place_id;
+  const saved = snapshot.cafes.filter((cafe) => cafe.id !== importedId);
+  let bootstrapLoads = 0;
+  await page.route('**/api/bootstrap', async (route) => {
+    bootstrapLoads++;
+    await route.fulfill({
+      json: {
+        ...snapshot,
+        cafes: saved,
+        directory: { ...directory, synced_at: previous, status: 'refreshing', refresh_after_ms: 0 },
+      },
+    });
+  });
+
+  const update = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === '/api/cafe-directory' && url.searchParams.get('since') === previous;
+  });
+  await page.goto('/cafes?q=1453');
+  const fresh = await (await update).json();
+  expect(fresh.directory).toMatchObject({ status: 'ready', synced_at: directory.synced_at });
+  const results = page.locator('#cafe-map-results');
+  await expect(results.getByRole('link', { name: fixture[1].name })).toHaveAttribute(
+    'href',
+    '/cafes/' + importedId,
+  );
+  await expect(results.locator('.explorer-unmapped')).toHaveCount(0);
+  expect(bootstrapLoads).toBe(1);
+
+  const unchanged = await request.get('/api/cafe-directory', {
+    params: { since: fresh.directory.synced_at },
+  });
+  expect(unchanged.ok()).toBe(true);
+  expect(await unchanged.json()).not.toHaveProperty('cafes');
+});
 
 test('source cafés appear on the uncluttered map with real coordinates, attribution and consolidated filters', async ({
   page,

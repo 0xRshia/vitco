@@ -41,7 +41,7 @@ import { productCategory } from '@/lib/catalog';
 import { publicPaymentAvailability } from '@/lib/payment-intake';
 import { startPayment, checkPayment, paymentCallback } from '@/lib/payments';
 import { quoteInvoice, createInvoice } from '@/lib/invoices';
-import { syncCafeDirectory, directoryStatus } from '@/lib/cafe-directory';
+import { syncCafeDirectory } from '@/lib/cafe-directory';
 import {
   bindTable,
   latestCashierCall,
@@ -100,6 +100,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const json = (value: unknown, status = 200) =>
   NextResponse.json(value, { status, headers: { 'Cache-Control': 'no-store' } });
+function publicCafes() {
+  return all(cafeSql + ' ORDER BY c.source ASC,c.name').map(hydrate<Cafe>);
+}
 function storeTableVisit(response: NextResponse, token: string, origin: string) {
   response.cookies.set(visitCookie, token, {
     httpOnly: true,
@@ -359,10 +362,19 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
       limit('invoice-quote:' + (user?.id || request.headers.get('x-real-ip') || 'public'), 60, 60);
       return json(quoteInvoice(input));
     }
-    if (['bootstrap', 'cafes'].includes(resource) && method === 'GET') await syncCafeDirectory();
+    if (resource === 'cafe-directory' && !id && method === 'GET') {
+      const directory = await syncCafeDirectory(fetch, true);
+      if (
+        directory.status === 'ready' &&
+        directory.synced_at !== request.nextUrl.searchParams.get('since')
+      )
+        return json({ directory, cafes: publicCafes() });
+      return json({ directory });
+    }
+    if (resource === 'cafes' && method === 'GET') await syncCafeDirectory();
     if (resource === 'bootstrap' && method === 'GET')
       return json({
-        directory: directoryStatus(),
+        directory: await syncCafeDirectory(),
         platformAdmin: platformAdmin(user),
         googleAvailable: googleAvailable(),
         onlinePayment: publicPaymentAvailability(),
@@ -373,7 +385,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
               user.id,
             )
           : [],
-        cafes: all(cafeSql + ' ORDER BY c.source ASC,c.name').map(hydrate),
+        cafes: publicCafes(),
         products: all(
           'SELECT p.*,c.name cafe_name FROM products p JOIN cafes c ON c.id=p.cafe_id WHERE p.vip_only=0 AND ' +
             visibleProducts +

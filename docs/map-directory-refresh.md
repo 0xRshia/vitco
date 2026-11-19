@@ -43,11 +43,18 @@ Source ratings/reviews are not presented as reviews submitted to Vitco. A source
 listing cannot receive local orders or reservations. Original raw exports,
 reviewer details and management records are not exposed through Vitco.
 
-The first catalogue request awaits the first import. Later requests serve the
-saved catalogue while a refresh runs at most every 15 minutes. Concurrent first
-loads share a request. A failed refresh retains the last successful import and
-shows an explicit saved-data notice; failure without a saved import shows an
-unavailable notice. Failures retry no more than once a minute. Imports validate
+The first catalogue request awaits the first import. After 15 minutes a catalogue
+request can start a refresh. All callers share that download. With an existing
+import, bootstrap serves the saved cafés immediately and reports an in-progress
+refresh. An open café search checks `GET /api/cafe-directory?since=<synced_at>`,
+which waits for that download. A successful response includes the new café list
+when the import timestamp changes. An unchanged timestamp returns only directory
+status. The search updates in place and uses the server's refresh interval for
+its next check.
+
+A failed refresh retains the last successful import and shows a saved-data
+notice. Failure without a saved import shows an unavailable notice. Failed
+imports retry no more than once a minute. Imports validate
 before a transaction, preserve favorites, and never overwrite an operator-owned
 record. Missing source records are retained rather than deleting user references.
 No source refresh modifies menus, ownership, orders or reservation history.

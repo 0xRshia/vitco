@@ -87,11 +87,15 @@ test('imports are idempotent, remain browse-only and cannot overwrite operator o
   assert.equal(directoryStatus().synced_at, timestamp);
 });
 
-test('authenticated refresh uses the supported export, shares one request and retains real saved data on failure', async (t) => {
+test('expired data is served while waiting callers join one authenticated refresh', async (t) => {
   process.env.CAFE_DIRECTORY_USERNAME = 'test-reader';
   process.env.CAFE_DIRECTORY_PASSWORD = 'test-only-secret';
   delete process.env.CAFE_DIRECTORY_FILE;
-  importCafeDirectory(fixture, new Date(0));
+  const old = new Date(0);
+  importCafeDirectory(fixture, old);
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const download = Promise.withResolvers<Response>();
   const urls: string[] = [];
   const transport: typeof fetch = async (input, init) => {
     const url = String(input);
@@ -103,25 +107,66 @@ test('authenticated refresh uses the supported export, shares one request and re
       });
     }
     assert.equal(new Headers(init?.headers).get('Cookie'), 'hg_crawler_session=test-session');
-    if (url.endsWith('/download/stores.json')) return Response.json(fixture);
+    if (url.endsWith('/download/stores.json')) return download.promise;
     assert.ok(url.endsWith('/api/admin/logout'));
     return Response.json({});
   };
-  await Promise.all([syncCafeDirectory(transport, true), syncCafeDirectory(transport, true)]);
+  const saved = await syncCafeDirectory(transport);
+  assert.deepEqual(saved, {
+    configured: true,
+    status: 'refreshing',
+    synced_at: old.toISOString(),
+    cafe_count: 2,
+    refresh_after_ms: 0,
+  });
+  const subscribers = [syncCafeDirectory(transport, true), syncCafeDirectory(transport, true)];
+  assert.deepEqual(await syncCafeDirectory(transport), saved);
+  assert.deepEqual(directoryStatus(), saved);
+  now += 11000;
+  download.resolve(Response.json([fixture[1]]));
+  const completed = await Promise.all(subscribers);
+  assert.deepEqual(completed[0], {
+    configured: true,
+    status: 'ready',
+    synced_at: new Date(now).toISOString(),
+    cafe_count: 1,
+    refresh_after_ms: 900000,
+  });
+  assert.deepEqual(completed[1], completed[0]);
+  now += 4000;
+  assert.equal((await syncCafeDirectory(transport, true)).refresh_after_ms, 896000);
   assert.deepEqual(
     urls,
     ['/api/admin/login', '/download/stores.json', '/api/admin/logout'].map(
       (p) => 'https://data.hmghadam.com' + p,
     ),
   );
-  assert.equal(directoryStatus().status, 'ready');
-  const last = directoryStatus().synced_at;
-  const future = Date.now() + 16 * 60000;
-  t.mock.method(Date, 'now', () => future);
-  await syncCafeDirectory(async () => new Response('unauthorized', { status: 401 }), true);
-  assert.equal(directoryStatus().status, 'stale');
-  assert.equal(directoryStatus().synced_at, last);
-  assert.equal(directoryStatus().cafe_count, 2);
+});
+
+test('failed refresh preserves the catalogue and observation requests respect the retry delay', async (t) => {
+  process.env.CAFE_DIRECTORY_USERNAME = 'test-reader';
+  process.env.CAFE_DIRECTORY_PASSWORD = 'test-only-secret';
+  delete process.env.CAFE_DIRECTORY_FILE;
+  const old = new Date(0);
+  importCafeDirectory(fixture, old);
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const denied = t.mock.fn(async () => new Response('unauthorized', { status: 401 }));
+  const saved = await syncCafeDirectory(denied, true);
+  assert.deepEqual(saved, {
+    configured: true,
+    status: 'stale',
+    synced_at: old.toISOString(),
+    cafe_count: 2,
+    refresh_after_ms: 60000,
+  });
+  now += 30000;
+  assert.equal((await syncCafeDirectory(denied, true)).refresh_after_ms, 30000);
+  assert.equal(denied.mock.callCount(), 1);
+  now += 30000;
+  assert.equal(directoryStatus().refresh_after_ms, 0);
+  assert.equal((await syncCafeDirectory(denied, true)).status, 'stale');
+  assert.equal(denied.mock.callCount(), 2);
   assert.equal(cafeById('invara-' + fixture[1].place_id).latitude, fixture[1].latitude);
   assert.ok(!JSON.stringify(directoryStatus()).includes('test-only-secret'));
 });

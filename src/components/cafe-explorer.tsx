@@ -12,7 +12,7 @@ import {
   SlidersHorizontal,
   X,
 } from 'lucide-react';
-import { useApp } from '@/lib/client';
+import { useCafeDirectory } from '@/lib/client';
 import { digits, amenities } from '@/lib/format';
 import { menuCategories, productCategory } from '@/lib/catalog';
 import {
@@ -32,6 +32,13 @@ import { MapMenuButton, VitrinFooter } from './vitrin-layout';
 
 type Camera = { points: GeoPoint[]; zoom?: number; revision: number };
 type MappedCafe = Cafe & GeoPoint;
+const directoryNotices = {
+  refreshing: 'در حال به‌روزرسانی فهرست کافه‌ها از همقدم…',
+  stale: 'آخرین اطلاعات ذخیره‌شده نمایش داده می‌شود. دریافت اطلاعات تازه ممکن نشد.',
+  unavailable: 'اطلاعات کافه‌های همقدم هنوز دریافت نشده است. کمی بعد دوباره تلاش کنید.',
+  ready: '',
+  disabled: '',
+};
 
 export function CafeExplorer({
   favorites = false,
@@ -40,7 +47,7 @@ export function CafeExplorer({
   favorites?: boolean;
   listOnly?: boolean;
 }) {
-  const { data } = useApp(),
+  const data = useCafeDirectory(),
     query = useSearchParams();
   const readFilters = (): CafeFilters => ({
     search: query.get('q') || '',
@@ -103,12 +110,7 @@ export function CafeExplorer({
     a.localeCompare(b, 'fa'),
   );
   const demo = data?.cafes.find((c) => c.is_demo && c.active);
-  const directoryNotice =
-    data?.directory?.status === 'stale'
-      ? 'آخرین اطلاعات ذخیره‌شده نمایش داده می‌شود؛ اطلاعات تازه هنوز دریافت نشده است.'
-      : data?.directory?.status === 'unavailable'
-        ? 'اطلاعات کافه‌های همقدم هنوز دریافت نشده است. کمی بعد دوباره تلاش کنید.'
-        : '';
+  const directoryNotice = data?.directory && directoryNotices[data.directory.status];
   const activeCount =
     Number(Boolean(filters.city)) +
     Number(Boolean(filters.category)) +

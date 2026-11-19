@@ -87,7 +87,7 @@ export function parseCafeDirectory(value: unknown) {
   return cafes;
 }
 
-export function importCafeDirectory(value: unknown, now = new Date()) {
+export function importCafeDirectory(value: unknown, now?: Date) {
   // Validate the entire document before touching the last successful import.
   const cafes = parseCafeDirectory(value);
   transaction(() => {
@@ -120,7 +120,7 @@ export function importCafeDirectory(value: unknown, now = new Date()) {
       `INSERT INTO cafe_directory_sync (source,synced_at,cafe_count) VALUES (?,?,?)
       ON CONFLICT(source) DO UPDATE SET synced_at=excluded.synced_at,cafe_count=excluded.cafe_count`,
       source,
-      now.toISOString(),
+      (now ?? new Date(Date.now())).toISOString(),
       cafes.length,
     );
   });
@@ -128,9 +128,9 @@ export function importCafeDirectory(value: unknown, now = new Date()) {
 }
 
 type SyncState = { synced_at: string; cafe_count: number };
-let pending: Promise<void> | null = null;
-let nextAttempt = 0;
-let failed = false;
+type DirectoryStatus = NonNullable<Bootstrap['directory']>;
+let pending: Promise<DirectoryStatus> | null = null;
+let retryAt = 0;
 function configured() {
   return Boolean(
     process.env.CAFE_DIRECTORY_FILE ||
@@ -205,45 +205,53 @@ async function fetchDirectory(transport: typeof fetch) {
       .catch(() => {});
   }
 }
-export function directoryStatus(): NonNullable<Bootstrap['directory']> {
+export function directoryStatus(): DirectoryStatus {
   const state = one<SyncState>(
     'SELECT synced_at,cafe_count FROM cafe_directory_sync WHERE source=?',
     source,
   );
-  return {
-    configured: configured(),
-    status: state
-      ? failed || Date.now() - Date.parse(state.synced_at) >= refreshMs
-        ? 'stale'
-        : 'ready'
-      : configured()
-        ? 'unavailable'
-        : 'disabled',
+  const enabled = configured();
+  const now = Date.now();
+  const status: DirectoryStatus = {
+    configured: enabled,
+    status: state ? 'stale' : 'unavailable',
     synced_at: state?.synced_at || null,
     cafe_count: state?.cafe_count || 0,
+    refresh_after_ms: 0,
   };
-}
-export async function syncCafeDirectory(transport: typeof fetch = fetch, waitForRefresh = false) {
-  if (!configured()) return;
-  const state = directoryStatus();
-  if (pending) {
-    if (!state.synced_at || waitForRefresh) await pending;
-    return;
+  if (!enabled) {
+    if (!state) status.status = 'disabled';
+  } else if (pending) {
+    status.status = 'refreshing';
+  } else if (retryAt) {
+    status.refresh_after_ms = Math.max(0, retryAt - now);
+  } else if (state) {
+    status.refresh_after_ms = Math.max(0, Date.parse(state.synced_at) + refreshMs - now);
+    if (status.refresh_after_ms > 0) status.status = 'ready';
   }
-  if (Date.now() < nextAttempt || state.status === 'ready') return;
-  pending = (async () => {
-    try {
-      importCafeDirectory(await fetchDirectory(transport));
-      failed = false;
-      nextAttempt = Date.now() + refreshMs;
-    } catch {
-      failed = true;
-      nextAttempt = Date.now() + retryMs;
-    }
-  })().finally(() => {
-    pending = null;
-  });
+  return status;
+}
+export async function syncCafeDirectory(
+  transport: typeof fetch = fetch,
+  waitForRefresh = false,
+): Promise<DirectoryStatus> {
+  if (waitForRefresh && pending) return pending;
+  const state = directoryStatus();
+  if (!state.configured || state.refresh_after_ms > 0) return state;
+  if (!pending) {
+    pending = (async () => {
+      try {
+        importCafeDirectory(await fetchDirectory(transport));
+        retryAt = 0;
+      } catch {
+        retryAt = Date.now() + retryMs;
+      } finally {
+        pending = null;
+      }
+      return directoryStatus();
+    })();
+  }
   // A saved catalogue is served immediately while its refresh runs in the background.
-  // The first import is awaited so direct café links and map data agree.
-  if (!state.synced_at || waitForRefresh) await pending;
+  if (!state.synced_at || waitForRefresh) return pending;
+  return { ...state, status: 'refreshing' };
 }
