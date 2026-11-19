@@ -20,12 +20,13 @@ type Runtime = {
   active: boolean;
 };
 const emptyPoints: MapPoint[] = [];
+const mobileMapQuery = '(max-width: 760px)';
 const styles = {
   light: 'https://tiles.openfreemap.org/styles/positron',
   streets: 'https://tiles.openfreemap.org/styles/liberty',
   dark: 'https://tiles.openfreemap.org/styles/dark',
 };
-const credits = [
+export const mapCredits = [
   { label: 'OpenFreeMap', url: 'https://openfreemap.org/' },
   { label: '© OpenMapTiles', url: 'https://www.openmaptiles.org/' },
   { label: '© OpenStreetMap', url: 'https://www.openstreetmap.org/copyright' },
@@ -38,7 +39,7 @@ function attribution() {
       element.className = 'maplibregl-ctrl map-source-credit';
       element.dir = 'ltr';
       element.setAttribute('aria-label', 'منابع نقشه');
-      for (const [index, credit] of credits.entries()) {
+      for (const [index, credit] of mapCredits.entries()) {
         if (index) element.append(' · ');
         const link = document.createElement('a');
         link.href = credit.url;
@@ -65,6 +66,7 @@ export function MapCanvas({
   onChange,
   label = 'نقشه کافه‌ها',
   fullscreen = false,
+  fitInitialResults = false,
   className = '',
 }: {
   points?: MapPoint[];
@@ -76,6 +78,7 @@ export function MapCanvas({
   onChange?: (point: GeoPoint) => void;
   label?: string;
   fullscreen?: boolean;
+  fitInitialResults?: boolean;
   className?: string;
 }) {
   const { theme } = useApp();
@@ -108,7 +111,8 @@ export function MapCanvas({
           container: host.current,
           style,
           center: fullscreen ? [51.389, 35.6892] : [53.7, 32.4],
-          zoom: fullscreen ? 14 : 4,
+          // MapLibre's 512px tiles show the reference's mobile street scale at zoom 13.
+          zoom: fullscreen ? (window.matchMedia(mobileMapQuery).matches ? 13 : 14) : 4,
           maxZoom: 18,
           attributionControl: false,
           dragRotate: false,
@@ -126,7 +130,7 @@ export function MapCanvas({
         appliedStyle.current = style;
         const created: Runtime = { map, sdk, active: true };
         instance = created;
-        map.on('moveend', () => {
+        const reportBounds = () => {
           const b = map.getBounds(),
             center = map.getCenter().wrap();
           callbacks.current.onMove?.({
@@ -136,7 +140,9 @@ export function MapCanvas({
             west: b.getWest(),
             center: { latitude: center.lat, longitude: center.lng },
           });
-        });
+        };
+        map.on('moveend', reportBounds);
+        if (fullscreen) reportBounds();
         map.on('click', (event) => {
           if (editable) {
             const point = event.lngLat.wrap();
@@ -220,6 +226,7 @@ export function MapCanvas({
   useEffect(() => {
     if (!runtime?.active) return;
     const { map, sdk } = runtime;
+    const mobile = window.matchMedia(mobileMapQuery);
     let markers: Marker[] = [];
     const render = () => {
       const focused =
@@ -261,25 +268,27 @@ export function MapCanvas({
         button.type = 'button';
         button.dataset.cafeId = point.id;
         const clustered = group.items.length > 1 && point.id !== selected;
+        const pin = mobile.matches && !clustered;
         button.className =
           'cafe-map-marker' + (point.id === selected ? ' selected' : clustered ? ' clustered' : '');
+        if (pin) button.classList.add('pin');
         button.setAttribute(
           'aria-label',
           clustered ? digits(group.items.length) + ' کافه؛ بزرگ‌نمایی' : point.name,
         );
         button.setAttribute('aria-pressed', String(point.id === selected));
-        if (point.image && !clustered) {
+        if (point.image && !clustered && !pin) {
           const image = document.createElement('img');
           image.src = point.image;
           image.alt = '';
           button.append(image);
         }
-        if (!clustered) {
+        if (!clustered && !pin) {
           const text = document.createElement('span');
           text.textContent = point.name;
           button.append(text);
         }
-        if (group.items.length > 1) {
+        if (group.items.length > 1 && !pin) {
           const count = document.createElement('b');
           count.textContent = digits(group.items.length);
           button.append(count);
@@ -295,9 +304,10 @@ export function MapCanvas({
           }
           callbacks.current.onSelect?.(point.id);
         });
+        const position = pin ? point : group;
         markers.push(
-          new sdk.Marker({ element: button })
-            .setLngLat([group.longitude, group.latitude])
+          new sdk.Marker({ element: button, anchor: pin ? 'bottom' : 'center' })
+            .setLngLat([position.longitude, position.latitude])
             .addTo(map),
         );
         if (focused === point.id) button.focus({ preventScroll: true });
@@ -305,6 +315,7 @@ export function MapCanvas({
     };
     render();
     map.on('moveend', render);
+    if (fullscreen) mobile.addEventListener('change', render);
     let location: Marker | undefined;
     if (origin) {
       const dot = document.createElement('span');
@@ -318,6 +329,7 @@ export function MapCanvas({
       if (document.activeElement instanceof HTMLElement)
         markerFocus.current = document.activeElement.dataset.cafeId;
       map.off('moveend', render);
+      if (fullscreen) mobile.removeEventListener('change', render);
       markers.forEach((marker) => marker.remove());
       location?.remove();
     };
@@ -326,6 +338,11 @@ export function MapCanvas({
     if (!runtime?.active) return;
     const revision = camera?.revision ?? 'initial';
     if (appliedCamera.current === revision) return;
+    const mobileSheet = fullscreen && window.matchMedia(mobileMapQuery).matches;
+    if (mobileSheet && !camera && !fitInitialResults) {
+      appliedCamera.current = revision;
+      return;
+    }
     const focus = camera?.points || points;
     if (!focus.length) return;
     appliedCamera.current = revision;
@@ -343,7 +360,6 @@ export function MapCanvas({
       focus.forEach((point) => bounds.extend([point.longitude, point.latitude]));
       const width = host.current!.clientWidth,
         height = host.current!.clientHeight;
-      const mobileSheet = fullscreen && window.matchMedia('(max-width: 760px)').matches;
       const pad = mobileSheet
         ? {
             top: 76,
@@ -365,7 +381,7 @@ export function MapCanvas({
         duration: 0,
       });
     }
-  }, [runtime, camera, points, fullscreen]);
+  }, [runtime, camera, points, fullscreen, fitInitialResults]);
   useEffect(() => {
     if (!runtime?.active || !fullscreen) return;
     const point = points.find((point) => point.id === selected);

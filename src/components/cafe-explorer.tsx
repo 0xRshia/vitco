@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import {
   ArrowLeft,
+  Info,
   List,
   LocateFixed,
   Map,
@@ -26,7 +27,7 @@ import {
 import type { Cafe } from '@/lib/types';
 import { CafeCard } from './browse-cards';
 import { ExplorerCafeCard } from './explorer-cafe-card';
-import { MapCanvas, type MapBounds as Bounds } from './map-canvas';
+import { MapCanvas, mapCredits, type MapBounds as Bounds } from './map-canvas';
 import { Empty, Field, LoginGate, Modal, PageTitle } from './ui';
 import { MapMenuButton, VitrinFooter } from './vitrin-layout';
 
@@ -81,6 +82,8 @@ export function CafeExplorer({
   const drag = useRef<{ pointer: number; y: number; height: number; moved: boolean } | null>(null);
   const dragged = useRef(false),
     locationRequest = useRef(0);
+  const sheetTouch = useRef<{ x: number; y: number } | null>(null);
+  const cameraChosen = useRef(false);
   const mapView = !listOnly && !favorites && query.get('view') !== 'list';
   const path = favorites ? '/favorites' : listOnly ? '/menu' : '/cafes';
   const source = useMemo(
@@ -147,7 +150,7 @@ export function CafeExplorer({
     list.current?.scrollTo({ top: 0 });
   }, [selected]);
   useEffect(() => {
-    if (mapView) locate();
+    if (mapView) locate(true);
     return () => {
       locationRequest.current++;
     };
@@ -170,16 +173,19 @@ export function CafeExplorer({
       if (!value || (listOnly && key === 'view')) params.delete(key);
     window.history.replaceState(null, '', path + (params.size ? '?' + params : ''));
     if ('city' in patch) {
+      cameraChosen.current = true;
       const points = discoverCafes(source, data?.products || [], next, origin).filter(
         (c): c is MappedCafe => hasCoordinates(c),
       );
       setCamera((current) => ({ points, revision: (current?.revision || 0) + 1 }));
     }
   }
-  function locate() {
+  function locate(automatic = false) {
     const request = ++locationRequest.current;
+    const mobile = window.matchMedia('(max-width: 760px)').matches;
     if (!navigator.geolocation) {
-      setLocationError('مرورگر به موقعیت دسترسی ندارد. شهر را انتخاب کنید یا نقشه را حرکت دهید.');
+      if (!automatic || !mobile)
+        setLocationError('مرورگر به موقعیت دسترسی ندارد. شهر را انتخاب کنید یا نقشه را حرکت دهید.');
       return;
     }
     setLocating(true);
@@ -189,28 +195,32 @@ export function CafeExplorer({
         if (request !== locationRequest.current) return;
         const point = { latitude: position.coords.latitude, longitude: position.coords.longitude };
         setOrigin(point);
-        setCamera((current) => ({
-          points: [point],
-          zoom: 14,
-          revision: (current?.revision || 0) + 1,
-        }));
+        if (!automatic || !mobile || !(cameraChosen.current || searching || filters.city))
+          setCamera((current) => ({
+            points: [point],
+            zoom: mobile ? (automatic ? 13 : 15) : 14,
+            revision: (current?.revision || 0) + 1,
+          }));
         setLocating(false);
       },
       () => {
         if (request !== locationRequest.current) return;
-        setLocationError(
-          'موقعیت دریافت نشد. دسترسی موقعیت را فعال کنید یا شهر و محدوده نقشه را انتخاب کنید.',
-        );
+        if (!automatic || !mobile)
+          setLocationError(
+            'موقعیت دریافت نشد. دسترسی موقعیت را فعال کنید یا شهر و محدوده نقشه را انتخاب کنید.',
+          );
         setLocating(false);
       },
       { timeout: 10000, maximumAge: 60000, enableHighAccuracy: false },
     );
   }
   function select(id: string) {
+    cameraChosen.current = true;
     setSelected(id);
     setSnap('preview');
   }
   function searchFor(value: string) {
+    if (value.trim()) cameraChosen.current = true;
     update({ search: value });
     if (mapView && value.trim()) {
       setSnap('expanded');
@@ -266,7 +276,7 @@ export function CafeExplorer({
         <input
           aria-label="جستجوی کافه‌ها"
           enterKeyHint="search"
-          placeholder={mapView ? 'جستجوی کافه‌ها…' : 'جستجوی کافه یا محله'}
+          placeholder={mapView ? 'جستجوی کافه‌ها...' : 'جستجوی کافه یا محله'}
           value={filters.search}
           onChange={(event) => searchFor(event.target.value)}
         />
@@ -519,6 +529,7 @@ export function CafeExplorer({
       <MapCanvas
         className="cafe-explorer-canvas"
         fullscreen
+        fitInitialResults={searching || Boolean(filters.city)}
         label="نقشه کافه‌های اطراف من"
         points={mapped}
         selected={selected}
@@ -546,7 +557,7 @@ export function CafeExplorer({
           disabled={locating}
           aria-label="موقعیت من"
           aria-busy={locating}
-          onClick={locate}
+          onClick={() => locate()}
         >
           <LocateFixed size={23} />
         </button>
@@ -597,6 +608,20 @@ export function CafeExplorer({
         >
           <span />
         </button>
+        {snap === 'expanded' && (
+          <details className="explorer-sheet-credits">
+            <summary aria-label="منابع نقشه">
+              <Info size={15} aria-hidden="true" />
+            </summary>
+            <div dir="ltr">
+              {mapCredits.map((credit) => (
+                <a key={credit.url} href={credit.url} target="_blank" rel="noopener noreferrer">
+                  {credit.label}
+                </a>
+              ))}
+            </div>
+          </details>
+        )}
         <div className="explorer-results-heading">
           <h2>{active ? 'کافه انتخاب‌شده' : searching ? 'نتایج جستجو' : 'کافه‌ها'}</h2>
           <span role="status">{digits(results.length)} کافه</span>
@@ -615,8 +640,33 @@ export function CafeExplorer({
           className="explorer-results-scroll"
           ref={list}
           hidden={snap === 'collapsed'}
+          onTouchStart={(event) => {
+            const touch = event.touches[0];
+            sheetTouch.current =
+              event.touches.length === 1 && event.currentTarget.scrollTop <= 0
+                ? { x: touch.clientX, y: touch.clientY }
+                : null;
+          }}
+          onTouchCancel={() => {
+            sheetTouch.current = null;
+          }}
+          onTouchEnd={(event) => {
+            const start = sheetTouch.current;
+            sheetTouch.current = null;
+            if (!start || event.touches.length || !window.matchMedia('(max-width: 760px)').matches)
+              return;
+            const touch = event.changedTouches[0];
+            const dy = touch.clientY - start.y;
+            if (Math.abs(dy) < 40 || Math.abs(dy) <= Math.abs(touch.clientX - start.x)) return;
+            if (dy < 0 && snap === 'preview') setSnap('expanded');
+            if (dy > 0 && snap === 'expanded' && event.currentTarget.scrollTop <= 0)
+              setSnap('preview');
+          }}
           onScroll={(event) => {
-            if (snap === 'preview' && event.currentTarget.scrollTop > 0) setSnap('expanded');
+            if (snap === 'preview' && event.currentTarget.scrollTop > 0) {
+              event.currentTarget.scrollTop = 0;
+              setSnap('expanded');
+            }
           }}
         >
           {directoryNotice && (
@@ -658,7 +708,7 @@ export function CafeExplorer({
               </button>
             </div>
           )}
-          {demo && !searching && !active && (
+          {demo && cafes.includes(demo) && !searching && !active && (
             <Link className="text-link explorer-demo-link" href={'/reserve?cafe=' + demo.id}>
               آزمایش رزرو میز
             </Link>

@@ -469,6 +469,26 @@ body:has(.map-mode) {
   padding: 0;
   font-size: 13px;
 }
+.cafe-map-marker.pin {
+  width: 44px;
+  height: 44px;
+  align-items: flex-end;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--primary);
+}
+.cafe-map-marker.pin::before {
+  content: '';
+  width: 36px;
+  height: 39px;
+  background: currentColor;
+  mask: url('/vitrin/map-pin.png') center / contain no-repeat;
+}
+.cafe-map-marker.pin.selected {
+  color: var(--accent);
+}
 .cafe-map-marker img {
   width: 28px;
   height: 28px;

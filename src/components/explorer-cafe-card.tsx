@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { ArrowLeft, MapPin, Star } from 'lucide-react';
+import { ArrowLeft, MapPin, MessageCircleMore, Star } from 'lucide-react';
 import { distanceKm, hasCoordinates, type GeoPoint } from '@/lib/cafe-discovery';
 import { digits } from '@/lib/format';
 import type { Cafe } from '@/lib/types';
@@ -19,10 +19,7 @@ export function ExplorerCafeCard({
 }) {
   const [failedCover, setFailedCover] = useState('');
   const cover = cafe.image || cafe.images?.[0];
-  const location =
-    cafe.city && !cafe.address.startsWith(cafe.city)
-      ? [cafe.city, cafe.address].filter(Boolean).join('، ')
-      : cafe.address;
+  const location = cafe.city || cafe.address;
   const distance = origin && hasCoordinates(cafe) ? distanceKm(origin, cafe) : null;
 
   return (
@@ -50,12 +47,23 @@ export function ExplorerCafeCard({
       <div className="explorer-cafe-caption">
         <h3 dir="auto">{cafe.name}</h3>
         <div className="explorer-cafe-meta">
-          <span>
-            <Star size={14} aria-hidden="true" />
-            {cafe.rating === null
-              ? 'بدون نظر'
-              : digits(cafe.rating.toFixed(1)) + ' (' + digits(cafe.review_count) + ' نظر)'}
-          </span>
+          {cafe.rating === null ? (
+            <span>
+              <Star size={14} aria-hidden="true" />
+              بدون نظر
+            </span>
+          ) : (
+            <>
+              <span>
+                <Star size={14} fill="currentColor" aria-hidden="true" />
+                {digits(cafe.rating.toFixed(1))}
+              </span>
+              <span>
+                <MessageCircleMore size={14} aria-hidden="true" />
+                {digits(cafe.review_count)} نظر
+              </span>
+            </>
+          )}
           {location && (
             <span className="explorer-cafe-location">
               <MapPin size={14} aria-hidden="true" />

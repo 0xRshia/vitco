@@ -7,6 +7,22 @@
   unicode-range: U+0600-06ff, U+0750-077f, U+0870-08ff, U+200c-200e, U+fb50-fdff, U+fe70-fefc;
 }
 
+@font-face {
+  font-family: 'Vitrin Search';
+  src: url('/vitrin/fonts/KalamehWeb-FaNum-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Vitrin Search';
+  src: url('/vitrin/fonts/KalamehWeb-FaNum-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 .vitrin {
   --text-base: 14px;
   --text-title: clamp(24px, 3vw, 30px);
@@ -632,6 +648,10 @@
 }
 
 @media (max-width: 760px) {
+  .vitrin-map-page {
+    --explorer-font: 'Vitrin Search', var(--font-body);
+  }
+
   .vitrin-public {
     padding-block-end: var(--vitrin-nav-offset);
   }
@@ -691,6 +711,21 @@
   .explorer-results-scroll .vitrin-footer {
     margin-block: 24px 0;
     padding: 0;
+    font-family: var(--explorer-font);
+  }
+
+  .explorer-results-scroll .vitrin-footer-row {
+    gap: 40px;
+  }
+
+  .explorer-results-scroll .vitrin-footer-row p {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  .explorer-results-scroll .vitrin-footer nav a {
+    padding-inline: 16px;
+    line-height: 20px;
   }
 
   .vitrin-footer-inner {

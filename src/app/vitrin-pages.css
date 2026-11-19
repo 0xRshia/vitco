@@ -782,6 +782,10 @@
   display: none;
 }
 
+.explorer-sheet-credits {
+  display: none;
+}
+
 @media (min-width: 761px) {
   .vitrin-map-page .cafe-explorer {
     display: grid;
@@ -998,7 +1002,12 @@
     height: 42px;
     min-height: 42px;
     padding-block: 0;
-    font-size: 16px;
+    font: 400 16px/24px var(--explorer-font);
+  }
+
+  .vitrin-map-page .explorer-search > svg {
+    width: 16px;
+    height: 16px;
   }
 
   .vitrin-map-page .explorer-search:has(input:focus-visible) {
@@ -1033,11 +1042,17 @@
   }
 
   .vitrin-map-page .explorer-drawer-handle {
-    height: 36px;
+    height: 34px;
+    padding-block-end: 4px;
   }
 
   .vitrin-map-page .explorer-results-scroll {
     padding-block-start: 0;
+    scrollbar-width: none;
+  }
+
+  .vitrin-map-page .explorer-results-scroll::-webkit-scrollbar {
+    display: none;
   }
 
   .vitrin-map-page .explorer-map-actions {
@@ -1049,8 +1064,44 @@
   }
 
   .vitrin-map-page .cafe-explorer[data-drawer='expanded'] .maplibregl-ctrl-bottom-left {
-    bottom: auto;
-    top: 0;
+    display: none;
+  }
+
+  .vitrin-map-page .explorer-sheet-credits {
+    display: block;
+    position: absolute;
+    inset: 5px auto auto 16px;
+    z-index: 1;
+    color: var(--muted);
+  }
+
+  .explorer-sheet-credits summary {
+    display: grid;
+    width: 32px;
+    height: 28px;
+    place-items: center;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .explorer-sheet-credits summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .explorer-sheet-credits div {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    font:
+      11px/1.5 Arial,
+      sans-serif;
+  }
+
+  .explorer-sheet-credits a {
+    text-decoration: underline;
   }
 
   .vitrin-map-page .explorer-drawer-handle > span {

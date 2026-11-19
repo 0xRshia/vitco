@@ -60,6 +60,10 @@ test('source cafés appear on the uncluttered map with real coordinates, attribu
   }
   const pin = map.getByRole('button', { name: fixture[1].name, exact: true });
   await expect(pin).toBeVisible();
+  if (testInfo.project.name === 'mobile') {
+    await expect(pin).toHaveClass(/\bpin\b/);
+    expect((await pin.boundingBox())!.width).toBeGreaterThanOrEqual(44);
+  }
   const data = await (await context.request.get('/api/bootstrap')).json();
   expect(data.directory).toMatchObject({ status: 'ready', cafe_count: 2 });
   const imported = data.cafes.find((c: { id: string }) => c.id === 'invara-' + fixture[1].place_id);
@@ -151,6 +155,11 @@ test('café search opens matching cards outside the map area and without a locat
     const searchBar = (await page.locator('.explorer-search').boundingBox())!;
     expect(Math.abs(searchBar.height - 44)).toBeLessThanOrEqual(2);
     const drawer = page.getByRole('region', { name: 'کافه‌های این محدوده' });
+    const credits = drawer.locator('.explorer-sheet-credits');
+    await credits.locator('summary').click();
+    await expect(credits.getByRole('link', { name: '© OpenStreetMap' })).toBeVisible();
+    await credits.locator('summary').click();
+    await expect(credits.getByRole('link')).toHaveCount(0);
     const card = (await aala.boundingBox())!;
     await expect
       .poll(async () =>
@@ -162,6 +171,19 @@ test('café search opens matching cards outside the map area and without a locat
     const noPhoto = (await aala.getByText('بدون تصویر').boundingBox())!;
     const caption = (await aala.locator('.explorer-cafe-caption').boundingBox())!;
     expect(noPhoto.y + noPhoto.height).toBeLessThanOrEqual(caption.y + 1);
+    // Swipe the card itself at the top of the list, as on a touch phone.
+    const touch = await context.newCDPSession(page);
+    const x = card.x + card.width / 2;
+    const y = card.y + 30;
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x, y: y + 90 }],
+    });
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect(page.locator('.cafe-explorer')).toHaveAttribute('data-drawer', 'preview');
+    await touch.detach();
+    await drawer.getByRole('button', { name: 'گسترش فهرست کافه‌ها' }).click();
     const contact = results.getByRole('link', { name: 'تماس با ما', exact: true });
     await expect(contact).toHaveAttribute('href', '/contact');
     await contact.scrollIntoViewIfNeeded();
