@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { api, useApp, useResource } from '@/lib/client';
 import { dateLabel, daysAhead, digits, money, today } from '@/lib/format';
+import { cafeCustomerHref } from '@/lib/cafe-links';
 import type { accountingOverview, ExportProfile, FinancialSource } from '@/lib/accounting';
 import type { loyaltyManagement, myLoyalty, Reward } from '@/lib/loyalty';
 import { ErrorBox, Field, Form, Loading } from './ui';
@@ -327,10 +328,17 @@ export function LoyaltyWorkspace({ id }: { id: string }) {
           </div>
           <div className="service-card-grid">
             <div className="panel stack">
-              <h3>اعضا</h3>
-              {data.members.map((member, index) => (
-                <div className="list-row" key={member.name + index}>
-                  <span>{member.name}</span>
+              <div className="card-heading">
+                <h3>اعضا</h3>
+                <Link className="text-link" href={cafeCustomerHref(id)}>
+                  فهرست مشتریان
+                </Link>
+              </div>
+              {data.members.map((member) => (
+                <div className="list-row" key={member.id}>
+                  <Link className="text-link" href={cafeCustomerHref(id, member.id)}>
+                    {member.name}
+                  </Link>
                   <strong>{digits(member.points)} امتیاز</strong>
                 </div>
               ))}

@@ -164,7 +164,7 @@ export function Application() {
       view = <MeetingsView key={id || 'list'} id={id} />;
       break;
     case 'operations':
-      view = <OperationsView key={(id || 'list') + ':' + (query.get('tab') || '')} id={id} />;
+      view = <OperationsView key={id || 'list'} id={id} />;
       break;
     case 'blog':
       view = <BlogView key={id || 'list'} id={id} />;
@@ -180,7 +180,7 @@ export function Application() {
       view = <ContactView key={page} partnership={page === 'partnership'} />;
       break;
     case 'admin':
-      view = <PlatformAdminView section={id} />;
+      view = <PlatformAdminView section={id} userId={id === 'users' ? segments[2] : undefined} />;
       break;
     default:
       view = auth ? <AuthView key={page} page={page} /> : <InfoView page={page} />;

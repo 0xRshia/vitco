@@ -482,6 +482,7 @@ function WorkspaceNav({ admin, cafe, owner }: { admin: boolean; cafe?: string; o
         { href: '/admin/cafes', label: 'کافه‌ها', icon: Store },
         { href: '/admin/orders', label: 'سفارشات', icon: ShoppingBag },
         { href: '/admin/users', label: 'کاربران', icon: Users },
+        { href: '/admin/crm', label: 'پیگیری همکاری کافه‌ها', icon: MessageCircleMore },
       ],
     },
     {

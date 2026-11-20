@@ -148,6 +148,30 @@ export const cafeServiceSchema = `
     name TEXT NOT NULL, contact TEXT NOT NULL, subject TEXT NOT NULL, body TEXT NOT NULL,
     created_at TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0
   );
+  CREATE TABLE IF NOT EXISTS partner_leads (
+    id TEXT PRIMARY KEY, message_id TEXT UNIQUE REFERENCES contact_messages(id),
+    cafe_name TEXT NOT NULL, contact_name TEXT NOT NULL, contact TEXT NOT NULL,
+    stage TEXT NOT NULL DEFAULT 'new' CHECK(stage IN ('new','contacted','negotiating','won','lost')),
+    follow_up_on TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS partner_leads_stage_follow_up ON partner_leads(stage,follow_up_on);
+  CREATE TABLE IF NOT EXISTS partner_lead_notes (
+    id INTEGER PRIMARY KEY, lead_id TEXT NOT NULL REFERENCES partner_leads(id),
+    author_id TEXT NOT NULL REFERENCES users(id), body TEXT NOT NULL, created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS partner_lead_notes_lead ON partner_lead_notes(lead_id,id);
+  CREATE TRIGGER IF NOT EXISTS capture_partnership_lead AFTER INSERT ON contact_messages
+    WHEN NEW.kind='partnership'
+    BEGIN
+      INSERT INTO partner_leads(id,message_id,cafe_name,contact_name,contact,created_at,updated_at)
+      VALUES(NEW.id,NEW.id,NEW.subject,NEW.name,NEW.contact,NEW.created_at,NEW.created_at);
+    END;
+  INSERT INTO partner_leads(id,message_id,cafe_name,contact_name,contact,created_at,updated_at)
+    SELECT id,id,subject,name,contact,created_at,created_at FROM contact_messages
+    WHERE kind='partnership' AND NOT EXISTS (
+      SELECT 1 FROM partner_leads WHERE message_id=contact_messages.id
+    );
   CREATE TABLE IF NOT EXISTS ticket_attachments (
     id TEXT PRIMARY KEY, ticket_id TEXT NOT NULL REFERENCES tickets(id), reply_id TEXT REFERENCES ticket_replies(id),
     name TEXT NOT NULL, content BLOB NOT NULL, size INTEGER NOT NULL

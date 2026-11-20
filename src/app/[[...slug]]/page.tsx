@@ -52,7 +52,9 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
   if (slug.length === 2 && slug[0] === 'settings' && slug[1] === 'profile') redirect('/profile');
   if (slug.length === 2 && slug[0] === 'user' && slug[1] === 'dashboard') redirect('/profile');
   const orderReceipt = slug.length === 3 && slug[0] === 'orders' && slug[2] === 'invoice';
-  if (!orderReceipt && (slug.length > 2 || (slug[0] && !routes.includes(slug[0])))) notFound();
+  const adminProfile = slug.length === 3 && slug[0] === 'admin' && slug[1] === 'users';
+  if ((!orderReceipt && !adminProfile && slug.length > 2) || (slug[0] && !routes.includes(slug[0])))
+    notFound();
   return (
     <Suspense fallback={<Loading />}>
       <Application />

@@ -33,6 +33,7 @@ export function database() {
     CREATE TABLE IF NOT EXISTS auth_codes (target TEXT NOT NULL, purpose TEXT NOT NULL, hash TEXT NOT NULL, expires INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(target,purpose));
     CREATE TABLE IF NOT EXISTS rate_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS orders_user ON orders(user_id,created_at);
+    CREATE INDEX IF NOT EXISTS orders_created ON orders(created_at);
     CREATE INDEX IF NOT EXISTS orders_cafe ON orders(cafe_id,status);
     CREATE INDEX IF NOT EXISTS bookings_slot ON reservations(cafe_id,date,time,status);
     CREATE INDEX IF NOT EXISTS products_cafe ON products(cafe_id);

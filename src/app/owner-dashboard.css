@@ -143,3 +143,25 @@
     padding-inline: 8px;
   }
 }
+
+.admin-performance {
+  margin: 0;
+}
+.admin-performance .card-heading {
+  flex-wrap: wrap;
+}
+.admin-performance-bars {
+  display: flex;
+  height: 9rem;
+  align-items: flex-end;
+  gap: min(1%, 0.5rem);
+  border-block-end: 1px solid var(--line);
+}
+.admin-performance-bars > span {
+  flex: 1;
+  background: var(--accent);
+  border-radius: 0.25rem 0.25rem 0 0;
+}
+.admin-performance summary {
+  cursor: pointer;
+}

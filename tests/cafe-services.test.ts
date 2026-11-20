@@ -16,6 +16,7 @@ import {
   rescheduleReservation,
   saveMenuCategory,
 } from '../src/lib/cafe-operations';
+import { adjustCafeCustomer, cafeCustomerProfile, cafeCustomers } from '../src/lib/cafe-customers';
 import { complementaryItems, setFeatures } from '../src/lib/cafe-features';
 import {
   availableTables,
@@ -783,4 +784,96 @@ test('article schedules protect direct links and related lists while keeping str
       ),
     { status: 400 },
   );
+});
+
+test('café customer profiles scope membership, spending and retryable points adjustments to a single café', () => {
+  const customer = member('profile-member');
+  run(
+    'INSERT INTO users(id,name,phone,created_at) VALUES (?,?,?,?)',
+    customer.id,
+    'مشتری پرونده',
+    '09121112233',
+    new Date().toISOString(),
+  );
+  const orderId = createOrder(customer, { items, mode: 'pickup', request_key: randomUUID() });
+  for (const status of ['preparing', 'ready', 'completed']) transitionOrder(owner, orderId, status);
+  const cancelled = createOrder(customer, { items, mode: 'pickup', request_key: randomUUID() });
+  transitionOrder(customer, cancelled, 'cancelled');
+  const booking = randomUUID();
+  run(
+    'INSERT INTO reservations(id,cafe_id,user_id,date,time,guests,note,status,created_at,request_key) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    booking,
+    'cafe',
+    customer.id,
+    future,
+    '12:00',
+    2,
+    '',
+    'pending',
+    new Date().toISOString(),
+    randomUUID(),
+  );
+  const guest = randomUUID();
+  run(
+    "INSERT INTO users(id,name,created_at,account_kind) VALUES (?,?,?,'guest')",
+    guest,
+    'مهمان پرونده',
+    new Date().toISOString(),
+  );
+  run('INSERT INTO loyalty_balances(user_id,cafe_id,points) VALUES (?,?,?)', guest, 'branch', 0);
+  assert.deepEqual(
+    cafeCustomers(owner, 'branch', new URLSearchParams({ q: '۰۹۱۲۱۱۱۲۲۳۳' })).customers.map(
+      (row) => row.id,
+    ),
+    [customer.id],
+  );
+  assert.equal(
+    cafeCustomers(owner, 'branch', new URLSearchParams({ q: 'مهمان پرونده' })).customers.length,
+    0,
+  );
+  assert.throws(() => cafeCustomers(manager, 'branch', params), { status: 403 });
+  assert.throws(() => cafeCustomerProfile(visitor, 'other', customer.id), { status: 404 });
+  const cafeProfile = cafeCustomerProfile(owner, 'cafe', customer.id);
+  assert.equal(cafeProfile.orders.length, 0);
+  assert.deepEqual(
+    cafeProfile.reservations.map((row) => row.id),
+    [booking],
+  );
+  const branchProfile = cafeCustomerProfile(owner, 'branch', customer.id);
+  assert.equal(branchProfile.orders.length, 2);
+  assert.equal(branchProfile.purchase.count, 1);
+  assert.equal(branchProfile.purchase.total, 120000);
+  assert.equal(branchProfile.reservations.length, 0);
+  saveLoyalty(owner, 'branch', {
+    action: 'program',
+    name: 'باشگاه شعبه',
+    active: true,
+    spend_per_point: 10000,
+  });
+  saveLoyalty(owner, 'branch', { action: 'tier', name: 'سطح ویژه', threshold: 1000 });
+  const adjustment = { delta: 1000, reason: 'مراجعه حضوری مشتری', request_key: randomUUID() };
+  assert.throws(() => adjustCafeCustomer(manager, 'branch', customer.id, adjustment), {
+    status: 403,
+  });
+  assert.throws(() => adjustCafeCustomer(owner, 'branch', guest, adjustment), { status: 404 });
+  adjustCafeCustomer(owner, 'branch', customer.id, adjustment);
+  adjustCafeCustomer(owner, 'branch', customer.id, adjustment);
+  assert.throws(
+    () => adjustCafeCustomer(owner, 'branch', customer.id, { ...adjustment, delta: 30 }),
+    { status: 409 },
+  );
+  assert.throws(
+    () =>
+      adjustCafeCustomer(owner, 'branch', customer.id, {
+        ...adjustment,
+        request_key: randomUUID(),
+        delta: -100000,
+      }),
+    { status: 409 },
+  );
+  const after = cafeCustomerProfile(owner, 'branch', customer.id);
+  assert.equal(after.customer.points, branchProfile.customer.points + 1000);
+  assert.equal(after.customer.tier, 'سطح ویژه');
+  assert.equal(after.ledger.filter((row) => row.reason === adjustment.reason).length, 1);
+  assert.equal(cafeCustomerProfile(owner, 'cafe', customer.id).ledger.length, 0);
 });

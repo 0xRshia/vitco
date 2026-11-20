@@ -13,6 +13,8 @@ import {
   transitionReservation,
 } from '../src/lib/commerce';
 import { ownerAnalytics } from '../src/lib/owner-analytics';
+import { adminApi } from '../src/lib/platform';
+import { dashboardRedirect } from '../src/lib/cafe-links';
 import { topOrderedProducts } from '../src/lib/home-ranking';
 import { adjustCategoryPrices } from '../src/lib/pricing';
 import type { CartLine, Order, User } from '../src/lib/types';
@@ -111,6 +113,62 @@ before(() => {
 after(() => {
   database().close();
   rmSync(directory, { recursive: true, force: true });
+});
+
+test('admin profiles rank completed purchases and keep customer activity isolated', (t) => {
+  database().exec('BEGIN');
+  t.after(() => database().exec('ROLLBACK'));
+  const previousAdmin = process.env.PLATFORM_ADMIN_USER_ID;
+  process.env.PLATFORM_ADMIN_USER_ID = owner.id;
+  t.after(() => {
+    if (previousAdmin === undefined) delete process.env.PLATFORM_ADMIN_USER_ID;
+    else process.env.PLATFORM_ADMIN_USER_ID = previousAdmin;
+  });
+  const timestamp = '2026-09-10T09:00:00Z';
+  order(buyer, timestamp, 'completed', [line(2), line(3)]);
+  order(buyer, timestamp, 'cancelled', [line(15)], 'foreign-cafe');
+  order(second, timestamp, 'completed', [line(12)], 'foreign-cafe');
+  run(
+    'INSERT INTO reviews (id,user_id,cafe_id,rating,body,created_at) VALUES (?,?,?,?,?,?),(?,?,?,?,?,?)',
+    'review-buyer',
+    buyer.id,
+    'cafe',
+    5,
+    'قهوه عالی بود',
+    timestamp,
+    'review-second',
+    second.id,
+    'foreign-cafe',
+    4,
+    'برخورد خوب بود',
+    timestamp,
+  );
+  const path = ['admin', 'users', buyer.id];
+  const profile = adminApi(owner, path, 'GET', {}, new URLSearchParams());
+  assert.ok('insights' in profile && profile.insights);
+  assert.equal(profile.insights.favoriteCafe?.id, 'cafe');
+  assert.equal(profile.insights.products.length, 1);
+  assert.equal(profile.insights.products[0].quantity, 5);
+  assert.deepEqual(
+    profile.insights.reviews.map((review) => review.id),
+    ['review-buyer'],
+  );
+  assert.throws(() => adminApi(second, path, 'GET', {}, new URLSearchParams()), { status: 403 });
+});
+
+test('source dashboard customer links keep the selected café and member', () => {
+  assert.equal(
+    dashboardRedirect(['dashboard', 'cafes', 'my-cafe', 'loyalty', 'members']),
+    '/operations/my-cafe?tab=customers',
+  );
+  assert.equal(
+    dashboardRedirect(['dashboard', 'cafes', 'my-cafe', 'loyalty', 'members', 'my-user']),
+    '/operations/my-cafe?tab=customers&member=my-user',
+  );
+  assert.equal(
+    dashboardRedirect(['dashboard', 'admin', 'users', 'my-user']),
+    '/admin/users/my-user',
+  );
 });
 
 test('home ranks current public products across cafés by quantities in completed menu orders', (t) => {

@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 import { api, useApp, useResource } from '@/lib/client';
 import { dateLabel, digits, money } from '@/lib/format';
@@ -8,6 +9,7 @@ import type {
   Article,
   ArticleBlock,
   ContactMessage,
+  CustomerInsights,
   HomeCafePlacement,
   ManagedCafe,
   PlatformReview,
@@ -16,6 +18,9 @@ import type {
 } from '@/lib/platform';
 import type { Order, Reservation, Ticket } from '@/lib/types';
 import { ImageUpload } from './account';
+import { AdminReport, ReportPeriodSelect } from './admin-report';
+import type { AdminOverview } from '@/lib/admin-overview';
+import { PartnerCrm } from './partner-crm';
 import { paymentStatusLabels, paymentIsPending } from './payment-status';
 import { PersianDateInput } from './persian-date';
 import { Badge, Confirm, Empty, ErrorBox, Field, Form, Loading, LoginGate, PageTitle } from './ui';
@@ -23,6 +28,7 @@ import { Badge, Confirm, Empty, ErrorBox, Field, Form, Loading, LoginGate, PageT
 const sections = [
   ['dashboard', 'خلاصه'],
   ['users', 'حساب‌ها'],
+  ['crm', 'پیگیری همکاری کافه‌ها'],
   ['cafes', 'کافه‌ها و امکانات'],
   ['placements', 'جایگاه‌های صفحه اول'],
   ['orders', 'سفارش‌ها'],
@@ -42,8 +48,10 @@ const featureLabels: Record<FeatureKey, string> = {
 };
 
 type PanelData = {
+  overview?: AdminOverview;
   users?: PlatformUser[] | number;
   account?: PlatformUser;
+  insights?: CustomerInsights;
   orders?:
     | number
     | Pick<
@@ -65,7 +73,13 @@ type PanelData = {
   gateway?: { enabled: boolean; configured: boolean; sandbox: boolean };
 };
 
-export function PlatformAdminView({ section = 'dashboard' }: { section?: string }) {
+export function PlatformAdminView({
+  section = 'dashboard',
+  userId,
+}: {
+  section?: string;
+  userId?: string;
+}) {
   const { data } = useApp();
   if (!data?.user) return <LoginGate>{null}</LoginGate>;
   if (!data.platformAdmin) return <ErrorBox message="دسترسی میز مدیریت ویتکو مجاز نیست." />;
@@ -85,7 +99,16 @@ export function PlatformAdminView({ section = 'dashboard' }: { section?: string 
           </Link>
         ))}
       </nav>
-      <PlatformPanel key={selected} section={selected} viewerId={data.user.id} />
+      {selected === 'crm' ? (
+        <PartnerCrm />
+      ) : (
+        <PlatformPanel
+          key={userId || selected}
+          section={selected}
+          viewerId={data.user.id}
+          userId={userId}
+        />
+      )}
     </>
   );
 }
@@ -93,18 +116,34 @@ export function PlatformAdminView({ section = 'dashboard' }: { section?: string 
 function PlatformPanel({
   section,
   viewerId,
+  userId,
 }: {
-  section: (typeof sections)[number][0];
+  section: Exclude<(typeof sections)[number][0], 'crm'>;
   viewerId: string;
+  userId?: string;
 }) {
   const [query, setQuery] = useState(''),
     [selected, setSelected] = useState(''),
     [error, setError] = useState('');
   const [deletion, setDeletion] = useState<{ path: string; label: string } | null>(null);
   const { toast, refresh } = useApp();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const userQuery = searchParams.get('q') || '';
+  const userSearch = userQuery ? '?q=' + encodeURIComponent(userQuery) : '';
+  const reportPeriod = searchParams.get('period') || 'week';
   const path = section === 'dashboard' ? 'admin' : 'admin/' + section;
+  const searchQuery = section === 'users' ? userQuery : query;
+  const recordId = userId || selected;
   const resource = useResource<PanelData>(
-    path + (selected ? '/' + selected : query ? '?q=' + encodeURIComponent(query) : ''),
+    path +
+      (section === 'dashboard'
+        ? '?period=' + encodeURIComponent(reportPeriod)
+        : recordId
+          ? '/' + encodeURIComponent(recordId)
+          : searchQuery
+            ? '?q=' + encodeURIComponent(searchQuery)
+            : ''),
   );
   const data = resource.data;
   const save = async (path: string, method: string, input?: unknown) => {
@@ -120,38 +159,42 @@ function PlatformPanel({
   let panel: ReactNode;
   if (section === 'dashboard') {
     panel = (
-      <div className="service-card-grid">
-        {(
-          [
-            ['حساب‌های کاربری', data?.users, '/admin/users'],
-            ['کافه‌های عضو', data?.cafes, '/admin/cafes'],
-            ['سفارش‌ها', data?.orders, '/admin/orders'],
-            ['پیام‌های خوانده‌نشده', data?.unread, '/admin/messages'],
-          ] as const
-        ).map(([label, count, href]) => (
-          <div className="panel" key={label}>
-            <p>
-              {href ? (
-                <Link className="text-link" href={href}>
-                  {label}
-                </Link>
-              ) : (
-                label
-              )}
-            </p>
-            <h2>{digits(typeof count === 'number' ? count : 0)}</h2>
-          </div>
-        ))}
-      </div>
+      <>
+        {data?.overview && <AdminReport report={data.overview} />}
+        <h2 className="service-section">آمار کل ویتکو</h2>
+        <div className="service-card-grid">
+          {(
+            [
+              ['حساب‌های کاربری', data?.users, '/admin/users'],
+              ['کافه‌های عضو', data?.cafes, '/admin/cafes'],
+              ['سفارش‌ها', data?.orders, '/admin/orders'],
+              ['پیام‌های خوانده‌نشده', data?.unread, '/admin/messages'],
+            ] as const
+          ).map(([label, count, href]) => (
+            <div className="panel" key={label}>
+              <p>
+                {href ? (
+                  <Link className="text-link" href={href}>
+                    {label}
+                  </Link>
+                ) : (
+                  label
+                )}
+              </p>
+              <h2>{digits(typeof count === 'number' ? count : 0)}</h2>
+            </div>
+          ))}
+        </div>
+      </>
     );
   } else if (section === 'users') {
     const account = data?.account;
-    panel = selected ? (
-      account?.id === selected && (
+    panel = userId ? (
+      account?.id === userId && (
         <div className="panel">
-          <button className="button secondary" onClick={() => setSelected('')}>
+          <Link className="button secondary" href={'/admin/users' + userSearch}>
             بازگشت به حساب‌ها
-          </button>
+          </Link>
           <h2>{account.name}</h2>
           <p dir="auto">{account.email || account.phone}</p>
           <Form
@@ -172,6 +215,7 @@ function PlatformPanel({
               {account.suspended ? 'فعال‌سازی حساب' : 'تعلیق حساب'}
             </button>
           )}
+          {data?.insights && <CustomerActivity insights={data.insights} />}
           <h3 className="service-section">سفارش‌های اخیر</h3>
           {Array.isArray(data?.orders) &&
             data.orders.map((order) => (
@@ -197,9 +241,15 @@ function PlatformPanel({
     ) : (
       <>
         <div className="panel">
-          <Form onSubmit={async (form) => setQuery(String(form.get('q') || ''))}>
+          <Form
+            key={userQuery}
+            onSubmit={async (form) => {
+              const q = String(form.get('q') || '').trim();
+              router.push('/admin/users' + (q ? '?q=' + encodeURIComponent(q) : ''));
+            }}
+          >
             <Field label="جستجو با نام، ایمیل یا شماره همراه">
-              <input type="search" name="q" defaultValue={query} />
+              <input type="search" name="q" defaultValue={userQuery} />
             </Field>
           </Form>
         </div>
@@ -212,9 +262,12 @@ function PlatformPanel({
                   <br />
                   <bdi>{account.email || account.phone}</bdi>
                 </span>
-                <button className="button secondary" onClick={() => setSelected(account.id)}>
+                <Link
+                  className="button secondary"
+                  href={'/admin/users/' + encodeURIComponent(account.id) + userSearch}
+                >
                   مشاهده حساب
-                </button>
+                </Link>
               </div>
             ))}
           {Array.isArray(data?.users) && !data.users.length && <p>حسابی پیدا نشد.</p>}
@@ -366,6 +419,16 @@ function PlatformPanel({
               {message.name} · <bdi>{message.contact}</bdi>
             </p>
             <p className="service-body">{message.body}</p>
+            {message.kind === 'partnership' && (
+              <p>
+                <Link
+                  className="text-link"
+                  href={'/admin/crm?lead=' + encodeURIComponent(message.id)}
+                >
+                  پرونده همکاری کافه
+                </Link>
+              </p>
+            )}
             <button
               className="button secondary"
               onClick={() => toggle(path + '/' + message.id, { read: !message.read })}
@@ -402,6 +465,12 @@ function PlatformPanel({
   return (
     <>
       {error && <ErrorBox message={error} />}
+      {section === 'dashboard' && (
+        <ReportPeriodSelect
+          value={reportPeriod}
+          onChange={(period) => router.push('/admin/dashboard?period=' + period, { scroll: false })}
+        />
+      )}
       {resource.loading || !data ? <Loading /> : panel}
       <Confirm
         open={Boolean(deletion)}
@@ -415,6 +484,49 @@ function PlatformPanel({
           void save(deletion.path, 'DELETE').catch((error) => setError(error.message));
         }}
       />
+    </>
+  );
+}
+
+function CustomerActivity({ insights }: { insights: CustomerInsights }) {
+  const { favoriteCafe, products, reviews } = insights;
+  return (
+    <>
+      <h3 className="service-section">الگوی خرید مشتری</h3>
+      {favoriteCafe ? (
+        <p>
+          بیشترین سفارش تکمیل‌شده در {favoriteCafe.name} · {digits(favoriteCafe.orders)} سفارش
+        </p>
+      ) : (
+        <p className="muted">این مشتری هنوز سفارش تکمیل‌شده‌ای ندارد.</p>
+      )}
+      {products.length > 0 && (
+        <>
+          <h4>پرسفارش‌ترین اقلام منو</h4>
+          {products.map((item) => (
+            <div className="list-row" key={JSON.stringify([item.cafe_id, item.name])}>
+              <span>
+                {item.name} · {item.cafe_name}
+              </span>
+              <strong>{digits(item.quantity)} عدد</strong>
+            </div>
+          ))}
+        </>
+      )}
+      <h3 className="service-section">دیدگاه‌های اخیر</h3>
+      {reviews.length ? (
+        reviews.map((review) => (
+          <article key={review.id}>
+            <strong>
+              {review.cafe_name} · {digits(review.rating)} از ۵
+            </strong>
+            <small className="muted"> · {dateLabel(review.created_at)}</small>
+            <p className="service-body">{review.body}</p>
+          </article>
+        ))
+      ) : (
+        <p className="muted">این مشتری هنوز دیدگاهی ثبت نکرده است.</p>
+      )}
     </>
   );
 }

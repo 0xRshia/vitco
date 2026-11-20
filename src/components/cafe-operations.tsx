@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { api, useApp, useLiveResource, useResource } from '@/lib/client';
 import { dateLabel, digits, statusLabels, today } from '@/lib/format';
@@ -35,6 +35,7 @@ import { ImageUpload } from './account';
 import { AccountingWorkspace, LoyaltyWorkspace } from './finance-workspace';
 import { QrWorkspace, TableStatusControl } from './qr-workspace';
 import { PaymentActivityView } from './payment-activity';
+import { CafeCustomers } from './cafe-customers';
 
 type TableCode = CafeTable & { state: TableState; code?: string; scans?: number };
 type Operations = {
@@ -106,7 +107,8 @@ function LocationList() {
 }
 function LocationWorkspace({ id }: { id: string }) {
   const query = useSearchParams();
-  const [selected, setSelected] = useState(query.get('tab') || '');
+  const router = useRouter();
+  const selected = query.get('tab');
   const resource = useLiveResource<Operations>('operations/' + id, 30000);
   const { toast, refresh } = useApp();
   const data = resource.data;
@@ -125,6 +127,7 @@ function LocationWorkspace({ id }: { id: string }) {
     { id: 'accounting', label: 'حسابداری', allowed: data.access.accounting },
     { id: 'payments', label: 'تراکنش‌های درگاه', allowed: data.access.accounting },
     { id: 'loyalty', label: 'باشگاه مشتریان', allowed: data.access.owner },
+    { id: 'customers', label: 'پرونده مشتریان', allowed: data.access.owner },
   ].filter((tab) => tab.allowed);
   const tab = areas.find((area) => area.id === selected)?.id || areas[0]?.id;
   async function save(action: string, payload: Record<string, unknown>) {
@@ -156,7 +159,11 @@ function LocationWorkspace({ id }: { id: string }) {
             key={area.id}
             aria-pressed={tab === area.id}
             className={tab === area.id ? 'active' : ''}
-            onClick={() => setSelected(area.id)}
+            onClick={() =>
+              router.push('/operations/' + encodeURIComponent(id) + '?tab=' + area.id, {
+                scroll: false,
+              })
+            }
           >
             {area.label}
           </button>
@@ -169,6 +176,13 @@ function LocationWorkspace({ id }: { id: string }) {
       {tab === 'accounting' && <AccountingWorkspace id={id} />}
       {tab === 'payments' && <PaymentActivityView id={id} />}
       {tab === 'loyalty' && <LoyaltyWorkspace id={id} />}
+      {tab === 'customers' && (
+        <CafeCustomers
+          key={query.get('member') || 'directory'}
+          cafeId={id}
+          memberId={query.get('member') || undefined}
+        />
+      )}
       {tab === 'tables' && (
         <section className="stack">
           <h2>میزهای شعبه</h2>

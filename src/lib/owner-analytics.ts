@@ -21,12 +21,12 @@ export function ownerAnalytics(
   ensure(end - start <= 3660 * day, 'بازه گزارش نمی‌تواند بیش از ده سال باشد.');
   if (input.cafe) ownerCafe(user, input.cafe);
   const orders = all(
-    'SELECT o.*,c.name cafe_name,u.name customer_name FROM orders o JOIN cafes c ON c.id=o.cafe_id JOIN users u ON u.id=o.user_id WHERE c.owner_id=?' +
+    'SELECT o.*,c.name cafe_name,u.name customer_name,u.account_kind FROM orders o JOIN cafes c ON c.id=o.cafe_id JOIN users u ON u.id=o.user_id WHERE c.owner_id=?' +
       (input.cafe ? ' AND c.id=?' : '') +
       ' ORDER BY o.created_at DESC,o.rowid DESC',
     ...[user.id, ...(input.cafe ? [input.cafe] : [])],
   )
-    .map(hydrate<Order>)
+    .map(hydrate<Order & { account_kind: string }>)
     .filter(
       (order) =>
         order.kind === 'menu' ||
@@ -61,6 +61,7 @@ export function ownerAnalytics(
       customers.set(key, {
         user_id: order.user_id,
         customer_name: order.customer_name || '',
+        has_profile: order.account_kind === 'member',
         cafe_id: order.cafe_id,
         cafe_name: order.cafe_name,
         first_order_at: order.created_at,

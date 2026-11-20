@@ -3,8 +3,10 @@ import { all, hydrate, one, run, transaction } from './database';
 import { platformAdmin } from './cafe-access';
 import { cafeFeatures, setFeatures } from './cafe-features';
 import { operatorTickets } from './tickets';
+import { adminOverview } from './admin-overview';
 import { cafeSql, transitionOrder } from './commerce';
 import { paymentIntakeSettings, updatePaymentIntake } from './payment-intake';
+import { partnerCrmApi } from './partner-crm';
 import type { Cafe, Order, User } from './types';
 import * as v from './validation';
 
@@ -41,6 +43,37 @@ export type PlatformUser = {
   suspended: number;
   created_at: string;
 };
+
+function customerInsights(userId: string) {
+  const favoriteCafe = one<{ id: string; name: string; orders: number }>(
+    `SELECT c.id,c.name,COUNT(*) orders FROM orders o JOIN cafes c ON c.id=o.cafe_id
+     WHERE o.user_id=? AND o.status='completed' AND c.is_demo=0
+     GROUP BY c.id ORDER BY orders DESC,MAX(o.created_at) DESC,c.id LIMIT 1`,
+    userId,
+  );
+  const products = all<{ cafe_id: string; cafe_name: string; name: string; quantity: number }>(
+    `SELECT c.id cafe_id,c.name cafe_name,item.value ->> '$.name' name,
+            SUM(item.value ->> '$.quantity') quantity
+     FROM orders o JOIN cafes c ON c.id=o.cafe_id JOIN json_each(o.items) item
+     WHERE o.user_id=? AND o.status='completed' AND o.kind='menu' AND c.is_demo=0
+     GROUP BY c.id,item.value ->> '$.name'
+     ORDER BY quantity DESC,COUNT(DISTINCT o.id) DESC,c.id,item.value ->> '$.name' LIMIT 5`,
+    userId,
+  );
+  const reviews = all<{
+    id: string;
+    cafe_name: string;
+    rating: number;
+    body: string;
+    created_at: string;
+  }>(
+    `SELECT r.id,c.name cafe_name,r.rating,r.body,r.created_at FROM reviews r JOIN cafes c ON c.id=r.cafe_id
+     WHERE r.user_id=? AND c.is_demo=0 ORDER BY r.created_at DESC,r.id LIMIT 5`,
+    userId,
+  );
+  return { favoriteCafe: favoriteCafe ?? null, products, reviews };
+}
+export type CustomerInsights = ReturnType<typeof customerInsights>;
 export type ContactMessage = {
   id: string;
   kind: 'contact' | 'partnership';
@@ -343,9 +376,11 @@ export function adminApi(
 ) {
   v.ensure(platformAdmin(user), 'دسترسی میز مدیریت ویتکو مجاز نیست.', 403);
   const [, section, id] = path;
+  if (section === 'crm') return partnerCrmApi(user, path.slice(2), method, input, params);
   if (method === 'GET') {
     if (!section)
       return {
+        overview: adminOverview(params.get('period')),
         users: one<{ count: number }>(`SELECT COUNT(*) count FROM users WHERE ${regularAccount}`)
           ?.count,
         cafes: one<{ count: number }>(
@@ -413,6 +448,7 @@ export function adminApi(
       v.ensure(account, 'حساب پیدا نشد.', 404);
       return {
         account,
+        insights: customerInsights(id),
         orders: all(
           'SELECT o.id,o.kind,o.status,o.total,o.payment_status,o.created_at,c.name cafe_name FROM orders o JOIN cafes c ON c.id=o.cafe_id WHERE o.user_id=? ORDER BY o.created_at DESC LIMIT 50',
           id,

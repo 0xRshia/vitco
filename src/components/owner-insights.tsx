@@ -1,5 +1,7 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
+import { cafeCustomerHref } from '@/lib/cafe-links';
 import { BarChart3, Users, ReceiptText, TrendingUp, Search, SlidersHorizontal } from 'lucide-react';
 import { api, useResource } from '@/lib/client';
 import { money, digits, dateLabel, today } from '@/lib/format';
@@ -54,6 +56,17 @@ export function OwnerInsights({ cafes, view }: { cafes: Cafe[]; view: 'crm' | 's
             ))}
           </select>
         </Field>
+        {view === 'crm' && cafes.length > 0 && (
+          <nav aria-label="پرونده مشتریان کافه‌ها" className="stack">
+            {cafes
+              .filter((item) => !cafe || item.id === cafe)
+              .map((item) => (
+                <Link key={item.id} className="text-link" href={cafeCustomerHref(item.id)}>
+                  پرونده مشتریان {item.name}
+                </Link>
+              ))}
+          </nav>
+        )}
       </div>
       {!valid ? (
         <ErrorBox message="تاریخ پایان باید برابر یا بعد از تاریخ شروع باشد." />
@@ -92,7 +105,15 @@ export function OwnerInsights({ cafes, view }: { cafes: Cafe[]; view: 'crm' | 's
                   >
                     <div className="card-heading">
                       <div>
-                        <h3>{customer.customer_name}</h3>
+                        <h3>
+                          {customer.has_profile ? (
+                            <Link href={cafeCustomerHref(customer.cafe_id, customer.user_id)}>
+                              {customer.customer_name}
+                            </Link>
+                          ) : (
+                            customer.customer_name
+                          )}
+                        </h3>
                         <small className="muted">{customer.cafe_name}</small>
                       </div>
                       <Badge status={customer.latest_order.status} />

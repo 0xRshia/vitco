@@ -185,6 +185,7 @@ export type OwnerAnalytics = {
   customers: {
     user_id: string;
     customer_name: string;
+    has_profile: boolean;
     cafe_id: string;
     cafe_name: string;
     first_order_at: string;

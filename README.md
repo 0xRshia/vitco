@@ -23,6 +23,12 @@ You can then receive real local orders and reservation requests, update statuses
 create events and coupons, and answer order-related support requests. A separate
 customer account can be used to exercise the customer flow.
 
+The account identified by `PLATFORM_ADMIN_USER_ID` can open `/admin` for platform
+reports and customer profiles. Its partnership CRM at `/admin/crm` collects
+existing and new `/partnership` submissions and supports manual leads, sales
+stages, dated follow-ups, and staff notes. Café owners can open **مدیریت مشتریان**
+in their dashboard to see each café’s customers, purchases, reservations, and loyalty history.
+
 ## Included views and behavior
 
 - Responsive home with invoice-payment guidance, full-screen café map, compact

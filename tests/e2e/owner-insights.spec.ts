@@ -231,4 +231,12 @@ test('owner reports use real customer orders and pricing previews preserve histo
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
     true,
   );
+  await page.goto('/dashboard?tab=crm');
+  await page.locator('.owner-customer').getByRole('link', { name: 'مشتری گزارش آزمون' }).click();
+  await expect(page.getByRole('heading', { name: 'مشتری گزارش آزمون', exact: true })).toBeVisible();
+  await page.goto('/dashboard/cafes/' + cafeId + '/loyalty/members');
+  await expect(page.getByRole('heading', { name: 'فهرست مشتریان' })).toBeVisible();
+  await page.getByLabel('جستجوی مشتری').fill('مشتری گزارش');
+  await expect(page.getByRole('link', { name: /مشتری گزارش آزمون/ })).toBeVisible();
+  expect((await customer.get('/api/operations/' + cafeId + '/customers')).status()).toBe(403);
 });

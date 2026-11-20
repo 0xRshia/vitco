@@ -63,7 +63,7 @@ export function changeLoyaltyPoints(
   cafeId: string,
   delta: number,
   reason: string,
-  redemption?: { key: string; rewardId: string; couponId: string },
+  entry?: { key: string; rewardId?: string; couponId?: string },
 ) {
   if (!delta) return;
   v.ensure(balance(userId, cafeId) + delta >= 0, 'امتیاز این کافه کافی نیست.', 409);
@@ -92,10 +92,37 @@ export function changeLoyaltyPoints(
     delta,
     reason,
     new Date().toISOString(),
-    redemption?.key ?? null,
-    redemption?.rewardId ?? null,
-    redemption?.couponId ?? null,
+    entry?.key ?? null,
+    entry?.rewardId ?? null,
+    entry?.couponId ?? null,
   );
+}
+// Call inside the same write transaction as the member and program checks.
+export function adjustMemberPoints(
+  cafeId: string,
+  userId: string,
+  input: Record<string, unknown>,
+  requestKey?: string,
+) {
+  const delta = v.integer(input.delta, 'تغییر امتیاز', -100000, 100000);
+  v.ensure(delta, 'تغییر امتیاز باید غیرصفر باشد.');
+  const reason = v.text(input.reason, 'علت تغییر', 3, 200);
+  if (requestKey) {
+    const previous = one<{ cafe_id: string; delta: number; reason: string }>(
+      'SELECT cafe_id,delta,reason FROM loyalty_ledger WHERE user_id=? AND request_key=?',
+      userId,
+      requestKey,
+    );
+    if (previous) {
+      v.ensure(
+        previous.cafe_id === cafeId && previous.delta === delta && previous.reason === reason,
+        'این درخواست با اطلاعات دیگری ثبت شده است.',
+        409,
+      );
+      return;
+    }
+  }
+  changeLoyaltyPoints(userId, cafeId, delta, reason, requestKey ? { key: requestKey } : undefined);
 }
 export function earnOrderPoints(userId: string, cafeId: string, total: number) {
   const configured = program(cafeId);
@@ -158,8 +185,8 @@ export function loyaltyManagement(user: User, cafeId: string) {
       'SELECT COALESCE(SUM(MAX(delta,0)),0) credits,COALESCE(SUM(CASE WHEN reward_id IS NOT NULL THEN -delta ELSE 0 END),0) redemptions FROM loyalty_ledger WHERE cafe_id=?',
       cafeId,
     )!,
-    members: all<{ name: string; points: number }>(
-      'SELECT u.name,b.points FROM loyalty_balances b JOIN users u ON u.id=b.user_id WHERE b.cafe_id=? ORDER BY b.points DESC LIMIT 100',
+    members: all<{ id: string; name: string; points: number }>(
+      "SELECT u.id,u.name,b.points FROM loyalty_balances b JOIN users u ON u.id=b.user_id WHERE b.cafe_id=? AND u.account_kind='member' ORDER BY b.points DESC,u.id LIMIT 100",
       cafeId,
     ),
     ledger: all<LedgerEntry>(
@@ -269,9 +296,7 @@ export function saveLoyalty(user: User, cafeId: string, input: Record<string, un
     } else if (input.action === 'adjust') {
       const target = findMemberByContact(input.contact ?? input.email);
       v.ensure(target, 'حساب فعال مشتری پیدا نشد.', 404);
-      const delta = v.integer(input.delta, 'تغییر امتیاز', -100000, 100000);
-      v.ensure(delta, 'تغییر امتیاز باید غیرصفر باشد.');
-      changeLoyaltyPoints(target.id, cafeId, delta, v.text(input.reason, 'علت تغییر', 3, 200));
+      adjustMemberPoints(cafeId, target.id, input);
     } else throw new v.AppError('عملیات نامعتبر است.');
   });
 }

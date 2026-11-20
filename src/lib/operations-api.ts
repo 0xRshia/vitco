@@ -27,6 +27,7 @@ import {
   saveExportProfile,
 } from './accounting';
 import { loyaltyManagement, saveLoyalty } from './loyalty';
+import { adjustCafeCustomer, cafeCustomerProfile, cafeCustomers } from './cafe-customers';
 import { cafeFeatures } from './cafe-features';
 import { qrMappings, saveQrMapping } from './qr-mappings';
 import { qrScanHistory } from './qr-activity';
@@ -48,6 +49,10 @@ export async function operationsApi(
     if (action === 'accounting')
       return accountingOverview(user, cafeId, request.nextUrl.searchParams);
     if (action === 'loyalty') return loyaltyManagement(user, cafeId);
+    if (action === 'customers' && path.length <= 4)
+      return itemId
+        ? cafeCustomerProfile(user, cafeId, itemId)
+        : cafeCustomers(user, cafeId, request.nextUrl.searchParams);
     if (action === 'payments')
       return {
         payments: paymentActivity(user, cafeId, request.nextUrl.searchParams.get('status') || ''),
@@ -135,6 +140,8 @@ export async function operationsApi(
     else if (action === 'calendar' && itemId) rescheduleReservation(user, cafeId, itemId, input);
     else if (action === 'accounting') recordManualEntry(user, cafeId, input);
     else if (action === 'loyalty') saveLoyalty(user, cafeId, input);
+    else if (action === 'customers' && itemId && path.length === 4)
+      adjustCafeCustomer(user, cafeId, itemId, input);
     else if (action === 'export-profile') saveExportProfile(user, cafeId, input);
     else if (action === 'export') return { id: createFinancialExport(user, cafeId, input) };
     else throw new v.AppError('مسیر پیدا نشد.', 404);

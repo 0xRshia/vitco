@@ -16,6 +16,12 @@ export function cafeLinkId(value: string, branch = false) {
   return (branch ? branchIdentifiers : cafeIdentifiers).has(value) ? sourceId : value;
 }
 
+export function cafeCustomerHref(cafeId: string, memberId?: string) {
+  const params = new URLSearchParams({ tab: 'customers' });
+  if (memberId) params.set('member', memberId);
+  return '/operations/' + encodeURIComponent(cafeId) + '?' + params.toString();
+}
+
 export function storefrontRedirect(path: string[], knownReferenceOnly = false) {
   const [area, requested, action] = path;
   if (!requested || path.length > 3) return null;
@@ -45,6 +51,8 @@ export function dashboardRedirect(path: string[]) {
   if (group === 'cafe' && path.length === 2) return '/dashboard';
   if (group === 'admin') {
     if (!cafe && path.length === 2) return '/admin';
+    if (cafe === 'users' && section && path.length === 4 && localId.test(section))
+      return '/admin/users/' + section;
     if (cafe === 'payments' && section === 'settings' && path.length === 4)
       return '/admin/payments';
     if (
@@ -58,6 +66,11 @@ export function dashboardRedirect(path: string[]) {
   if (group !== 'cafes' || !cafe) return null;
   const id = cafeLinkId(cafe);
   if (!id) return null;
+  if (section === 'loyalty' && branch === 'members') {
+    if (path.length === 5) return cafeCustomerHref(id);
+    if (path.length === 6 && localId.test(operation)) return cafeCustomerHref(id, operation);
+    return null;
+  }
   if (section === 'branches') {
     if (!branch) return '/operations/' + id;
     const location = cafeLinkId(branch, true);
